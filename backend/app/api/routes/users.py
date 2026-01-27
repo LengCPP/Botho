@@ -265,8 +265,9 @@ def register_user(session: SessionDep, user_in: UserRegister) -> Any:
     user = crud.create_user(session=session, user_create=user_create)
     
     if settings.emails_enabled and user_in.email:
+        from datetime import timedelta
         from app.utils import generate_password_reset_token, generate_verification_email
-        verification_token = generate_password_reset_token(email=user_in.email)
+        verification_token = generate_password_reset_token(email=user_in.email, expires_delta=timedelta(minutes=1))
         email_data = generate_verification_email(
             email_to=user_in.email, email=user_in.email, token=verification_token
         )

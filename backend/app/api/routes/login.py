@@ -18,6 +18,7 @@ from app.models import Message, NewPassword, Token, UserPublic, UserCreate
 from app.utils import (
     generate_password_reset_token,
     generate_reset_password_email,
+    generate_verification_email,
     send_email,
     verify_password_reset_token,
 )
@@ -44,7 +45,17 @@ def login_access_token(
     elif not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     elif not user.is_verified:
-        raise HTTPException(status_code=400, detail="User not verified. Please check your email.")
+        # Generate new verification token
+        verification_token = generate_password_reset_token(email=user.email, expires_delta=timedelta(minutes=1))
+        email_data = generate_verification_email(
+            email_to=user.email, email=user.email, token=verification_token
+        )
+        send_email(
+            email_to=user.email,
+            subject=email_data.subject,
+            html_content=email_data.html_content,
+        )
+        raise HTTPException(status_code=403, detail="User not verified")
         
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     return Token(
@@ -110,7 +121,7 @@ def reset_password(session: SessionDep, body: NewPassword) -> Message:
 
 
 @router.post("/verify-email/")
-def verify_email(token: str, session: SessionDep) -> Message:
+def verify_email(token: str, session: SessionDep) -> Token:
     """
     Verify email address
     """
@@ -123,13 +134,18 @@ def verify_email(token: str, session: SessionDep) -> Message:
             status_code=404,
             detail="The user with this email does not exist in the system.",
         )
-    if user.is_verified:
-        return Message(message="Email already verified")
     
-    user.is_verified = True
-    session.add(user)
-    session.commit()
-    return Message(message="Email verified successfully")
+    if not user.is_verified:
+        user.is_verified = True
+        session.add(user)
+        session.commit()
+    
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    return Token(
+        access_token=security.create_access_token(
+            user.id, expires_delta=access_token_expires
+        )
+    )
 
 
 @router.post("/resend-verification-email/{email}")
@@ -146,7 +162,7 @@ def resend_verification_email(email: str, session: SessionDep) -> Message:
     if user.is_verified:
          return Message(message="Email already verified")
          
-    verification_token = generate_password_reset_token(email=email)
+    verification_token = generate_password_reset_token(email=email, expires_delta=timedelta(minutes=1))
     email_data = generate_verification_email(
         email_to=user.email, email=email, token=verification_token
     )

@@ -37,8 +37,11 @@ const useAuth = () => {
     mutationFn: (data: UserRegister) =>
       UsersService.registerUser({ requestBody: data }),
 
-    onSuccess: () => {
-      navigate({ to: "/login" })
+    onSuccess: (data, variables) => {
+      navigate({ 
+        to: "/signup-success",
+        search: { email: variables.email }
+      })
     },
     onError: (err: ApiError) => {
       handleError(err)
@@ -57,8 +60,17 @@ const useAuth = () => {
 
   const loginMutation = useMutation({
     mutationFn: login,
-    onError: (err: ApiError) => {
-      let errDetail = (err.body as any)?.detail;
+    onError: (err: ApiError, variables) => {
+      const errDetail = (err.body as any)?.detail;
+      
+      if (errDetail === "User not verified") {
+        navigate({ 
+            to: "/signup-success", 
+            search: { email: variables.username }
+        });
+        return; 
+      }
+
       if (typeof errDetail === "string") {
         setError(errDetail);
       }

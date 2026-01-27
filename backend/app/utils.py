@@ -1,6 +1,5 @@
 import logging
 import secrets
-import httpx
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -8,6 +7,7 @@ from typing import Any
 
 import emails  # type: ignore
 import jwt
+import mailtrap as mt  # type: ignore
 from jinja2 import Template
 from jwt.exceptions import InvalidTokenError
 from sqlmodel import Session, select
@@ -40,6 +40,25 @@ def send_email(
     html_content: str = "",
 ) -> None:
     assert settings.emails_enabled, "no provided configuration for email variables"
+    
+    # Use Mailtrap SDK if SMTP_HOST is a mailtrap address and we have a token
+    if settings.SMTP_HOST and "mailtrap" in settings.SMTP_HOST and settings.SMTP_PASSWORD:
+        try:
+            client = mt.MailtrapClient(token=settings.SMTP_PASSWORD)
+            mail = mt.Mail(
+                sender=mt.Address(email=settings.EMAILS_FROM_EMAIL, name=settings.EMAILS_FROM_NAME),
+                to=[mt.Address(email=email_to)],
+                subject=subject,
+                html=html_content,
+                category="System Notification",
+            )
+            response = client.send(mail)
+            logger.info(f"send email result (Mailtrap SDK): {response}")
+            return
+        except Exception as e:
+            logger.error(f"Failed to send email via Mailtrap SDK: {e}")
+            # Fallback to SMTP if SDK fails
+
     message = emails.Message(
         subject=subject,
         html=html_content,
@@ -55,7 +74,7 @@ def send_email(
     if settings.SMTP_PASSWORD:
         smtp_options["password"] = settings.SMTP_PASSWORD
     response = message.send(to=email_to, smtp=smtp_options)
-    logger.info(f"send email result: {response}")
+    logger.info(f"send email result (SMTP): {response}")
 
 
 def generate_test_email(email_to: str) -> EmailData:
@@ -119,8 +138,11 @@ def generate_new_account_email(
     return EmailData(html_content=html_content, subject=subject)
 
 
-def generate_password_reset_token(email: str) -> str:
-    delta = timedelta(hours=settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS)
+def generate_password_reset_token(email: str, expires_delta: timedelta | None = None) -> str:
+    if expires_delta:
+        delta = expires_delta
+    else:
+        delta = timedelta(hours=settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS)
     now = datetime.now(timezone.utc)
     expires = now + delta
     exp = expires.timestamp()
@@ -176,6 +198,6 @@ def generate_unique_id(prefix: str, session: Session, model: type) -> str:
         if not existing:
             return unique_id
 
-        raise ValueError(f"Failed to generate unique ID after {max_attempts} attempts")
+    raise ValueError(f"Failed to generate unique ID after {max_attempts} attempts")
 
     

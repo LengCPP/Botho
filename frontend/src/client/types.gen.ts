@@ -243,13 +243,6 @@ export type NotificationsPublic = {
 
 export type NotificationType = 'info' | 'success' | 'warning' | 'error';
 
-export type PrivateUserCreate = {
-    email: string;
-    password: string;
-    full_name: string;
-    is_verified?: boolean;
-};
-
 export type SearchResults = {
     users: Array<UserPublic>;
     items: Array<ItemPublic>;
@@ -290,6 +283,7 @@ export type UserPublic = {
     email: string;
     is_active?: boolean;
     is_superuser?: boolean;
+    is_verified?: boolean;
     full_name?: (string | null);
     public_id: string;
     id: string;
@@ -696,6 +690,18 @@ export type LoginResetPasswordData = {
 
 export type LoginResetPasswordResponse = (Message);
 
+export type LoginVerifyEmailData = {
+    token: string;
+};
+
+export type LoginVerifyEmailResponse = (Token);
+
+export type LoginResendVerificationEmailData = {
+    email: string;
+};
+
+export type LoginResendVerificationEmailResponse = (Message);
+
 export type LoginRecoverPasswordHtmlContentData = {
     email: string;
 };
@@ -730,12 +736,6 @@ export type NotificationsDeleteNotificationData = {
 };
 
 export type NotificationsDeleteNotificationResponse = (Message);
-
-export type PrivateCreateUserData = {
-    requestBody: PrivateUserCreate;
-};
-
-export type PrivateCreateUserResponse = (UserPublic);
 
 export type SearchSearchData = {
     limit?: number;

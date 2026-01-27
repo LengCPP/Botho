@@ -11,6 +11,8 @@
 // Import Routes
 
 import { Route as rootRoute } from './routes/__root'
+import { Route as VerifyEmailImport } from './routes/verify-email'
+import { Route as SignupSuccessImport } from './routes/signup-success'
 import { Route as SignupImport } from './routes/signup'
 import { Route as ResetPasswordImport } from './routes/reset-password'
 import { Route as RecoverPasswordImport } from './routes/recover-password'
@@ -29,6 +31,16 @@ import { Route as LayoutCommunitiesCommunityIdImport } from './routes/_layout/co
 import { Route as LayoutCollectionsCollectionIdImport } from './routes/_layout/collections/$collectionId'
 
 // Create/Update Routes
+
+const VerifyEmailRoute = VerifyEmailImport.update({
+  path: '/verify-email',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const SignupSuccessRoute = SignupSuccessImport.update({
+  path: '/signup-success',
+  getParentRoute: () => rootRoute,
+} as any)
 
 const SignupRoute = SignupImport.update({
   path: '/signup',
@@ -136,6 +148,14 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignupImport
       parentRoute: typeof rootRoute
     }
+    '/signup-success': {
+      preLoaderRoute: typeof SignupSuccessImport
+      parentRoute: typeof rootRoute
+    }
+    '/verify-email': {
+      preLoaderRoute: typeof VerifyEmailImport
+      parentRoute: typeof rootRoute
+    }
     '/_layout/admin': {
       preLoaderRoute: typeof LayoutAdminImport
       parentRoute: typeof LayoutImport
@@ -203,6 +223,8 @@ export const routeTree = rootRoute.addChildren([
   RecoverPasswordRoute,
   ResetPasswordRoute,
   SignupRoute,
+  SignupSuccessRoute,
+  VerifyEmailRoute,
 ])
 
 /* prettier-ignore-end */
