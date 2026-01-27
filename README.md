@@ -82,7 +82,28 @@ docker compose up -d
 - **Traefik Dashboard**: [http://localhost:8090](http://localhost:8090)
 - **MinIO Console**: [http://localhost:9001](http://localhost:9001)
 
-### 4. Database Migrations
+### 4. Staging Environment
+To run the application in the staging environment (mirroring development with hot-reloading):
+
+1. **Create Network**:
+   ```bash
+   docker network create traefik-public
+   ```
+2. **Start Staging**:
+   ```bash
+   docker compose -f docker-compose.staging.yml up -d
+   ```
+3. **Access**:
+   - App: [https://staging.rsc-xchange.app](https://staging.rsc-xchange.app)
+   - API: [https://api.staging.rsc-xchange.app](https://api.staging.rsc-xchange.app)
+4. **Database Migrations (Staging)**:
+   ```bash
+   docker compose -f docker-compose.staging.yml exec backend alembic upgrade head
+   ```
+
+**Note:** The staging environment is configured to use volume mounts for `/app` (backend) and `/app/src` (frontend), allowing for real-time code updates (hot-reloading) just like in development.
+
+### 5. Database Migrations (Local)
 Run migrations to set up the database schema:
 ```bash
 docker compose exec backend alembic upgrade head
