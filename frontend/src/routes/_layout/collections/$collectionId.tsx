@@ -19,17 +19,25 @@ import {
   SimpleGrid,
 } from "@chakra-ui/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Link, createFileRoute } from "@tanstack/react-router"
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useMemo, useState } from "react"
 import { FaFilter } from "react-icons/fa"
-import { FiPlus, FiTrash2 } from "react-icons/fi"
+import { FiPlus, FiTrash2, FiMoreVertical, FiEdit } from "react-icons/fi"
 
-import { CollectionsService, ItemsService, type ItemPublic } from "@/client"
+import { CollectionsService, ItemsService, CommunitiesService, type ItemPublic } from "@/client"
 import AddItem from "@/components/Items/AddItem"
 import ItemCard from "@/components/Items/ItemCard"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
+import EditCollection from "@/components/Collections/EditCollection"
+import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import { useColorModeValue } from "@/components/ui/color-mode"
+import {
+  MenuContent,
+  MenuItem,
+  MenuRoot,
+  MenuTrigger,
+} from "@/components/ui/menu"
 import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
 import { handleError } from "@/utils"
@@ -42,11 +50,14 @@ function CollectionDetail() {
   const { collectionId } = Route.useParams()
   const { user } = useAuth()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const { showSuccessToast } = useCustomToast()
 
   const [categoryFilter, setCategoryFilter] = useState("")
   const [genreFilter, setGenreFilter] = useState("")
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   const isMobile = useBreakpointValue({ base: true, md: false })
 
   const bgColor = useColorModeValue("orange.50", "gray.800")
@@ -60,12 +71,26 @@ function CollectionDetail() {
     queryFn: () => CollectionsService.readCollection({ id: collectionId }),
   })
 
-  // Get user's items to allow adding them if owner
-  const { data: userItemsData } = useQuery({
-    queryKey: ["items", "me", { excludeCollections: true }],
-    queryFn: () =>
-      ItemsService.readItems({ limit: 100, excludeCollections: true }),
-    enabled: !!user && collection?.owner_id === user.id,
+  // Get community info if it's a community collection
+  const { data: community } = useQuery({
+    queryKey: ["community", collection?.community_id],
+    queryFn: () => CommunitiesService.readCommunity({ id: collection!.community_id! }),
+    enabled: !!collection?.community_id,
+  })
+
+  const isOwner = user?.id === collection?.owner_id
+  const isCommunityAdmin = community?.current_user_role === "admin" || community?.created_by === user?.id
+  const canManage = isOwner || isCommunityAdmin || !!user?.is_superuser
+
+  // Get items to allow adding them
+  const { data: availableItemsData } = useQuery({
+    queryKey: collection?.community_id 
+      ? ["communityItems", collection.community_id]
+      : ["items", "me", { excludeCollections: true }],
+    queryFn: () => collection?.community_id
+      ? CommunitiesService.readCommunityItems({ id: collection.community_id })
+      : ItemsService.readItems({ limit: 100, excludeCollections: true }),
+    enabled: !!user && !!collection && canManage,
   })
 
   const addMutation = useMutation({
@@ -84,6 +109,21 @@ function CollectionDetail() {
     onSuccess: () => {
       showSuccessToast("Item removed from collection")
       queryClient.invalidateQueries({ queryKey: ["collections", collectionId] })
+    },
+    onError: handleError,
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => CollectionsService.deleteCollection({ id: collectionId }),
+    onSuccess: () => {
+      showSuccessToast("Collection deleted")
+      queryClient.invalidateQueries({ queryKey: ["collections"] })
+      if (collection?.community_id) {
+        queryClient.invalidateQueries({ queryKey: ["communityCollections", collection.community_id] })
+        navigate({ to: "/communities/$communityId", params: { communityId: collection.community_id } })
+      } else {
+        navigate({ to: "/items" })
+      }
     },
     onError: handleError,
   })
@@ -151,12 +191,11 @@ function CollectionDetail() {
     return <Text>Collection not found</Text>
   }
 
-  const isOwner = user?.id === collection.owner_id
-
-  // Filter out items already in collection
+  // Filter out items already in ANY collection (backend constraint)
+  // For community collections, we only show items from the community pool
   const availableItems =
-    userItemsData?.data.filter(
-      (item) => !collection.items?.some((ci) => ci.id === item.id),
+    availableItemsData?.data.filter(
+      (item) => !item.collection_id && !collection.items?.some((ci) => ci.id === item.id),
     ) || []
 
   const selectStyle = {
@@ -174,20 +213,57 @@ function CollectionDetail() {
       <VStack align="start" gap={6} width="full">
         <HStack width="full" justify="space-between" wrap="wrap" gap={4}>
           <HStack gap={4}>
-            {/* Back arrow removed */}
             <VStack align="start" gap={0}>
               <Heading size="2xl">{collection.title}</Heading>
               <Text color="gray.500">
                 {collection.description || "No description provided."}
               </Text>
+              {collection.community_id && community && (
+                <HStack mt={1}>
+                  <Text fontSize="sm" fontWeight="bold">Owned by Community:</Text>
+                  <Link to={`/communities/${community.id}`}>
+                    <Text fontSize="sm" color="ui.hover" _hover={{ textDecoration: "underline" }}>
+                      {community.name}
+                    </Text>
+                  </Link>
+                </HStack>
+              )}
             </VStack>
           </HStack>
 
-          {isOwner && (
-            <Badge colorPalette="orange" size="lg" variant="solid">
-              Owner View
-            </Badge>
-          )}
+          <HStack gap={4}>
+            {canManage && (
+              <>
+                <Badge colorPalette="orange" size="lg" variant="solid">
+                  {isOwner ? "Owner View" : "Admin View"}
+                </Badge>
+                
+                <MenuRoot>
+                  <MenuTrigger asChild>
+                    <IconButton
+                      aria-label="Collection Actions"
+                      variant="ghost"
+                      colorPalette="gray"
+                    >
+                      <FiMoreVertical />
+                    </IconButton>
+                  </MenuTrigger>
+                  <MenuContent>
+                    <MenuItem value="edit" onClick={() => setIsEditOpen(true)}>
+                      <FiEdit /> Edit Details
+                    </MenuItem>
+                    <MenuItem
+                      value="delete"
+                      color="red.500"
+                      onClick={() => setIsDeleteOpen(true)}
+                    >
+                      <FiTrash2 /> Delete Collection
+                    </MenuItem>
+                  </MenuContent>
+                </MenuRoot>
+              </>
+            )}
+          </HStack>
         </HStack>
 
         <Flex
@@ -293,10 +369,16 @@ function CollectionDetail() {
             </Popover.Root>
           </HStack>
 
-          {isOwner && <AddItem collectionId={collection.id} />}
+          {canManage && (
+            <AddItem 
+              collectionId={collection.id} 
+              communityId={collection.community_id || undefined}
+              isAdmin={isCommunityAdmin}
+            />
+          )}
         </Flex>
 
-        {isOwner && (
+        {canManage && (
           <Box
             width="full"
             p={4}
@@ -306,13 +388,14 @@ function CollectionDetail() {
             borderColor={borderColor}
           >
             <Heading size="sm" mb={4}>
-              Add Your Items
+              Add Items to this Collection
             </Heading>
             <Flex wrap="wrap" gap={2}>
               {availableItems.length === 0 ? (
                 <Text fontSize="sm" color="gray.500">
-                  All your existing items are already in this collection. Use "Add
-                  Item" to create new ones.
+                  {collection.community_id 
+                    ? "No available items in the community pool. Pooled items that aren't in any collection will appear here."
+                    : "All your existing items are already in this collection. Use 'Add Item' to create new ones."}
                 </Text>
               ) : (
                 availableItems.map((item) => (
@@ -384,10 +467,10 @@ function CollectionDetail() {
                   isMobile ? (
                     <CompactItemCard
                       key={item.id}
-                      item={item}
+                      item={item as any}
                       onShowDetails={() => setSelectedItem(item as any)}
                       onRemoveFromCollection={
-                        isOwner
+                        canManage
                           ? () => removeMutation.mutate(item.id)
                           : undefined
                       }
@@ -397,7 +480,7 @@ function CollectionDetail() {
                       key={item.id}
                       item={item as any}
                       onRemoveFromCollection={
-                        isOwner
+                        canManage
                           ? () => removeMutation.mutate(item.id)
                           : undefined
                       }
@@ -415,6 +498,21 @@ function CollectionDetail() {
           )}
         </Box>
       </VStack>
+
+      <EditCollection
+        collection={collection}
+        isOpen={isEditOpen}
+        onClose={() => setIsEditOpen(false)}
+      />
+
+      <ConfirmationModal
+        isOpen={isDeleteOpen}
+        onClose={() => setIsDeleteOpen(false)}
+        onConfirm={() => deleteMutation.mutate()}
+        title="Delete Collection"
+        message={`Are you sure you want to delete "${collection.title}"? This will not delete the items themselves.`}
+        isLoading={deleteMutation.isPending}
+      />
     </Container>
   )
 }

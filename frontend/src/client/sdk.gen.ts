@@ -23,11 +23,12 @@ export class CollectionsService {
             query: {
                 skip: data.skip,
                 limit: data.limit,
-                owner_id: data.ownerId
+                owner_id: data.ownerId,
+                community_id: data.communityId
             },
             errors: {
-                422: 'Validation Error'
-            }
+                422: `Validation Error`,
+            },
         });
     }
     
@@ -36,6 +37,7 @@ export class CollectionsService {
      * Create new collection.
      * @param data The data for the request.
      * @param data.requestBody
+     * @param data.communityId
      * @returns CollectionPublic Successful Response
      * @throws ApiError
      */
@@ -43,6 +45,9 @@ export class CollectionsService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/collections/',
+            query: {
+                community_id: data.communityId
+            },
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {

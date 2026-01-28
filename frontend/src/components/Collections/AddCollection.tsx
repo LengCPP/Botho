@@ -28,7 +28,11 @@ import {
 } from "../ui/dialog"
 import { Field } from "../ui/field"
 
-const AddCollection = () => {
+interface AddCollectionProps {
+  communityId?: string
+}
+
+const AddCollection = ({ communityId }: AddCollectionProps) => {
   const [isOpen, setIsOpen] = useState(false)
   const queryClient = useQueryClient()
   const { showSuccessToast } = useCustomToast()
@@ -54,7 +58,7 @@ const AddCollection = () => {
 
   const mutation = useMutation({
     mutationFn: (data: CollectionCreate) =>
-      CollectionsService.createCollection({ requestBody: data }),
+      CollectionsService.createCollection({ requestBody: data, communityId }),
     onSuccess: () => {
       showSuccessToast("Collection created successfully.")
       reset()
@@ -64,7 +68,13 @@ const AddCollection = () => {
       handleError(err)
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["collections"] })
+      if (communityId) {
+        queryClient.invalidateQueries({
+          queryKey: ["communityCollections", communityId],
+        })
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["collections"] })
+      }
     },
   })
 

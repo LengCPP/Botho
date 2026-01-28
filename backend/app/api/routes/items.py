@@ -20,7 +20,6 @@ from app.models import (
     Friendship,
     FriendshipStatus,
     ItemOwnerPublic,
-    UserItem,
     Loan,
     LoanStatus,
 )
@@ -35,19 +34,6 @@ def check_item_availability(session: SessionDep, item_id: uuid.UUID) -> bool:
     active_loan = session.exec(
         select(Loan).where(
             Loan.item_id == item_id,
-            Loan.status == LoanStatus.ACTIVE
-        )
-    ).first()
-    return active_loan is None
-
-def check_owner_item_availability(session: SessionDep, item_id: uuid.UUID, owner_id: uuid.UUID) -> bool:
-    """
-    Check if a specific owner's copy of an item is available.
-    """
-    active_loan = session.exec(
-        select(Loan).where(
-            Loan.item_id == item_id,
-            Loan.owner_id == owner_id,
             Loan.status.in_([LoanStatus.ACTIVE, LoanStatus.PENDING, LoanStatus.ACCEPTED, LoanStatus.RETURN_PENDING])
         )
     ).first()
@@ -68,100 +54,83 @@ def read_items(
     genre: str | None = None
 ) -> Any:
     """
-    Retrieve items.
+    Retrieve items. Filters by current user's owner_id by default.
     """
     
-    if owner_id:
-        all_visible_user_ids = [owner_id]
+    # Permission check and target owner selection
+    if owner_id and owner_id != current_user.id:
+        # Check if friend
+        is_friend = session.exec(
+            select(Friendship).where(
+                ((Friendship.user_id == current_user.id) & (Friendship.friend_id == owner_id)) |
+                ((Friendship.user_id == owner_id) & (Friendship.friend_id == current_user.id)),
+                Friendship.status == FriendshipStatus.ACCEPTED
+            )
+        ).first()
+        if not is_friend and not current_user.is_superuser:
+            raise HTTPException(status_code=403, detail="Not enough permissions to view this user's items")
+        target_owner_id = owner_id
     else:
-        friends_stmt = select(Friendship.friend_id).where(
-            Friendship.user_id == current_user.id,
-            Friendship.status == FriendshipStatus.ACCEPTED
-        )
-        friend_ids = session.exec(friends_stmt).all()
-        
-        friends_stmt_2 = select(Friendship.user_id).where(
-            Friendship.friend_id == current_user.id,
-            Friendship.status == FriendshipStatus.ACCEPTED
-        )
-        friend_ids_2 = session.exec(friends_stmt_2).all()
-        
-        all_visible_user_ids = list(set([current_user.id] + list(friend_ids) + list(friend_ids_2)))
+        target_owner_id = current_user.id
 
-    # Get distinct item IDs first
-    item_ids_query = (
-        select(Item.id)
-        .join(UserItem)
-        .where(UserItem.user_id.in_(all_visible_user_ids))
-    )
+    # Filter items by owner_id
+    statement = select(Item).where(Item.owner_id == target_owner_id)
 
     if category:
-        item_ids_query = item_ids_query.where(
+        statement = statement.where(
             func.json_extract_path_text(Item.extra_data, 'category') == category
         )
     
     if genre:
-        item_ids_query = item_ids_query.where(
+        statement = statement.where(
             func.json_extract_path_text(Item.extra_data, 'genre') == genre
         )
 
     if exclude_collections:
-        from app.models import CollectionItem, Collection
-        # Subquery for items that ARE in a collection owned by any of the visible users
-        in_collections_stmt = (
-            select(CollectionItem.item_id)
-            .join(Collection)
-            .where(Collection.owner_id.in_(all_visible_user_ids))
+        from app.models import CollectionItem
+        # Exclude items that are in any collection
+        statement = statement.where(
+            Item.id.not_in(select(CollectionItem.item_id))
         )
-        item_ids_query = item_ids_query.where(Item.id.not_in(in_collections_stmt))
 
-    item_ids = session.exec(item_ids_query).all()
-    unique_item_ids = list(set(item_ids))
-    count = len(unique_item_ids)
+    # Count total
+    count_stmt = select(func.count()).select_from(statement.subquery())
+    count = session.exec(count_stmt).one()
 
-    # Fetch actual items with pagination and sorting
-    items_query = select(Item).where(Item.id.in_(unique_item_ids))
-    
     # Apply sorting
     sort_column = Item.created_at
     if sort_by == "title":
         sort_column = Item.title
         
     if sort_order == "desc":
-        items_query = items_query.order_by(sort_column.desc())
+        statement = statement.order_by(sort_column.desc())
     else:
-        items_query = items_query.order_by(sort_column.asc())
+        statement = statement.order_by(sort_column.asc())
 
-    items = session.exec(items_query.offset(skip).limit(limit)).all()
+    items = session.exec(statement.offset(skip).limit(limit)).all()
     
     public_items = []
     for item in items:
-        owners_public = []
-        any_available = False
-        for owner in item.owners:
-            is_avail = check_owner_item_availability(session, item.id, owner.id)
-            if is_avail:
-                any_available = True
-            
-                owner_pub = filter_owner_privacy(owner, current_user.id, is_admin=current_user.is_superuser)
-
-            owner_pub.is_available = is_avail
-            owners_public.append(owner_pub)
+        is_avail = check_item_availability(session, item.id)
+        owner_pub = filter_owner_privacy(item.owner, current_user.id, is_admin=current_user.is_superuser)
+        owner_pub.is_available = is_avail
         
-        public_items.append(
-            ItemPublic(
-                id=item.id,
-                title=item.title,
-                description=item.description,
-                item_type=item.item_type,
-                image_url=item.image_url,
-                extra_data=item.extra_data,
-                count=item.count,
-                owners=owners_public,
-                created_at=item.created_at,
-                is_available=any_available
-            )
+        item_pub = ItemPublic(
+            id=item.id,
+            owner_id=item.owner_id,
+            title=item.title,
+            description=item.description,
+            author=item.author,
+            item_type=item.item_type,
+            image_url=item.image_url,
+            extra_data=item.extra_data,
+            count=item.count,
+            created_at=item.created_at,
+            owner=owner_pub,
+            is_available=is_avail,
+            community_owner_id=item.community_owner_id
         )
+        public_items.append(item_pub)
 
     return ItemsPublic(data=public_items, count=count)
 
@@ -175,200 +144,121 @@ def read_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> 
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
         
-    owner_ids = [o.id for o in item.owners]
-    
-    if current_user.is_superuser or current_user.id in owner_ids:
-        pass 
-    else:
-        stmt = select(Friendship).where(
-            (
-                (Friendship.user_id == current_user.id) & 
-                (Friendship.friend_id.in_(owner_ids)) & 
-                (Friendship.status == FriendshipStatus.ACCEPTED)
-            ) | (
-                (Friendship.user_id.in_(owner_ids)) & 
-                (Friendship.friend_id == current_user.id) & 
-                (Friendship.status == FriendshipStatus.ACCEPTED)
+    # Permission check
+    if item.owner_id != current_user.id and not current_user.is_superuser:
+        is_friend = session.exec(
+            select(Friendship).where(
+                ((Friendship.user_id == current_user.id) & (Friendship.friend_id == item.owner_id)) |
+                ((Friendship.user_id == item.owner_id) & (Friendship.friend_id == current_user.id)),
+                Friendship.status == FriendshipStatus.ACCEPTED
             )
-        )
-        friendship = session.exec(stmt).first()
-        
-        if not friendship:
-             raise HTTPException(status_code=400, detail="Not enough permissions (Not a friend of owner)")
+        ).first()
+        if not is_friend:
+             raise HTTPException(status_code=403, detail="Not enough permissions (Not a friend of owner)")
 
-    owners_public = []
-    any_available = False
-    for owner in item.owners:
-        is_avail = check_owner_item_availability(session, item.id, owner.id)
-        if is_avail:
-            any_available = True
-        
-            owner_pub = filter_owner_privacy(owner, current_user.id, is_admin=current_user.is_superuser)
-
-        owner_pub.is_available = is_avail
-        owners_public.append(owner_pub)
+    is_avail = check_item_availability(session, item.id)
+    owner_pub = filter_owner_privacy(item.owner, current_user.id, is_admin=current_user.is_superuser)
+    owner_pub.is_available = is_avail
     
-    return ItemPublic(
+    item_pub = ItemPublic(
         id=item.id,
+        owner_id=item.owner_id,
         title=item.title,
         description=item.description,
+        author=item.author,
         item_type=item.item_type,
         image_url=item.image_url,
         extra_data=item.extra_data,
         count=item.count,
-        owners=owners_public,
         created_at=item.created_at,
-        is_available=any_available
+        owner=owner_pub,
+        is_available=is_avail,
+        community_owner_id=item.community_owner_id
     )
+    return item_pub
 
 
 @router.post("/", response_model=ItemPublic)
-async def create_item(
+def create_item(
     *,
     session: SessionDep,
     current_user: CurrentUser,
     title: Annotated[str, Form()],
     description: Annotated[str | None, Form()] = None,
-    item_type: Annotated[str, Form()] = "general",
+    item_type: Annotated[ItemType, Form()] = ItemType.general,
     extra_data: Annotated[str | None, Form()] = None,
     image: Annotated[UploadFile | None, File()] = None,
     image_url: Annotated[str | None, Form()] = None,
     community_owner_id: Annotated[uuid.UUID | None, Form()] = None,
 ) -> Any:
     """
-    Create new item. If item with same title exists, connect user to it and increment count.
-    If community_owner_id is provided, check if user is admin.
+    Create a new item. Associates with current user as owner.
     """
-    
-    if community_owner_id:
-        from app.models import CommunityMember, CommunityMemberRole
-        membership = session.exec(
-            select(CommunityMember).where(
-                CommunityMember.community_id == community_owner_id,
-                CommunityMember.user_id == current_user.id,
-                CommunityMember.role == CommunityMemberRole.ADMIN
-            )
-        ).first()
-        if not membership and not current_user.is_superuser:
-            raise HTTPException(status_code=403, detail="Only admins can create community-owned items")
-
-    final_image_url = image_url
-    if image:
-        contents = await image.read()
-        final_image_url = await upload_image(contents, image.filename)
-
-    extra_data_dict = {}
+    parsed_extra = {}
     if extra_data:
         try:
-            extra_data_dict = json.loads(extra_data)
+            parsed_extra = json.loads(extra_data)
         except json.JSONDecodeError:
             pass
 
-    # Avoid enum casing issues in query by using lowercase string
-    item_type_val = item_type.lower()
+    # Handle image upload
+    final_image_url = image_url
+    if image:
+        final_image_url = upload_image(image, folder="items")
 
-    existing_item = session.exec(
-        select(Item).where(
-            Item.title == title,
-            Item.item_type == item_type_val
-        )
-    ).first()
-    
-    if existing_item:
-        item = existing_item
-        # If community-owned, it's just available. If not, check if user already owns it.
-        if community_owner_id:
-            # Check if already in this community
-            from app.models import CommunityItem
-            existing_comm_item = session.exec(
-                select(CommunityItem).where(
-                    CommunityItem.community_id == community_owner_id,
-                    CommunityItem.item_id == item.id
-                )
-            ).first()
-            if not existing_comm_item:
-                comm_item = CommunityItem(
-                    community_id=community_owner_id, 
-                    item_id=item.id,
-                    added_by=current_user.id
-                )
-                session.add(comm_item)
-        elif current_user not in item.owners:
-            item.owners.append(current_user)
-            item.count += 1
-            # Update image if existing item doesn't have one and new one is provided
-            if not item.image_url and final_image_url:
-                item.image_url = final_image_url
-            session.add(item)
-        
-        session.commit()
-        session.refresh(item)
-        sync_item_to_search(item)
-    else:
-        item = Item(
-            title=title,
-            description=description,
-            item_type=ItemType(item_type_val),
-            extra_data=extra_data_dict,
-            image_url=final_image_url,
-            count=1,
-            community_owner_id=community_owner_id
-        )
-        if not community_owner_id:
-            item.owners.append(current_user)
-        else:
-            # If creating for community, also link it via CommunityItem link table
-            from app.models import CommunityItem
-            session.add(item)
-            session.flush() # Get item ID
-            comm_item = CommunityItem(
-                community_id=community_owner_id, 
-                item_id=item.id,
-                added_by=current_user.id
-            )
-            session.add(comm_item)
+    # Determine owner_id based on exclusive ownership rule
+    # If community_owner_id is set, owner_id (personal) is None.
+    item_owner_id = None if community_owner_id else current_user.id
 
-        session.add(item)
-        session.commit()
-        session.refresh(item)
-        sync_item_to_search(item)
-
-    owners_public = []
-    any_available = False
-    for owner in item.owners:
-        is_avail = check_owner_item_availability(session, item.id, owner.id)
-        if is_avail:
-            any_available = True
-        
-            owner_pub = filter_owner_privacy(owner, current_user.id, is_admin=current_user.is_superuser)
-
-        owner_pub.is_available = is_avail
-        owners_public.append(owner_pub)
-
-    return ItemPublic(
-        id=item.id,
-        title=item.title,
-        description=item.description,
-        item_type=item.item_type,
-        image_url=item.image_url,
-        extra_data=item.extra_data,
-        count=item.count,
-        owners=owners_public,
-        community_owner_id=item.community_owner_id,
-        created_at=item.created_at,
-        is_available=any_available
+    db_item = Item(
+        title=title,
+        description=description,
+        item_type=item_type,
+        extra_data=parsed_extra,
+        image_url=final_image_url,
+        owner_id=item_owner_id,
+        community_owner_id=community_owner_id
     )
+    session.add(db_item)
+    session.commit()
+    session.refresh(db_item)
+    sync_item_to_search(db_item)
+    
+    # Prepare public response
+    if item_owner_id:
+        owner_pub = filter_owner_privacy(current_user, current_user.id, is_admin=current_user.is_superuser)
+        owner_pub.is_available = True
+    else:
+        owner_pub = None
+    
+    # Manually construct ItemPublic to avoid Pydantic validation issues with User model
+    item_pub = ItemPublic(
+        id=db_item.id,
+        owner_id=db_item.owner_id,
+        title=db_item.title,
+        description=db_item.description,
+        author=db_item.author,
+        item_type=db_item.item_type,
+        image_url=db_item.image_url,
+        extra_data=db_item.extra_data,
+        count=db_item.count,
+        created_at=db_item.created_at,
+        owner=owner_pub,
+        is_available=True,
+        community_owner_id=db_item.community_owner_id
+    )
+    return item_pub
 
 
-@router.put("/{id}", response_model=ItemPublic)
-async def update_item(
+@router.patch("/{id}", response_model=ItemPublic)
+def update_item(
     *,
     session: SessionDep,
     current_user: CurrentUser,
     id: uuid.UUID,
     title: Annotated[str | None, Form()] = None,
     description: Annotated[str | None, Form()] = None,
-    item_type: Annotated[str | None, Form()] = None,
+    item_type: Annotated[ItemType | None, Form()] = None,
     extra_data: Annotated[str | None, Form()] = None,
     image: Annotated[UploadFile | None, File()] = None,
     image_url: Annotated[str | None, Form()] = None,
@@ -376,92 +266,80 @@ async def update_item(
     """
     Update an item.
     """
-    item = session.get(Item, id)
-    if not item:
+    db_item = session.get(Item, id)
+    if not db_item:
         raise HTTPException(status_code=404, detail="Item not found")
-        
-    owner_ids = [o.id for o in item.owners]
-    if not current_user.is_superuser and (current_user.id not in owner_ids):
-        raise HTTPException(status_code=400, detail="Not enough permissions")
-        
+    
+    if db_item.owner_id != current_user.id and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+
     if title is not None:
-        item.title = title
+        db_item.title = title
     if description is not None:
-        item.description = description
+        db_item.description = description
     if item_type is not None:
-        item.item_type = ItemType(item_type.lower())
+        db_item.item_type = item_type
+    if image_url is not None:
+        db_item.image_url = image_url
     if extra_data is not None:
         try:
-            item.extra_data = json.loads(extra_data)
+            db_item.extra_data = json.loads(extra_data)
         except json.JSONDecodeError:
             pass
-    
-    if image_url is not None:
-        item.image_url = image_url
 
     if image:
-        contents = await image.read()
-        final_image_url = await upload_image(contents, image.filename)
-        if final_image_url:
-            item.image_url = final_image_url
+        if db_item.image_url:
+            delete_image(db_item.image_url)
+        db_item.image_url = upload_image(image, folder="items")
 
-    session.add(item)
+    session.add(db_item)
     session.commit()
-    session.refresh(item)
-    sync_item_to_search(item)
+    session.refresh(db_item)
+    sync_item_to_search(db_item)
     
-    owners_public = []
-    any_available = False
-    for owner in item.owners:
-        is_avail = check_owner_item_availability(session, item.id, owner.id)
-        if is_avail:
-            any_available = True
-        
-            owner_pub = filter_owner_privacy(owner, current_user.id, is_admin=current_user.is_superuser)
-
-        owner_pub.is_available = is_avail
-        owners_public.append(owner_pub)
+    is_avail = check_item_availability(session, db_item.id)
+    owner_pub = filter_owner_privacy(db_item.owner, current_user.id, is_admin=current_user.is_superuser)
+    owner_pub.is_available = is_avail
     
-    return ItemPublic(
-        id=item.id,
-        title=item.title,
-        description=item.description,
-        item_type=item.item_type,
-        image_url=item.image_url,
-        extra_data=item.extra_data,
-        count=item.count,
-        owners=owners_public,
-        created_at=item.created_at,
-        is_available=any_available
+    item_pub = ItemPublic(
+        id=db_item.id,
+        owner_id=db_item.owner_id,
+        title=db_item.title,
+        description=db_item.description,
+        author=db_item.author,
+        item_type=db_item.item_type,
+        image_url=db_item.image_url,
+        extra_data=db_item.extra_data,
+        count=db_item.count,
+        created_at=db_item.created_at,
+        owner=owner_pub,
+        is_available=is_avail,
+        community_owner_id=db_item.community_owner_id
     )
+    return item_pub
 
 
-@router.delete("/{id}")
-async def delete_item(
-    session: SessionDep, current_user: CurrentUser, id: uuid.UUID
-) -> Message:
+@router.delete("/{id}", response_model=Message)
+def delete_item(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+) -> Any:
     """
-    Delete an item (or remove ownership).
+    Delete an item.
     """
-    item = session.get(Item, id)
-    if not item:
+    db_item = session.get(Item, id)
+    if not db_item:
         raise HTTPException(status_code=404, detail="Item not found")
-        
-    if not current_user.is_superuser and (current_user not in item.owners):
-        raise HTTPException(status_code=400, detail="Not enough permissions")
     
-    if current_user in item.owners:
-        item.owners.remove(current_user)
-        item.count = max(0, item.count - 1)
-        
-        if not item.owners:
-            if item.image_url:
-                await delete_image(item.image_url)
-            session.delete(item)
-            delete_item_from_search(id)
-        else:
-            session.add(item)
-            
-        session.commit()
-    
-    return Message(message="Item ownership removed successfully")
+    if db_item.owner_id != current_user.id and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+
+    if db_item.image_url:
+        delete_image(db_item.image_url)
+
+    session.delete(db_item)
+    session.commit()
+    delete_item_from_search(id)
+    return Message(message="Item deleted successfully")

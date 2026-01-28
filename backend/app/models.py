@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from enum import Enum
 import uuid
+from typing import Optional
 
 from pydantic import EmailStr, field_validator
 from sqlalchemy import Column, JSON, DateTime, func
@@ -35,6 +36,7 @@ class ItemType(str, Enum):
 class CollectionType(str, Enum):
     GENERAL = "general"
     LIBRARY = "library"
+    BUCKET = "bucket"
 
 
 class LoanStatus(str, Enum):
@@ -106,11 +108,6 @@ class CommunityInterest(SQLModel, table=True):
     interest_id: uuid.UUID = Field(foreign_key="interest.id", primary_key=True, ondelete="CASCADE")
 
 
-class UserItem(SQLModel, table=True):
-    user_id: uuid.UUID = Field(foreign_key="user.id", primary_key=True, ondelete="CASCADE")
-    item_id: uuid.UUID = Field(foreign_key="item.id", primary_key=True, ondelete="CASCADE")
-
-
 # Support Models
 class UserSettingsSchema(SQLModel):
     autocomplete_enabled: bool = Field(default=True)
@@ -128,9 +125,9 @@ class UserSettingsSchema(SQLModel):
 
 class UserProfile(SQLModel, table=True):
     user_id: uuid.UUID = Field(foreign_key="user.id", primary_key=True, ondelete="CASCADE")
-    bio: str | None = Field(default=None, max_length=500)
-    alias: str | None = Field(default=None, max_length=255)
-    image_url: str | None = Field(default=None, max_length=512)
+    bio: Optional[str] = Field(default=None, max_length=500)
+    alias: Optional[str] = Field(default=None, max_length=255)
+    image_url: Optional[str] = Field(default=None, max_length=512)
 
 
 class Notification(SQLModel, table=True):
@@ -140,8 +137,8 @@ class Notification(SQLModel, table=True):
     message: str = Field(max_length=512)
     type: NotificationType = Field(default=NotificationType.INFO)
     is_read: bool = Field(default=False)
-    link: str | None = Field(default=None, max_length=512)
-    created_at: datetime | None = Field(
+    link: Optional[str] = Field(default=None, max_length=512)
+    created_at: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
@@ -152,17 +149,17 @@ class Notification(SQLModel, table=True):
 class Loan(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     item_id: uuid.UUID = Field(foreign_key="item.id", ondelete="CASCADE")
-    owner_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="CASCADE")
-    community_id: uuid.UUID | None = Field(default=None, foreign_key="community.id", ondelete="CASCADE")
+    owner_id: Optional[uuid.UUID] = Field(default=None, foreign_key="user.id", ondelete="CASCADE")
+    community_id: Optional[uuid.UUID] = Field(default=None, foreign_key="community.id", ondelete="CASCADE")
     requester_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
     status: LoanStatus = Field(default=LoanStatus.PENDING)
     start_date: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
     end_date: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
-    pending_extension_date: datetime | None = Field(
+    pending_extension_date: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), nullable=True)
     )
-    created_at: datetime | None = Field(
+    created_at: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
@@ -181,7 +178,7 @@ class Loan(SQLModel, table=True):
 class Interest(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     name: str = Field(unique=True, index=True)
-    category: str | None = None
+    category: Optional[str] = None
     users: list["User"] = Relationship(back_populates="interests", link_model=UserInterest)
     communities: list["Community"] = Relationship(back_populates="interests", link_model=CommunityInterest)
 
@@ -192,8 +189,8 @@ class UserBase(SQLModel):
     is_active: bool = True
     is_superuser: bool = False
     is_verified: bool = False
-    full_name: str | None = Field(default=None, max_length=255)
-    public_id: str | None = Field(default=None, unique=True, index=True, max_length=8)
+    full_name: Optional[str] = Field(default=None, max_length=255)
+    public_id: Optional[str] = Field(default=None, unique=True, index=True, max_length=8)
 
     @field_validator("email", mode="before")
     @classmethod
@@ -209,7 +206,7 @@ class UserCreate(SQLModel):
     password: str = Field(min_length=8, max_length=40)
     is_active: bool = True
     is_superuser: bool = False
-    full_name: str | None = Field(default=None, max_length=255)
+    full_name: Optional[str] = Field(default=None, max_length=255)
 
     @field_validator("email", mode="before")
     @classmethod
@@ -220,7 +217,7 @@ class UserCreate(SQLModel):
 
     @field_validator("full_name", mode="before")
     @classmethod
-    def validate_full_name(cls, v: str | None) -> str | None:
+    def validate_full_name(cls, v: Optional[str]) -> Optional[str]:
         if isinstance(v, str):
             v = v.strip()
             if not v:
@@ -231,7 +228,7 @@ class UserCreate(SQLModel):
 class UserRegister(SQLModel):
     email: EmailStr = Field(max_length=255)
     password: str = Field(min_length=8, max_length=40)
-    full_name: str | None = Field(default=None, max_length=255)
+    full_name: Optional[str] = Field(default=None, max_length=255)
 
     @field_validator("email", mode="before")
     @classmethod
@@ -242,7 +239,7 @@ class UserRegister(SQLModel):
 
     @field_validator("full_name", mode="before")
     @classmethod
-    def validate_full_name(cls, v: str | None) -> str | None:
+    def validate_full_name(cls, v: Optional[str]) -> Optional[str]:
         if isinstance(v, str):
             v = v.strip()
             if not v:
@@ -252,22 +249,22 @@ class UserRegister(SQLModel):
 
 # Properties to receive via API on update, all are optional
 class UserUpdate(SQLModel):
-    email: EmailStr | None = Field(default=None, max_length=255)
-    password: str | None = Field(default=None, min_length=8, max_length=40)
-    is_active: bool | None = None
-    is_superuser: bool | None = None
-    full_name: str | None = Field(default=None, max_length=255)
+    email: Optional[EmailStr] = Field(default=None, max_length=255)
+    password: Optional[str] = Field(default=None, min_length=8, max_length=40)
+    is_active: Optional[bool] = None
+    is_superuser: Optional[bool] = None
+    full_name: Optional[str] = Field(default=None, max_length=255)
 
     @field_validator("email", mode="before")
     @classmethod
-    def validate_email(cls, v: str | None) -> str | None:
+    def validate_email(cls, v: Optional[str]) -> Optional[str]:
         if isinstance(v, str):
             return v.lower().strip()
         return v
 
     @field_validator("full_name", mode="before")
     @classmethod
-    def validate_full_name(cls, v: str | None) -> str | None:
+    def validate_full_name(cls, v: Optional[str]) -> Optional[str]:
         if isinstance(v, str):
             v = v.strip()
             if not v:
@@ -276,18 +273,18 @@ class UserUpdate(SQLModel):
 
 
 class UserUpdateMe(SQLModel):
-    full_name: str | None = Field(default=None, max_length=255)
-    email: EmailStr | None = Field(default=None, max_length=255)
+    full_name: Optional[str] = Field(default=None, max_length=255)
+    email: Optional[EmailStr] = Field(default=None, max_length=255)
 
 
 class UserProfileUpdate(SQLModel):
-    bio: str | None = Field(default=None, max_length=500)
-    alias: str | None = Field(default=None, max_length=255)
-    interest_ids: list[uuid.UUID] | None = None
+    bio: Optional[str] = Field(default=None, max_length=500)
+    alias: Optional[str] = Field(default=None, max_length=255)
+    interest_ids: Optional[list[uuid.UUID]] = None
 
     @field_validator("bio", mode="before")
     @classmethod
-    def validate_bio(cls, v: str | None) -> str | None:
+    def validate_bio(cls, v: Optional[str]) -> Optional[str]:
         if isinstance(v, str):
             v = v.strip()
         return v
@@ -300,16 +297,16 @@ class UpdatePassword(SQLModel):
 
 class User(UserBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    public_id: str | None = Field(default=None, unique=True, index=True, max_length=8)
+    public_id: Optional[str] = Field(default=None, unique=True, index=True, max_length=8)
     hashed_password: str
     has_set_password: bool = Field(default=True)
-    items: list["Item"] = Relationship(back_populates="owners", link_model=UserItem)
+    items: list["Item"] = Relationship(back_populates="owner")
     collections: list["Collection"] = Relationship(back_populates="owner")
     communities: list["Community"] = Relationship(
         back_populates="members", link_model=CommunityMember
     )
     settings: dict = Field(default={}, sa_column=Column(JSON))
-    profile: UserProfile | None = Relationship(
+    profile: Optional[UserProfile] = Relationship(
         sa_relationship_kwargs={"uselist": False, "cascade": "all, delete-orphan"}
     )
     interests: list["Interest"] = Relationship(back_populates="users", link_model=UserInterest)
@@ -326,7 +323,7 @@ class User(UserBase, table=True):
 
 class CommunityBase(SQLModel):
     name: str = Field(min_length=1, max_length=255, unique=True, index=True)
-    description: str | None = Field(default=None, max_length=255)
+    description: Optional[str] = Field(default=None, max_length=255)
     is_closed: bool = Field(default=False)
 
 
@@ -335,9 +332,9 @@ class CommunityCreate(CommunityBase):
 
 
 class CommunityUpdate(SQLModel):
-    name: str | None = Field(default=None, min_length=1, max_length=255)
-    description: str | None = Field(default=None, max_length=255)
-    is_closed: bool | None = Field(default=None)
+    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    description: Optional[str] = Field(default=None, max_length=255)
+    is_closed: Optional[bool] = Field(default=None)
 
 
 class Community(CommunityBase, table=True):
@@ -355,6 +352,7 @@ class Community(CommunityBase, table=True):
     )
     items: list["Item"] = Relationship(back_populates="communities", link_model=CommunityItem)
     loans: list["Loan"] = Relationship(back_populates="community")
+    collections: list["Collection"] = Relationship(back_populates="community")
 
 
 class CommunityAnnouncement(SQLModel, table=True):
@@ -363,7 +361,7 @@ class CommunityAnnouncement(SQLModel, table=True):
     author_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
     title: str = Field(max_length=255)
     content: str = Field(max_length=5000)
-    created_at: datetime | None = Field(
+    created_at: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
@@ -377,7 +375,7 @@ class CommunityMessage(SQLModel, table=True):
     community_id: uuid.UUID = Field(foreign_key="community.id", ondelete="CASCADE")
     author_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
     content: str = Field(max_length=2000)
-    created_at: datetime | None = Field(
+    created_at: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
@@ -388,42 +386,45 @@ class CommunityMessage(SQLModel, table=True):
 
 class CollectionBase(SQLModel):
     title: str = Field(min_length=1, max_length=255)
-    description: str | None = Field(default=None, max_length=512)
+    description: Optional[str] = Field(default=None, max_length=512)
     collection_type: CollectionType = Field(default=CollectionType.GENERAL)
 
 
 class Collection(CollectionBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    owner_id: uuid.UUID = Field(foreign_key="user.id", nullable=False, ondelete="CASCADE")
-    created_at: datetime | None = Field(
+    owner_id: Optional[uuid.UUID] = Field(default=None, foreign_key="user.id", ondelete="CASCADE")
+    community_id: Optional[uuid.UUID] = Field(default=None, foreign_key="community.id", ondelete="CASCADE")
+    created_at: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
     items: list["Item"] = Relationship(link_model=CollectionItem)
-    owner: User = Relationship(back_populates="collections")
+    owner: Optional["User"] = Relationship(back_populates="collections")
+    community: Optional["Community"] = Relationship(back_populates="collections")
 
 
 class ItemBase(SQLModel):
     title: str = Field(min_length=0, max_length=255)
-    description: str | None = Field(default=None, max_length=1000)
-    author: str | None = Field(default=None, max_length=255)
+    description: Optional[str] = Field(default=None, max_length=1000)
+    author: Optional[str] = Field(default=None, max_length=255)
     item_type: ItemType = Field(default=ItemType.general)
-    image_url: str | None = Field(default=None, max_length=512)
+    image_url: Optional[str] = Field(default=None, max_length=512)
     extra_data: dict = Field(default={}, sa_column=Column(JSON))
-    community_owner_id: uuid.UUID | None = Field(
+    community_owner_id: Optional[uuid.UUID] = Field(
         default=None, foreign_key="community.id", ondelete="CASCADE"
     )
 
 
 class Item(ItemBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    owner_id: Optional[uuid.UUID] = Field(default=None, foreign_key="user.id", ondelete="CASCADE", index=True)
     title: str = Field(max_length=255, index=True)
     count: int = Field(default=1)
-    created_at: datetime | None = Field(
+    created_at: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
-    owners: list["User"] = Relationship(back_populates="items", link_model=UserItem)
+    owner: "User" = Relationship(back_populates="items")
     communities: list["Community"] = Relationship(back_populates="items", link_model=CommunityItem)
     loans: list["Loan"] = Relationship(back_populates="item")
 
@@ -432,20 +433,20 @@ class Item(ItemBase, table=True):
 class InterestPublic(SQLModel):
     id: uuid.UUID
     name: str
-    category: str | None
+    category: Optional[str]
 
 
 class UserProfilePublic(SQLModel):
-    bio: str | None
-    alias: str | None
-    image_url: str | None
+    bio: Optional[str]
+    alias: Optional[str]
+    image_url: Optional[str]
 
 
 class CommunityPublic(CommunityBase):
     id: uuid.UUID
     created_by: uuid.UUID
-    current_user_role: CommunityMemberRole | None = None
-    notifications_enabled: bool | None = None
+    current_user_role: Optional[CommunityMemberRole] = None
+    notifications_enabled: Optional[bool] = None
 
 
 class CommunityAnnouncementBase(SQLModel):
@@ -466,7 +467,7 @@ class CommunityAnnouncementPublic(CommunityAnnouncementBase):
 
 
 class CommunityAnnouncementsPublic(SQLModel):
-    data: list[CommunityAnnouncementPublic]
+    data: list["CommunityAnnouncementPublic"]
     count: int
 
 
@@ -487,12 +488,12 @@ class CommunityMessagePublic(CommunityMessageBase):
 
 
 class CommunityMessagesPublic(SQLModel):
-    data: list[CommunityMessagePublic]
+    data: list["CommunityMessagePublic"]
     count: int
 
 
 class CommunitiesPublic(SQLModel):
-    data: list[CommunityPublic]
+    data: list["CommunityPublic"]
     count: int
 
 
@@ -500,20 +501,20 @@ class UserPublic(UserBase):
     id: uuid.UUID
     public_id: str
     has_set_password: bool = True
-    communities: list[CommunityPublic] = []
-    community_role: CommunityMemberRole | None = None
-    community_status: CommunityMemberStatus | None = None
-    profile: UserProfilePublic | None = None
-    settings: UserSettingsSchema | None = None
-    interests: list[InterestPublic] = []
-    friendship_status: FriendshipStatus | None = None
+    communities: list["CommunityPublic"] = []
+    community_role: Optional[CommunityMemberRole] = None
+    community_status: Optional[CommunityMemberStatus] = None
+    profile: Optional[UserProfilePublic] = None
+    settings: Optional[UserSettingsSchema] = None
+    interests: list["InterestPublic"] = []
+    friendship_status: Optional[FriendshipStatus] = None
     show_contact_details: bool = False
 
 
 class CommunityMemberUpdate(SQLModel):
-    role: CommunityMemberRole | None = Field(default=None)
-    status: CommunityMemberStatus | None = Field(default=None)
-    notifications_enabled: bool | None = Field(default=None)
+    role: Optional[CommunityMemberRole] = Field(default=None)
+    status: Optional[CommunityMemberStatus] = Field(default=None)
+    notifications_enabled: Optional[bool] = Field(default=None)
 
 
 class FriendshipPublic(SQLModel):
@@ -523,7 +524,7 @@ class FriendshipPublic(SQLModel):
 
 
 class UsersPublic(SQLModel):
-    data: list[UserPublic]
+    data: list["UserPublic"]
     count: int
 
 
@@ -532,19 +533,20 @@ class CollectionCreate(CollectionBase):
 
 
 class CollectionUpdate(SQLModel):
-    title: str | None = Field(default=None, min_length=1, max_length=255)
-    description: str | None = Field(default=None, max_length=512)
-    collection_type: CollectionType | None = None
+    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    description: Optional[str] = Field(default=None, max_length=512)
+    collection_type: Optional[CollectionType] = None
 
 
 class CollectionPublic(CollectionBase):
     id: uuid.UUID
-    owner_id: uuid.UUID
+    owner_id: Optional[uuid.UUID] = None
+    community_id: Optional[uuid.UUID] = None
     items: list["ItemPublic"] = []
 
 
 class CollectionsPublic(SQLModel):
-    data: list[CollectionPublic]
+    data: list["CollectionPublic"]
     count: int
 
 
@@ -557,17 +559,17 @@ class BookCreate(ItemCreate):
 
 
 class ItemUpdate(SQLModel):
-    title: str | None = Field(default=None, min_length=1, max_length=255)
-    description: str | None = Field(default=None, max_length=1000)
-    author: str | None = Field(default=None, max_length=255)
-    item_type: ItemType | None = None
-    image_url: str | None = None
-    extra_data: dict | None = None
+    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    description: Optional[str] = Field(default=None, max_length=1000)
+    author: Optional[str] = Field(default=None, max_length=255)
+    item_type: Optional[ItemType] = None
+    image_url: Optional[str] = None
+    extra_data: Optional[dict] = None
 
 
 class ItemOwnerPublic(SQLModel):
     id: uuid.UUID
-    full_name: str | None
+    full_name: Optional[str]
     email: str
     is_available: bool = True
     show_contact_details: bool = False
@@ -575,13 +577,14 @@ class ItemOwnerPublic(SQLModel):
 
 class ItemPublic(ItemBase):
     id: uuid.UUID
+    owner_id: uuid.UUID
     count: int
     created_at: datetime
-    owners: list[ItemOwnerPublic] = []
-    communities: list[CommunityPublic] = []
-    collection_id: uuid.UUID | None = None
+    owner: Optional[ItemOwnerPublic] = None
+    communities: list["CommunityPublic"] = []
+    collection_id: Optional[uuid.UUID] = None
     is_available: bool = True
-    added_by_id: uuid.UUID | None = None
+    added_by_id: Optional[uuid.UUID] = None
     is_donation_pending: bool = False
 
 
@@ -590,18 +593,18 @@ class BookPublic(ItemPublic):
 
 
 class BooksPublic(SQLModel):
-    data: list[BookPublic]
+    data: list["BookPublic"]
     count: int
 
 
 class ItemsPublic(SQLModel):
-    data: list[ItemPublic]
+    data: list["ItemPublic"]
     count: int
 
 
 class LoanCreate(SQLModel):
     item_id: uuid.UUID
-    community_id: uuid.UUID | None = None
+    community_id: Optional[uuid.UUID] = None
     start_date: datetime
     end_date: datetime
 
@@ -609,21 +612,21 @@ class LoanCreate(SQLModel):
 class LoanPublic(SQLModel):
     id: uuid.UUID
     item_id: uuid.UUID
-    owner_id: uuid.UUID | None
-    community_id: uuid.UUID | None
+    owner_id: Optional[uuid.UUID]
+    community_id: Optional[uuid.UUID]
     requester_id: uuid.UUID
     status: LoanStatus
     start_date: datetime
     end_date: datetime
     created_at: datetime
-    item: ItemPublic
-    owner: UserPublic | None
-    requester: UserPublic
-    community: CommunityPublic | None
+    item: "ItemPublic"
+    owner: Optional["UserPublic"]
+    requester: "UserPublic"
+    community: Optional["CommunityPublic"]
 
 
 class LoansPublic(SQLModel):
-    data: list[LoanPublic]
+    data: list["LoanPublic"]
     count: int
 
 
@@ -633,20 +636,20 @@ class NotificationPublic(SQLModel):
     message: str
     type: NotificationType
     is_read: bool
-    link: str | None
+    link: Optional[str]
     created_at: datetime
 
 
 class NotificationsPublic(SQLModel):
-    data: list[NotificationPublic]
+    data: list["NotificationPublic"]
     count: int
     unread_count: int
 
 
 class SearchResults(SQLModel):
-    users: list[UserPublic]
-    items: list[ItemPublic]
-    communities: list[CommunityPublic]
+    users: list["UserPublic"]
+    items: list["ItemPublic"]
+    communities: list["CommunityPublic"]
 
 
 class Message(SQLModel):
@@ -659,60 +662,7 @@ class Token(SQLModel):
 
 
 class TokenPayload(SQLModel):
-    sub: str | None = None
-
-
-class NewPassword(SQLModel):
-    token: str
-    new_password: str = Field(min_length=8, max_length=40)
-
-class BookPublic(ItemPublic):
-    pass
-
-
-class BooksPublic(SQLModel):
-    data: list[BookPublic]
-    count: int
-
-
-class ItemsPublic(SQLModel):
-    data: list[ItemPublic]
-    count: int
-
-
-class NotificationPublic(SQLModel):
-    id: uuid.UUID
-    title: str
-    message: str
-    type: NotificationType
-    is_read: bool
-    link: str | None
-    created_at: datetime
-
-
-class NotificationsPublic(SQLModel):
-    data: list[NotificationPublic]
-    count: int
-    unread_count: int
-
-
-class SearchResults(SQLModel):
-    users: list[UserPublic]
-    items: list[ItemPublic]
-    communities: list[CommunityPublic]
-
-
-class Message(SQLModel):
-    message: str
-
-
-class Token(SQLModel):
-    access_token: str
-    token_type: str = "bearer"
-
-
-class TokenPayload(SQLModel):
-    sub: str | None = None
+    sub: Optional[str] = None
 
 
 class NewPassword(SQLModel):

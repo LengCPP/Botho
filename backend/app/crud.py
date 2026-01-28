@@ -38,10 +38,10 @@ from app.search import (
 
 
 def create_collection(
-    *, session: Session, collection_in: CollectionCreate, owner_id: uuid.UUID
+    *, session: Session, collection_in: CollectionCreate, owner_id: uuid.UUID | None = None, community_id: uuid.UUID | None = None
 ) -> Collection:
     db_collection = Collection.model_validate(
-        collection_in, update={"owner_id": owner_id}
+        collection_in, update={"owner_id": owner_id, "community_id": community_id}
     )
     session.add(db_collection)
     session.commit()
@@ -88,6 +88,16 @@ def remove_item_from_collection(
     if db_obj:
         session.delete(db_obj)
         session.commit()
+
+        # Bucket cleanup: If this was a bucket and is now empty, delete it.
+        from app.models import Collection, CollectionType
+        collection = session.get(Collection, collection_id)
+        if collection and collection.collection_type == CollectionType.BUCKET:
+            count_stmt = select(func.count()).select_from(CollectionItem).where(CollectionItem.collection_id == collection_id)
+            item_count = session.exec(count_stmt).one()
+            if item_count == 0:
+                session.delete(collection)
+                session.commit()
 
 
 def create_notification(    *,
@@ -284,15 +294,9 @@ def accept_friend_request(
 
 
 def create_book(*, session: Session, book_in: BookCreate, owner_id: uuid.UUID) -> Item:
-    from app.models import ItemType, UserItem, Item
-    db_book = Item.model_validate(book_in, update={"item_type": ItemType.book})
+    from app.models import ItemType, Item
+    db_book = Item.model_validate(book_in, update={"item_type": ItemType.book, "owner_id": owner_id})
     session.add(db_book)
-    session.flush()
-    
-    # Add ownership
-    user_item = UserItem(user_id=owner_id, item_id=db_book.id)
-    session.add(user_item)
-    
     session.commit()
     session.refresh(db_book)
     

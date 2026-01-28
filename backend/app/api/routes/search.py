@@ -1,29 +1,34 @@
-from typing import Any
 import uuid
+from typing import Any
 
 from fastapi import APIRouter
-from sqlmodel import col, select
+from sqlmodel import col, func, select, or_
 
 from app.api.deps import CurrentUser, SessionDep
 from app.api.utils import filter_user_privacy, filter_owner_privacy
-from app.search import client as meili_client
+from app.core.config import settings
 from app.models import (
     Community,
-    Friendship,
-    FriendshipStatus,
     Item,
+    ItemPublic,
     SearchResults,
     User,
-    UserPublic,
-    CommunityMember,
-    CommunityMemberStatus,
-    UserItem,
+    Friendship,
+    FriendshipStatus,
     CollectionItem,
-    ItemPublic,
-    ItemOwnerPublic,
 )
 
 router = APIRouter(prefix="/search", tags=["search"])
+
+# Import meilisearch only if enabled
+if settings.MEILI_URL:
+    import meilisearch
+    meili_client = meilisearch.Client(
+        settings.MEILI_URL,
+        settings.MEILI_MASTER_KEY
+    )
+else:
+    meili_client = None
 
 
 @router.get("/", response_model=SearchResults)
@@ -36,121 +41,56 @@ def search(
 ) -> Any:
     """
     Search for users, items, and communities.
+    Users: Search by full_name, email, bio, alias.
+    Items: Search by title, description (Accessible items only).
+    Communities: Search by name, description.
     """
-    
-    # Define the user's "globe"
-    # 1. Direct friends
+    if not q:
+        return SearchResults(users=[], items=[], communities=[])
+
+    # 1. Search Users (Global)
+    user_statement = select(User).where(
+        or_(
+            col(User.full_name).ilike(f"%{q}%"),
+            col(User.email).ilike(f"%{q}%"),
+        )
+    ).limit(limit)
+    users_raw = session.exec(user_statement).all()
+    users_public = [filter_user_privacy(u, current_user.id, is_admin=current_user.is_superuser) for u in users_raw]
+
+    # 2. Search Items (Expansion: Filter by visibility/friends)
+    # Get friend IDs
     friends_stmt = select(Friendship.friend_id).where(
         Friendship.user_id == current_user.id,
         Friendship.status == FriendshipStatus.ACCEPTED
     )
-    friend_ids = set(session.exec(friends_stmt).all())
+    friend_ids = session.exec(friends_stmt).all()
     
-    # 2. Communities I am in
-    my_communities_stmt = select(CommunityMember.community_id).where(
-        CommunityMember.user_id == current_user.id,
-        CommunityMember.status == CommunityMemberStatus.ACCEPTED
+    friends_stmt_2 = select(Friendship.user_id).where(
+        Friendship.friend_id == current_user.id,
+        Friendship.status == FriendshipStatus.ACCEPTED
     )
-    my_community_ids = set(session.exec(my_communities_stmt).all())
-    
-    # 3. Communities my friends are in
-    friend_communities_stmt = select(CommunityMember.community_id).where(
-        CommunityMember.user_id.in_(list(friend_ids)),
-        CommunityMember.status == CommunityMemberStatus.ACCEPTED
-    )
-    friend_community_ids = set(session.exec(friend_communities_stmt).all())
-    
-    all_globe_community_ids = list(my_community_ids | friend_community_ids)
-    
-    # 4. All users in these globe communities
-    globe_users_in_comms_stmt = select(CommunityMember.user_id).where(
-        CommunityMember.community_id.in_(all_globe_community_ids),
-        CommunityMember.status == CommunityMemberStatus.ACCEPTED
-    )
-    globe_users_in_comms = set(session.exec(globe_users_in_comms_stmt).all())
-    
-    # Final set of user IDs in the "globe"
-    globe_user_ids = globe_users_in_comms | friend_ids | {current_user.id}
+    friend_ids_2 = session.exec(friends_stmt_2).all()
+    globe_user_ids = set([current_user.id] + list(friend_ids) + list(friend_ids_2))
 
-    # 1. Search Users
-    user_ids_to_fetch = set()
-    
-    normalized_q = q.lower().strip()
-    # Case A: Accurate match by public_id (Global)
-    exact_user = session.exec(
-        select(User).where(User.public_id == normalized_q)
-    ).first()
-    
-    if not exact_user and not normalized_q.startswith("u-"):
-        exact_user = session.exec(
-            select(User).where(User.public_id == f"u-{normalized_q}")
-        ).first()
-        
-    if exact_user:
-        user_ids_to_fetch.add(exact_user.id)
-
-    # Case B: Search by name (ONLY if in the globe)
-    globe_name_users_stmt = (
-        select(User.id)
-        .where(
-            User.id.in_(list(globe_user_ids)),
-            col(User.full_name).ilike(f"%{q}%"),
-            User.id != current_user.id
-        )
-    )
-    globe_name_user_ids = session.exec(globe_name_users_stmt).all()
-    for uid in globe_name_user_ids:
-        user_ids_to_fetch.add(uid)
-
-    users = []
-    if user_ids_to_fetch:
-        users = session.exec(
-            select(User).where(User.id.in_(list(user_ids_to_fetch))).limit(limit)
-        ).all()
-
-    # Get friendship statuses for found users
-    found_user_ids = [u.id for u in users]
-    friendship_map = {}
-    if found_user_ids:
-        friendships = session.exec(
-            select(Friendship).where(
-                Friendship.user_id == current_user.id,
-                Friendship.friend_id.in_(found_user_ids)
-            )
-        ).all()
-        friendship_map = {f.friend_id: f.status for f in friendships}
-
-    users_public = []
-    for user in users:
-        u_pub = filter_user_privacy(user, current_user.id, is_admin=current_user.is_superuser)
-        status = friendship_map.get(user.id)
-        u_pub.friendship_status = status
-        
-        # Restrict data if not friends
-        if not current_user.is_superuser and user.id != current_user.id and status != FriendshipStatus.ACCEPTED:
-            u_pub.communities = []
-            u_pub.interests = []
-            
-        users_public.append(u_pub)
-
-    # 2. Search Items using Meilisearch
     meili_items_raw = []
     try:
+        if not meili_client:
+            raise Exception("Meilisearch not configured")
+            
         item_index = meili_client.index("items")
         search_res = item_index.search(q, {
-            "limit": limit * 2, # Fetch slightly more
-            "attributesToSearchOn": ["title", "author", "description"]
+            "limit": limit * 2, # Fetch more to allow for filtering
+            "attributesToSearchOn": ["title", "description", "author"]
         })
         item_ids = [hit["id"] for hit in search_res["hits"]]
-        
         if item_ids:
-            # Fetch items that are in the globe
+            # Re-fetch from DB to check visibility and get full objects
             stmt = (
                 select(Item)
-                .join(UserItem)
                 .where(
                     Item.id.in_(item_ids),
-                    UserItem.user_id.in_(list(globe_user_ids))
+                    Item.owner_id.in_(list(globe_user_ids))
                 )
                 .limit(limit)
             )
@@ -164,10 +104,9 @@ def search(
         # Fallback to SQL
         item_statement = (
             select(Item)
-            .join(UserItem)
             .where(
                 col(Item.title).ilike(f"%{q}%"),
-                UserItem.user_id.in_(list(globe_user_ids))
+                Item.owner_id.in_(list(globe_user_ids))
             )
             .limit(limit)
         )
@@ -176,11 +115,24 @@ def search(
     # Convert raw items to ItemPublic and add collection info
     items_public = []
     for item in meili_items_raw:
-        item_pub = ItemPublic.model_validate(item)
-        item_pub.owners = [
-            filter_owner_privacy(owner, current_user.id, is_admin=current_user.is_superuser)
-            for owner in item.owners
-        ]
+        owner_pub = filter_owner_privacy(item.owner, current_user.id, is_admin=current_user.is_superuser)
+        
+        # Manually construct ItemPublic
+        item_pub = ItemPublic(
+            id=item.id,
+            owner_id=item.owner_id,
+            title=item.title,
+            description=item.description,
+            author=item.author,
+            item_type=item.item_type,
+            image_url=item.image_url,
+            extra_data=item.extra_data,
+            count=item.count,
+            created_at=item.created_at,
+            owner=owner_pub,
+            is_available=True, # Search results usually show as available, or we can check
+            community_owner_id=item.community_owner_id
+        )
         
         # Check for collection
         collection_link = session.exec(

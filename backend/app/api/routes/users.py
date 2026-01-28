@@ -240,15 +240,6 @@ def delete_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
             detail="You have active or pending loans. Please resolve all loans before deleting your account."
         )
     
-    # Handle items ownership before deleting user
-    for item in list(current_user.items):
-        item.owners.remove(current_user)
-        item.count = max(0, item.count - 1)
-        if not item.owners:
-            session.delete(item)
-        else:
-            session.add(item)
-            
     session.delete(current_user)
     session.commit()
     return Message(message="User deleted successfully")

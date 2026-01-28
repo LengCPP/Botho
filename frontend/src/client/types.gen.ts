@@ -47,7 +47,8 @@ export type CollectionPublic = {
     description?: (string | null);
     collection_type?: CollectionType;
     id: string;
-    owner_id: string;
+    owner_id?: (string | null);
+    community_id?: (string | null);
     items?: Array<ItemPublic>;
 };
 
@@ -56,7 +57,7 @@ export type CollectionsPublic = {
     count: number;
 };
 
-export type CollectionType = 'general' | 'library';
+export type CollectionType = 'general' | 'library' | 'bucket';
 
 export type CollectionUpdate = {
     title?: (string | null);
@@ -169,9 +170,10 @@ export type ItemPublic = {
     };
     community_owner_id?: (string | null);
     id: string;
+    owner_id: string;
     count: number;
     created_at: string;
-    owners?: Array<ItemOwnerPublic>;
+    owner?: (ItemOwnerPublic | null);
     communities?: Array<CommunityPublic>;
     collection_id?: (string | null);
     is_available?: boolean;
@@ -336,6 +338,7 @@ export type ValidationError = {
 };
 
 export type CollectionsReadCollectionsData = {
+    communityId?: (string | null);
     limit?: number;
     ownerId?: (string | null);
     skip?: number;
@@ -344,6 +347,7 @@ export type CollectionsReadCollectionsData = {
 export type CollectionsReadCollectionsResponse = (CollectionsPublic);
 
 export type CollectionsCreateCollectionData = {
+    communityId?: (string | null);
     requestBody: CollectionCreate;
 };
 

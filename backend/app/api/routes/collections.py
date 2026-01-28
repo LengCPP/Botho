@@ -2,7 +2,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session, select, func
+from sqlmodel import Session, select, func, or_
 
 from app.api.deps import get_current_active_superuser, get_current_user, get_db
 from app.models import (
@@ -13,6 +13,9 @@ from app.models import (
     CollectionsPublic,
     Message,
     User,
+    CommunityMember,
+    CommunityMemberStatus,
+    CommunityMemberRole,
 )
 from app import crud
 
@@ -26,10 +29,28 @@ def read_collections(
     limit: int = 100,
     current_user: User = Depends(get_current_user),
     owner_id: uuid.UUID | None = None,
+    community_id: uuid.UUID | None = None,
 ) -> Any:
     """
     Retrieve collections.
     """
+    if community_id:
+        # Check if member
+        statement = select(CommunityMember).where(
+            CommunityMember.community_id == community_id,
+            CommunityMember.user_id == current_user.id,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+        )
+        membership = session.exec(statement).first()
+        if not membership and not current_user.is_superuser:
+            raise HTTPException(status_code=403, detail="Not enough permissions to view this community's collections")
+        
+        count_statement = select(func.count()).select_from(Collection).where(Collection.community_id == community_id)
+        count = session.exec(count_statement).one()
+        statement = select(Collection).where(Collection.community_id == community_id).offset(skip).limit(limit)
+        collections = session.exec(statement).all()
+        return CollectionsPublic(data=collections, count=count)
+
     target_owner_id = owner_id or current_user.id
     
     # Permission check: If not me, check if friend
@@ -69,12 +90,32 @@ def create_collection(
     session: Session = Depends(get_db),
     collection_in: CollectionCreate,
     current_user: User = Depends(get_current_user),
+    community_id: uuid.UUID | None = None,
 ) -> Any:
     """
     Create new collection.
     """
+    owner_id = None
+    if community_id:
+        # Check if admin
+        statement = select(CommunityMember).where(
+            CommunityMember.community_id == community_id,
+            CommunityMember.user_id == current_user.id,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+            CommunityMember.role == CommunityMemberRole.ADMIN,
+        )
+        membership = session.exec(statement).first()
+        if not membership and not current_user.is_superuser:
+            # Also check if creator
+            from app.models import Community
+            comm = session.get(Community, community_id)
+            if not comm or comm.created_by != current_user.id:
+                raise HTTPException(status_code=403, detail="Only community admins can create community collections")
+    else:
+        owner_id = current_user.id
+
     collection = crud.create_collection(
-        session=session, collection_in=collection_in, owner_id=current_user.id
+        session=session, collection_in=collection_in, owner_id=owner_id, community_id=community_id
     )
     return collection
 
@@ -108,7 +149,23 @@ def update_collection(
     collection = session.get(Collection, id)
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
-    if collection.owner_id != current_user.id and not current_user.is_superuser:
+    
+    can_edit = False
+    if collection.owner_id == current_user.id or current_user.is_superuser:
+        can_edit = True
+    elif collection.community_id:
+        # Check if community admin
+        statement = select(CommunityMember).where(
+            CommunityMember.community_id == collection.community_id,
+            CommunityMember.user_id == current_user.id,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+            CommunityMember.role == CommunityMemberRole.ADMIN,
+        )
+        membership = session.exec(statement).first()
+        if membership:
+            can_edit = True
+            
+    if not can_edit:
         raise HTTPException(status_code=403, detail="Not enough permissions")
     
     collection = crud.update_collection(
@@ -130,7 +187,23 @@ def delete_collection(
     collection = session.get(Collection, id)
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
-    if collection.owner_id != current_user.id and not current_user.is_superuser:
+    
+    can_delete = False
+    if collection.owner_id == current_user.id or current_user.is_superuser:
+        can_delete = True
+    elif collection.community_id:
+        # Check if community admin
+        statement = select(CommunityMember).where(
+            CommunityMember.community_id == collection.community_id,
+            CommunityMember.user_id == current_user.id,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+            CommunityMember.role == CommunityMemberRole.ADMIN,
+        )
+        membership = session.exec(statement).first()
+        if membership:
+            can_delete = True
+            
+    if not can_delete:
         raise HTTPException(status_code=403, detail="Not enough permissions")
     
     crud.delete_collection(session=session, collection_id=id)
@@ -151,7 +224,22 @@ def add_item_to_collection(
     collection = session.get(Collection, id)
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
-    if collection.owner_id != current_user.id:
+    
+    can_manage = False
+    if collection.owner_id == current_user.id or current_user.is_superuser:
+        can_manage = True
+    elif collection.community_id:
+        statement = select(CommunityMember).where(
+            CommunityMember.community_id == collection.community_id,
+            CommunityMember.user_id == current_user.id,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+            CommunityMember.role == CommunityMemberRole.ADMIN,
+        )
+        membership = session.exec(statement).first()
+        if membership:
+            can_manage = True
+            
+    if not can_manage:
         raise HTTPException(status_code=403, detail="Not enough permissions")
     
     # Check if item is already in ANY collection
@@ -180,7 +268,22 @@ def remove_item_from_collection(
     collection = session.get(Collection, id)
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
-    if collection.owner_id != current_user.id:
+    
+    can_manage = False
+    if collection.owner_id == current_user.id or current_user.is_superuser:
+        can_manage = True
+    elif collection.community_id:
+        statement = select(CommunityMember).where(
+            CommunityMember.community_id == collection.community_id,
+            CommunityMember.user_id == current_user.id,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+            CommunityMember.role == CommunityMemberRole.ADMIN,
+        )
+        membership = session.exec(statement).first()
+        if membership:
+            can_manage = True
+            
+    if not can_manage:
         raise HTTPException(status_code=403, detail="Not enough permissions")
     
     crud.remove_item_from_collection(session=session, collection_id=id, item_id=item_id)

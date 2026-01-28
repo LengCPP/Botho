@@ -35,8 +35,8 @@ async def create_loan_request(
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     
-    # Check if user is already an owner
-    if any(owner.id == current_user.id for owner in item.owners):
+    # Check if user is already the owner
+    if item.owner_id == current_user.id:
         raise HTTPException(status_code=400, detail="You already own this item")
 
     # Determine if this is a community loan or personal loan
@@ -62,10 +62,8 @@ async def create_loan_request(
         if not session.exec(statement).first():
             raise HTTPException(status_code=403, detail="Must be a member of the community to borrow its items")
     else:
-        # Personal loan - use the first owner
-        if not item.owners:
-            raise HTTPException(status_code=400, detail="Item has no owners and is not a community item")
-        owner_id = item.owners[0].id
+        # Personal loan
+        owner_id = item.owner_id
 
     # Check for existing active or pending loans for this item
     existing_loan = session.exec(

@@ -40,6 +40,11 @@ from app.models import (
     User,
     UserPublic,
     UsersPublic,
+    CollectionCreate,
+    CollectionType,
+    ItemType,
+    Collection,
+    CollectionItem,
 )
 from app.api.utils import filter_user_privacy, filter_owner_privacy, filter_loan_privacy
 from app.search import delete_community_from_search, sync_community_to_search
@@ -425,320 +430,171 @@ def update_community_notifications(
 
 
 @router.get("/{id}/items", response_model=ItemsPublic)
-
-
 def read_community_items(
-
-
     *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, skip: int = 0, limit: int = 100
-
-
 ) -> Any:
-
-
     """
-
-
     Get items belonging to a community.
-
-
+    Includes both pooled items (via CommunityItem) and exclusively community-owned items.
     """
-
-
     community = session.get(Community, id)
-
-
     if not community:
-
-
         raise HTTPException(status_code=404, detail="Community not found")
 
-
-
-
-
     # Access check: member or admin
-
-
     statement = select(CommunityMember).where(
-
-
         CommunityMember.community_id == id,
-
-
         CommunityMember.user_id == current_user.id,
-
-
         CommunityMember.status == CommunityMemberStatus.ACCEPTED,
-
-
     )
-
-
     membership = session.exec(statement).first()
-
-
     if not membership and not current_user.is_superuser:
-
-
         raise HTTPException(status_code=403, detail="Must be a member to view community items")
 
-
-
-
-
-    # Fetch items linked to community
-
-
-    statement = (
-
-
-        select(Item, CommunityItem)
-
-
+    # Query for pooled items
+    pooled_stmt = (
+        select(Item)
         .join(CommunityItem, Item.id == CommunityItem.item_id)
-
-
         .where(CommunityItem.community_id == id)
-
-
+    )
+    
+    # Query for exclusively community-owned items
+    owned_stmt = (
+        select(Item)
+        .where(Item.community_owner_id == id)
+    )
+    
+    # Combine using OR
+    statement = select(Item).where(
+        or_(
+            Item.id.in_(pooled_stmt.with_only_columns(Item.id)),
+            Item.community_owner_id == id
+        )
     )
 
-
-    results = session.exec(statement.offset(skip).limit(limit)).all()
-
-
+    count_stmt = select(func.count()).select_from(statement.subquery())
+    count = session.exec(count_stmt).one()
     
-
-
-    count_statement = (
-
-
-        select(func.count())
-
-
-        .select_from(CommunityItem)
-
-
-        .where(CommunityItem.community_id == id)
-
-
-    )
-
-
-    count = session.exec(count_statement).one()
-
-
+    items = session.exec(statement.offset(skip).limit(limit)).all()
     
-
-
+    # Get all CommunityItem meta for pooled items in this batch
+    item_ids = [item.id for item in items]
+    comm_items = session.exec(
+        select(CommunityItem).where(
+            CommunityItem.community_id == id,
+            CommunityItem.item_id.in_(item_ids)
+        )
+    ).all()
+    comm_item_map = {ci.item_id: ci for ci in comm_items}
+    
     items_public = []
-
-
-    for item, comm_item in results:
-
-
-        item_pub = ItemPublic.model_validate(item)
-
-
-        item_pub.added_by_id = comm_item.added_by
-
-
-        item_pub.is_donation_pending = comm_item.is_donation_pending
-
-
-        
-
-
-        # Add owners info
-
-
-        item_pub.owners = [
-
-
-            filter_owner_privacy(owner, current_user.id, is_admin=current_user.is_superuser)
-
-
-            for owner in item.owners
-
-
-        ]
-
-
+    for item in items:
         # Check availability
-
-
-        active_loan = session.exec(
-
-
+        is_avail = not session.exec(
             select(Loan).where(
-
-
                 Loan.item_id == item.id,
-
-
                 Loan.status.in_([LoanStatus.ACTIVE, LoanStatus.ACCEPTED, LoanStatus.PENDING])
-
-
             )
-
-
         ).first()
-
-
-        item_pub.is_available = not active_loan
-
-
+        
+        owner_pub = None
+        if item.owner:
+            owner_pub = filter_owner_privacy(item.owner, current_user.id, is_admin=current_user.is_superuser)
+            owner_pub.is_available = is_avail
+            
+        item_pub = ItemPublic(
+            id=item.id,
+            owner_id=item.owner_id,
+            title=item.title,
+            description=item.description,
+            author=item.author,
+            item_type=item.item_type,
+            image_url=item.image_url,
+            extra_data=item.extra_data,
+            count=item.count,
+            created_at=item.created_at,
+            owner=owner_pub,
+            is_available=is_avail,
+            community_owner_id=item.community_owner_id
+        )
+        
+        # Add pooling metadata if applicable
+        comm_item = comm_item_map.get(item.id)
+        if comm_item:
+            item_pub.added_by_id = comm_item.added_by
+            item_pub.is_donation_pending = comm_item.is_donation_pending
+            
         items_public.append(item_pub)
-
-
-
-
 
     return ItemsPublic(data=items_public, count=count)
 
 
-
-
-
-
-
-
 @router.post("/{id}/items/{item_id}", response_model=Message)
-
-
 def add_item_to_community(
-
-
     *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, item_id: uuid.UUID
-
-
 ) -> Any:
-
-
     """
-
-
     Add an item to a community pool (Any member).
-
-
     """
-
-
     community = session.get(Community, id)
-
-
     if not community:
-
-
         raise HTTPException(status_code=404, detail="Community not found")
 
-
-
-
-
     # Member check
-
-
     statement = select(CommunityMember).where(
-
-
         CommunityMember.community_id == id,
-
-
         CommunityMember.user_id == current_user.id,
-
-
         CommunityMember.status == CommunityMemberStatus.ACCEPTED,
-
-
     )
-
-
     membership = session.exec(statement).first()
-
-
     if not membership and not current_user.is_superuser:
-
-
         raise HTTPException(status_code=403, detail="Must be a member to add items to community")
 
-
-
-
-
     item = session.get(Item, item_id)
-
-
     if not item:
-
-
         raise HTTPException(status_code=404, detail="Item not found")
 
-
-
-
-
-    # Check if current user is an owner
-
-
-    if current_user.id not in [o.id for o in item.owners]:
-
-
-        raise HTTPException(status_code=403, detail="Only owners can add items to pool")
-
-
-
-
+    # Check if current user is the owner
+    if item.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the owner can add this item to a pool")
 
     # Check if already added
-
-
     statement = select(CommunityItem).where(
-
-
         CommunityItem.community_id == id,
-
-
         CommunityItem.item_id == item_id
-
-
     )
-
-
     existing = session.exec(statement).first()
-
-
     if existing:
-
-
-        raise HTTPException(status_code=400, detail="Item already in community")
-
-
-
-
+        raise HTTPException(status_code=400, detail="Item already in community pool")
 
     comm_item = CommunityItem(
-
-
         community_id=id, 
-
-
         item_id=item_id, 
-
-
         added_by=current_user.id
-
-
     )
-
-
     session.add(comm_item)
 
+    # Auto-create collection for books
+    if item.item_type == ItemType.book:
+        visible_name = current_user.full_name or current_user.email
+        if current_user.profile and current_user.profile.alias:
+            visible_name = current_user.full_name or current_user.profile.alias or current_user.email
+
+        collection_title = f"{item.title} {visible_name} bucket"
+        collection_in = CollectionCreate(
+            title=collection_title,
+            description="Automatically created bucket for community book sharing.",
+            collection_type=CollectionType.BUCKET
+        )
+        new_collection = crud.create_collection(
+            session=session, 
+            collection_in=collection_in, 
+            owner_id=current_user.id,
+            community_id=id
+        )
+        crud.add_item_to_collection(session=session, collection_id=new_collection.id, item_id=item_id)
 
     session.commit()
-
-
     return Message(message="Item added to community pool")
 
 
@@ -989,113 +845,55 @@ def ratify_donation(
 
 
 @router.delete("/{id}/items/{item_id}", response_model=Message)
-
-
 def remove_item_from_community(
-
-
     *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, item_id: uuid.UUID
-
-
 ) -> Any:
-
-
     """
-
-
     Remove an item from a community.
-
-
     Admins can remove any item. Members can only remove items they added.
-
-
     """
-
-
     community = session.get(Community, id)
-
-
     if not community:
-
-
         raise HTTPException(status_code=404, detail="Community not found")
-
-
-
-
-
+    
     statement = select(CommunityItem).where(
-
-
         CommunityItem.community_id == id,
-
-
         CommunityItem.item_id == item_id
-
-
     )
-
-
     comm_item = session.exec(statement).first()
-
-
     if not comm_item:
-
-
         raise HTTPException(status_code=404, detail="Item not found in community")
-
-
-
-
-
+    
     # Admin or added_by check
-
-
     statement = select(CommunityMember).where(
-
-
         CommunityMember.community_id == id,
-
-
         CommunityMember.user_id == current_user.id,
-
-
         CommunityMember.status == CommunityMemberStatus.ACCEPTED,
-
-
     )
-
-
     membership = session.exec(statement).first()
-
-
     
-
-
     is_admin = membership and membership.role == CommunityMemberRole.ADMIN
-
-
     is_adder = comm_item.added_by == current_user.id
-
-
     
-
-
     if not is_admin and not is_adder and not current_user.is_superuser:
-
-
         raise HTTPException(status_code=403, detail="Not enough permissions to remove this item")
-
-
-
-
-
+    
+    # Bucket cleanup
+    statement = (
+        select(Collection)
+        .join(CollectionItem, Collection.id == CollectionItem.collection_id)
+        .where(
+            Collection.community_id == id,
+            Collection.collection_type == CollectionType.BUCKET,
+            CollectionItem.item_id == item_id
+        )
+    )
+    buckets = session.exec(statement).all()
+    for bucket in buckets:
+        crud.remove_item_from_collection(session=session, collection_id=bucket.id, item_id=item_id)
+            
     session.delete(comm_item)
-
-
     session.commit()
-
-
     return Message(message="Item removed from community")
 
 

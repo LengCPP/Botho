@@ -38,11 +38,14 @@ import {
 
 import {
   CommunitiesService,
+  CollectionsService,
   type CommunityPublic,
   FriendsService,
   type ItemPublic,
 } from "@/client"
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
+import AddCollection from "@/components/Collections/AddCollection"
+import CollectionCard from "@/components/Collections/CollectionCard"
 import AddItem from "@/components/Items/AddItem"
 import ItemCard from "@/components/Items/ItemCard"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
@@ -220,6 +223,11 @@ function CommunityBoard() {
   const { data: communityItems, isLoading: isLoadingItems } = useQuery({
     queryKey: ["communityItems", communityId],
     queryFn: () => CommunitiesService.readCommunityItems({ id: communityId }),
+  })
+
+  const { data: communityCollections, isLoading: isLoadingCollections } = useQuery({
+    queryKey: ["communityCollections", communityId],
+    queryFn: () => CollectionsService.readCollections({ communityId }),
   })
 
   const { data: messages, isLoading: isLoadingMessages } = useQuery({
@@ -542,69 +550,92 @@ function CommunityBoard() {
           </Tabs.Content>
 
           <Tabs.Content value="items" pt={6}>
-            <VStack align="stretch" gap={6}>
-              <Flex justify="space-between" align="center">
-                <Heading size="md">Community Items</Heading>
-                <AddItem communityId={communityId} isAdmin={isAdmin} />
-              </Flex>
-
-              {isLoadingItems ? (
-                <Text>Loading items...</Text>
-              ) : communityItems?.data.length === 0 ? (
-                <Box
-                  p={10}
-                  textAlign="center"
-                  borderWidth="1px"
-                  borderStyle="dashed"
-                  rounded="md"
-                >
-                  <Text color="fg.muted">
-                    No items in this community pool yet.
-                  </Text>
-                </Box>
-              ) : (
-                <>
-                  <SimpleGrid columns={{ base: 2, md: 3, lg: 4 }} gap={6}>
-                    {communityItems?.data.map((item) => (
-                      <Box key={item.id} position="relative">
-                        {isMobile ? (
-                          <CompactItemCard
-                            item={item}
-                            communityId={communityId}
-                            isAdmin={isAdmin}
-                            onShowDetails={() => setSelectedItem(item)}
-                          />
-                        ) : (
-                          <ItemCard
-                            item={item}
-                            communityId={communityId}
-                            isAdmin={isAdmin}
-                          />
-                        )}
-                        {item.is_donation_pending && (
-                          <Badge
-                            colorPalette="yellow"
-                            variant="solid"
-                            size="xs"
-                            position="absolute"
-                            top={2}
-                            left={2}
-                            zIndex={1}
-                          >
-                            Donation Pending
-                          </Badge>
-                        )}
-                      </Box>
+            <VStack align="stretch" gap={10}>
+              {/* Community Collections Section */}
+              {communityCollections?.data && communityCollections.data.length > 0 && (
+                <Box>
+                  <Flex justify="space-between" align="center" mb={4}>
+                    <Heading size="md">Community Collections</Heading>
+                    {isAdmin && <AddCollection communityId={communityId} />}
+                  </Flex>
+                  <SimpleGrid columns={{ base: 1, sm: 2, lg: 3, xl: 4 }} gap={6}>
+                    {communityCollections.data.map((collection) => (
+                      <CollectionCard key={collection.id} collection={collection} />
                     ))}
                   </SimpleGrid>
-
-                  <ItemDetailModal
-                    item={selectedItem}
-                    isOpen={!!selectedItem}
-                    onClose={() => setSelectedItem(null)}
-                  />
-                </>
+                </Box>
               )}
+
+              {/* Community Items Section */}
+              <Box>
+                <Flex justify="space-between" align="center" mb={4}>
+                  <Heading size="md">All Items</Heading>
+                  <HStack gap={2}>
+                    {isAdmin && (!communityCollections?.data || communityCollections.data.length === 0) && (
+                      <AddCollection communityId={communityId} />
+                    )}
+                    <AddItem communityId={communityId} isAdmin={isAdmin} />
+                  </HStack>
+                </Flex>
+
+                {isLoadingItems ? (
+                  <Text>Loading items...</Text>
+                ) : communityItems?.data.length === 0 ? (
+                  <Box
+                    p={10}
+                    textAlign="center"
+                    borderWidth="1px"
+                    borderStyle="dashed"
+                    rounded="md"
+                  >
+                    <Text color="fg.muted">
+                      No items in this community pool yet.
+                    </Text>
+                  </Box>
+                ) : (
+                  <>
+                    <SimpleGrid columns={{ base: 2, md: 3, lg: 4 }} gap={6}>
+                      {communityItems?.data.map((item) => (
+                        <Box key={item.id} position="relative">
+                          {isMobile ? (
+                            <CompactItemCard
+                              item={item}
+                              communityId={communityId}
+                              isAdmin={isAdmin}
+                              onShowDetails={() => setSelectedItem(item)}
+                            />
+                          ) : (
+                            <ItemCard
+                              item={item}
+                              communityId={communityId}
+                              isAdmin={isAdmin}
+                            />
+                          )}
+                          {item.is_donation_pending && (
+                            <Badge
+                              colorPalette="yellow"
+                              variant="solid"
+                              size="xs"
+                              position="absolute"
+                              top={2}
+                              left={2}
+                              zIndex={1}
+                            >
+                              Donation Pending
+                            </Badge>
+                          )}
+                        </Box>
+                      ))}
+                    </SimpleGrid>
+
+                    <ItemDetailModal
+                      item={selectedItem}
+                      isOpen={!!selectedItem}
+                      onClose={() => setSelectedItem(null)}
+                    />
+                  </>
+                )}
+              </Box>
             </VStack>
           </Tabs.Content>
 
