@@ -15,6 +15,8 @@ import {
   Skeleton,
   Text,
   VStack,
+  useBreakpointValue,
+  SimpleGrid,
 } from "@chakra-ui/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link, createFileRoute } from "@tanstack/react-router"
@@ -22,9 +24,11 @@ import { useMemo, useState } from "react"
 import { FaFilter } from "react-icons/fa"
 import { FiPlus, FiTrash2 } from "react-icons/fi"
 
-import { CollectionsService, ItemsService } from "@/client"
+import { CollectionsService, ItemsService, type ItemPublic } from "@/client"
 import AddItem from "@/components/Items/AddItem"
 import ItemCard from "@/components/Items/ItemCard"
+import { CompactItemCard } from "@/components/Items/CompactItemCard"
+import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { useColorModeValue } from "@/components/ui/color-mode"
 import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
@@ -42,6 +46,8 @@ function CollectionDetail() {
 
   const [categoryFilter, setCategoryFilter] = useState("")
   const [genreFilter, setGenreFilter] = useState("")
+  const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
+  const isMobile = useBreakpointValue({ base: true, md: false })
 
   const bgColor = useColorModeValue("orange.50", "gray.800")
   const borderColor = useColorModeValue("orange.200", "gray.600")
@@ -369,28 +375,43 @@ function CollectionDetail() {
               </Text>
             </Flex>
           ) : (
-            <Grid
-              templateColumns={{
-                base: "repeat(1, 1fr)",
-                sm: "repeat(2, 1fr)",
-                md: "repeat(3, 1fr)",
-                xl: "repeat(4, 1fr)",
-              }}
-              gap={6}
-            >
-              {filteredItems.map((item) => (
-                <Box key={item.id} position="relative">
-                  <ItemCard
-                    item={item}
-                    onRemoveFromCollection={
-                      isOwner
-                        ? () => removeMutation.mutate(item.id)
-                        : undefined
-                    }
-                  />
-                </Box>
-              ))}
-            </Grid>
+            <>
+              <SimpleGrid
+                columns={{ base: 2, md: 3, xl: 4 }}
+                gap={6}
+              >
+                {filteredItems.map((item) => (
+                  isMobile ? (
+                    <CompactItemCard
+                      key={item.id}
+                      item={item}
+                      onShowDetails={() => setSelectedItem(item as any)}
+                      onRemoveFromCollection={
+                        isOwner
+                          ? () => removeMutation.mutate(item.id)
+                          : undefined
+                      }
+                    />
+                  ) : (
+                    <ItemCard
+                      key={item.id}
+                      item={item as any}
+                      onRemoveFromCollection={
+                        isOwner
+                          ? () => removeMutation.mutate(item.id)
+                          : undefined
+                      }
+                    />
+                  )
+                ))}
+              </SimpleGrid>
+
+              <ItemDetailModal
+                item={selectedItem}
+                isOpen={!!selectedItem}
+                onClose={() => setSelectedItem(null)}
+              />
+            </>
           )}
         </Box>
       </VStack>

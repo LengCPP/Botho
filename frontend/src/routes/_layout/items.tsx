@@ -9,21 +9,26 @@ import {
   Heading,
   Popover,
   Portal,
+  SimpleGrid,
   Text,
   VStack,
+  useBreakpointValue,
 } from "@chakra-ui/react"
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import type React from "react"
+import { useState } from "react"
 import { FaFilter, FaSortAmountDown } from "react-icons/fa"
 import { FiSearch } from "react-icons/fi"
 import { z } from "zod"
 
-import { CollectionsService, ItemsService } from "@/client"
+import { CollectionsService, ItemsService, type ItemPublic } from "@/client"
 import AddCollection from "@/components/Collections/AddCollection"
 import CollectionCard from "@/components/Collections/CollectionCard"
 import AddItem from "@/components/Items/AddItem"
 import ItemCard from "@/components/Items/ItemCard"
+import { CompactItemCard } from "@/components/Items/CompactItemCard"
+import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import PendingItems from "@/components/Pending/PendingItems"
 import {
   MenuContent,
@@ -300,6 +305,8 @@ function ItemsTable() {
   const { page, sort_by, sort_order, limit, category, genre } =
     Route.useSearch()
   const { user } = useAuth()
+  const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
+  const isMobile = useBreakpointValue({ base: true, md: false })
 
   const { data, isLoading, isPlaceholderData } = useQuery({
     ...getItemsQueryOptions({
@@ -372,20 +379,31 @@ function ItemsTable() {
       <Heading size="md" mb={4}>
         My Items
       </Heading>
-      <Grid
-        templateColumns={{
-          base: "1fr",
-          sm: "repeat(2, 1fr)",
-          md: "repeat(3, 1fr)",
-          lg: "repeat(4, 1fr)",
-        }}
+      
+      <SimpleGrid
+        columns={{ base: 2, md: 3, lg: 4 }}
         gap={6}
         opacity={isPlaceholderData ? 0.5 : 1}
       >
         {items?.map((item) => (
-          <ItemCard key={item.id} item={item} displayOwnerId={user?.id} />
+          isMobile ? (
+            <CompactItemCard
+              key={item.id}
+              item={item}
+              onShowDetails={() => setSelectedItem(item)}
+            />
+          ) : (
+            <ItemCard key={item.id} item={item} displayOwnerId={user?.id} />
+          )
         ))}
-      </Grid>
+      </SimpleGrid>
+
+      <ItemDetailModal
+        item={selectedItem}
+        isOpen={!!selectedItem}
+        onClose={() => setSelectedItem(null)}
+      />
+
       <Flex justifyContent="center" mt={8}>
         <PaginationRoot
           count={count}

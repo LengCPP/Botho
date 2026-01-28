@@ -13,6 +13,7 @@ import {
   Text,
   Textarea,
   VStack,
+  useBreakpointValue,
 } from "@chakra-ui/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
@@ -39,10 +40,13 @@ import {
   CommunitiesService,
   type CommunityPublic,
   FriendsService,
+  type ItemPublic,
 } from "@/client"
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import AddItem from "@/components/Items/AddItem"
 import ItemCard from "@/components/Items/ItemCard"
+import { CompactItemCard } from "@/components/Items/CompactItemCard"
+import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { LoanCard } from "@/components/Items/LoanCard"
 import {
   DialogBody,
@@ -152,6 +156,8 @@ function CommunityBoard() {
   const navigate = useNavigate()
   const [message, setMessage] = useState("")
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false)
+  const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
+  const isMobile = useBreakpointValue({ base: true, md: false })
 
   const { data: community, isLoading: isLoadingCommunity } = useQuery({
     queryKey: ["community", communityId],
@@ -516,30 +522,47 @@ function CommunityBoard() {
                   </Text>
                 </Box>
               ) : (
-                <SimpleGrid columns={{ base: 1, md: 2, lg: 3, xl: 4 }} gap={6}>
-                  {communityItems?.data.map((item) => (
-                    <Box key={item.id} position="relative">
-                      <ItemCard
-                        item={item}
-                        communityId={communityId}
-                        isAdmin={isAdmin}
-                      />
-                      {item.is_donation_pending && (
-                        <Badge
-                          colorPalette="yellow"
-                          variant="solid"
-                          size="xs"
-                          position="absolute"
-                          top={2}
-                          left={2}
-                          zIndex={1}
-                        >
-                          Donation Pending
-                        </Badge>
-                      )}
-                    </Box>
-                  ))}
-                </SimpleGrid>
+                <>
+                  <SimpleGrid columns={{ base: 2, md: 3, lg: 4 }} gap={6}>
+                    {communityItems?.data.map((item) => (
+                      <Box key={item.id} position="relative">
+                        {isMobile ? (
+                          <CompactItemCard
+                            item={item}
+                            communityId={communityId}
+                            isAdmin={isAdmin}
+                            onShowDetails={() => setSelectedItem(item)}
+                          />
+                        ) : (
+                          <ItemCard
+                            item={item}
+                            communityId={communityId}
+                            isAdmin={isAdmin}
+                          />
+                        )}
+                        {item.is_donation_pending && (
+                          <Badge
+                            colorPalette="yellow"
+                            variant="solid"
+                            size="xs"
+                            position="absolute"
+                            top={2}
+                            left={2}
+                            zIndex={1}
+                          >
+                            Donation Pending
+                          </Badge>
+                        )}
+                      </Box>
+                    ))}
+                  </SimpleGrid>
+
+                  <ItemDetailModal
+                    item={selectedItem}
+                    isOpen={!!selectedItem}
+                    onClose={() => setSelectedItem(null)}
+                  />
+                </>
               )}
             </VStack>
           </Tabs.Content>

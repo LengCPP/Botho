@@ -11,6 +11,7 @@ import {
   SimpleGrid,
   Text,
   VStack,
+  useBreakpointValue,
 } from "@chakra-ui/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
@@ -23,9 +24,12 @@ import {
   FriendsService,
   ItemsService,
   UsersService,
+  type ItemPublic,
 } from "@/client"
 import CollectionCard from "@/components/Collections/CollectionCard"
 import ItemCard from "@/components/Items/ItemCard"
+import { CompactItemCard } from "@/components/Items/CompactItemCard"
+import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import UserInformation from "@/components/UserSettings/UserInformation"
 import UserProfilePicture from "@/components/UserSettings/UserProfilePicture"
 import { useColorModeValue } from "@/components/ui/color-mode"
@@ -53,6 +57,8 @@ function UserProfilePage() {
 
   const [sortBy, setSortBy] = useState("created_at")
   const [sortOrder, setSortOrder] = useState("desc")
+  const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
+  const isMobile = useBreakpointValue({ base: true, md: false })
 
   const borderColor = useColorModeValue("orange.200", "gray.600")
   const selectBg = useColorModeValue("white", "gray.800")
@@ -272,11 +278,27 @@ function UserProfilePage() {
       ) : userItems.length === 0 ? (
         <Text color="gray.500">No other items found.</Text>
       ) : (
-        <SimpleGrid columns={{ base: 1, md: 2, lg: 3, xl: 4 }} gap={6}>
-          {userItems.map((item) => (
-            <ItemCard key={item.id} item={item} displayOwnerId={userId} />
-          ))}
-        </SimpleGrid>
+        <>
+          <SimpleGrid columns={{ base: 2, md: 3, xl: 4 }} gap={6}>
+            {userItems.map((item) => (
+              isMobile ? (
+                <CompactItemCard
+                  key={item.id}
+                  item={item}
+                  onShowDetails={() => setSelectedItem(item)}
+                />
+              ) : (
+                <ItemCard key={item.id} item={item} displayOwnerId={userId} />
+              )
+            ))}
+          </SimpleGrid>
+
+          <ItemDetailModal
+            item={selectedItem}
+            isOpen={!!selectedItem}
+            onClose={() => setSelectedItem(null)}
+          />
+        </>
       )}
     </Container>
   )
