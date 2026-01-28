@@ -46,7 +46,7 @@ def search_user_by_id(
     )
     friendship = session.exec(statement).first()
     
-    user_public = filter_user_privacy(user, current_user.id)
+    user_public = filter_user_privacy(user, current_user.id, is_admin=current_user.is_superuser)
     user_public.friendship_status = friendship.status if friendship else None
     
     return user_public
@@ -80,7 +80,7 @@ def read_friends(
     friends = session.exec(statement.offset(skip).limit(limit)).all()
 
     return UsersPublic(
-        data=[filter_user_privacy(f, current_user.id) for f in friends], 
+        data=[filter_user_privacy(f, current_user.id, is_admin=current_user.is_superuser) for f in friends], 
         count=count
     )
 
@@ -113,7 +113,7 @@ def read_friend_requests(
     users = session.exec(statement.offset(skip).limit(limit)).all()
 
     return UsersPublic(
-        data=[filter_user_privacy(u, current_user.id) for u in users], 
+        data=[filter_user_privacy(u, current_user.id, is_admin=current_user.is_superuser) for u in users], 
         count=count
     )
 
@@ -146,7 +146,7 @@ def read_sent_friend_requests(
     users = session.exec(statement.offset(skip).limit(limit)).all()
 
     return UsersPublic(
-        data=[filter_user_privacy(u, current_user.id) for u in users], 
+        data=[filter_user_privacy(u, current_user.id, is_admin=current_user.is_superuser) for u in users], 
         count=count
     )
 

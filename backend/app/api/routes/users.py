@@ -56,7 +56,7 @@ def read_users(session: SessionDep, current_user: CurrentUser, skip: int = 0, li
     users = session.exec(statement).all()
 
     return UsersPublic(
-        data=[filter_user_privacy(u, current_user.id) for u in users], 
+        data=[filter_user_privacy(u, current_user.id, is_admin=current_user.is_superuser) for u in users], 
         count=count
     )
 
@@ -102,7 +102,7 @@ def update_user_me(
     session.add(current_user)
     session.commit()
     session.refresh(current_user)
-    return filter_user_privacy(current_user, current_user.id)
+    return filter_user_privacy(current_user, current_user.id, is_admin=current_user.is_superuser)
 
 
 @router.patch("/me/password", response_model=Message)
@@ -134,7 +134,7 @@ def read_user_me(current_user: CurrentUser) -> Any:
     """
     Get current user.
     """
-    return filter_user_privacy(current_user, current_user.id)
+    return filter_user_privacy(current_user, current_user.id, is_admin=current_user.is_superuser)
 
 
 
@@ -164,7 +164,7 @@ def update_user_profile(
     session.add(current_user)
     session.commit()
     session.refresh(current_user)
-    return filter_user_privacy(current_user, current_user.id)
+    return filter_user_privacy(current_user, current_user.id, is_admin=current_user.is_superuser)
 
 
 @router.post("/me/profile-picture", response_model=UserPublic)
@@ -187,7 +187,7 @@ async def upload_user_profile_picture(
     session.add(current_user)
     session.commit()
     session.refresh(current_user)
-    return filter_user_privacy(current_user, current_user.id)
+    return filter_user_privacy(current_user, current_user.id, is_admin=current_user.is_superuser)
 
 
 @router.get("/me/settings", response_model=UserSettingsSchema)
@@ -213,7 +213,7 @@ def update_user_settings(
     session.add(current_user)
     session.commit()
     session.refresh(current_user)
-    return filter_user_privacy(current_user, current_user.id)
+    return filter_user_privacy(current_user, current_user.id, is_admin=current_user.is_superuser)
 
 
 @router.delete("/me", response_model=Message)
@@ -301,11 +301,11 @@ def read_user_by_id(
     )
     friendship = session.exec(statement).first()
     
-    user_public = filter_user_privacy(user, current_user.id)
+    user_public = filter_user_privacy(user, current_user.id, is_admin=current_user.is_superuser)
     user_public.friendship_status = friendship.status if friendship else None
     
     # Restrict data if not friends (and not the same user, though this route is for "other" users)
-    if user_id != current_user.id and (not friendship or friendship.status != FriendshipStatus.ACCEPTED):
+    if not current_user.is_superuser and user_id != current_user.id and (not friendship or friendship.status != FriendshipStatus.ACCEPTED):
         user_public.communities = []
         user_public.interests = []
         # We don't have items in UserPublic directly yet based on models.py but it has Relationship.

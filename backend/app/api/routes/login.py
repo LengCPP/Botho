@@ -71,7 +71,7 @@ def test_token(current_user: CurrentUser) -> Any:
     """
     Test access token
     """
-    return filter_user_privacy(current_user, current_user.id)
+    return filter_user_privacy(current_user, current_user.id, is_admin=current_user.is_superuser)
 
 
 @router.post("/password-recovery/{email}")

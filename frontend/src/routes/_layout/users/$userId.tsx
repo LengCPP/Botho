@@ -80,11 +80,12 @@ function UserProfilePage() {
   })
 
   const isFriend = user?.friendship_status === "accepted"
+  const canSeeAll = isFriend || currentUser?.is_superuser
 
   const { data: collections } = useQuery({
     queryKey: ["user-collections", userId],
     queryFn: () => CollectionsService.readCollections({ ownerId: userId }),
-    enabled: isFriend,
+    enabled: canSeeAll,
   })
 
   const { data: items, isLoading: isLoadingItems } = useQuery({
@@ -100,7 +101,7 @@ function UserProfilePage() {
         sortBy,
         sortOrder,
       }),
-    enabled: isFriend,
+    enabled: canSeeAll,
   })
 
   const friendMutation = useMutation({
@@ -215,7 +216,7 @@ function UserProfilePage() {
         <UserInformation user={user as UserPublicExtended} />
       </VStack>
 
-      {isFriend && collections?.data && collections.data.length > 0 && (
+      {canSeeAll && collections?.data && collections.data.length > 0 && (
         <Box mb={12}>
           <Heading size="lg" mb={6}>
             Collections & Libraries
@@ -231,7 +232,7 @@ function UserProfilePage() {
       <Flex justify="space-between" align="center" mb={6} wrap="wrap" gap={4}>
         <Heading size="lg">Other Items</Heading>
 
-        {isFriend && (
+        {canSeeAll && (
           <HStack gap={2}>
             <select
               value={sortBy}
@@ -253,7 +254,7 @@ function UserProfilePage() {
         )}
       </Flex>
 
-      {!isFriend ? (
+      {!canSeeAll ? (
         <Box
           p={10}
           textAlign="center"

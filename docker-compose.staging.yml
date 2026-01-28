@@ -35,9 +35,6 @@ services:
       - traefik.constraint-label=traefik-public
       - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-http.rule=Host(`adminer.${DOMAIN?Variable not set}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-http.entrypoints=http
-      - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-https.rule=Host(`adminer.${DOMAIN?Variable not set}`)
-      - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-https.entrypoints=https
-      - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-https.tls=true
       - traefik.http.services.${STACK_NAME?Variable not set}-adminer.loadbalancer.server.port=8080
 
   prestart:
@@ -186,13 +183,13 @@ services:
       "
 
   frontend:
-    build:
-      context: ./frontend
-      args:
-        - VITE_API_URL=https://${DOMAIN?Variable not set}
-        - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-        - VITE_GOOGLE_BOOKS_API_KEY=${VITE_GOOGLE_BOOKS_API_KEY}
-        - NODE_ENV=development
+    image: node:20
+    working_dir: /app
+    environment:
+      - VITE_API_URL=https://${DOMAIN?Variable not set}
+      - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - VITE_GOOGLE_BOOKS_API_KEY=${VITE_GOOGLE_BOOKS_API_KEY}
+      - NODE_ENV=development
     restart: always
     networks:
       - traefik-public
@@ -200,13 +197,14 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    command: ["nginx", "-g", "daemon off;"]
+    command: >
+      sh -c "npm install && npm run dev -- --host 0.0.0.0"
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik-public
       - traefik.constraint-label=traefik-public
-      - traefik.http.services.${STACK_NAME?Variable not set}-frontend.loadbalancer.server.port=80
-      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.rule=Host(`dashboard.${DOMAIN?Variable not set}`) || Host(`${DOMAIN?Variable not set}`)
+      - traefik.http.services.${STACK_NAME?Variable not set}-frontend.loadbalancer.server.port=5173
+      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.rule=Host(`${DOMAIN?Variable not set}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.entrypoints=http
 
   meilisearch:
@@ -229,9 +227,6 @@ services:
       - traefik.http.services.${STACK_NAME?Variable not set}-meili.loadbalancer.server.port=7700
       - traefik.http.routers.${STACK_NAME?Variable not set}-meili-http.rule=Host(`search.${DOMAIN?Variable not set}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-meili-http.entrypoints=http
-      - traefik.http.routers.${STACK_NAME?Variable not set}-meili-https.rule=Host(`search.${DOMAIN?Variable not set}`)
-      - traefik.http.routers.${STACK_NAME?Variable not set}-meili-https.entrypoints=https
-      - traefik.http.routers.${STACK_NAME?Variable not set}-meili-https.tls=true
 
   traefik:
     image: traefik:3.6.5
@@ -250,12 +245,6 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-traefik-dashboard-http.rule=Host(`traefik.${DOMAIN?Variable not set}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-traefik-dashboard-http.service=api@internal
       - traefik.http.routers.${STACK_NAME?Variable not set}-traefik-dashboard-http.middlewares=${STACK_NAME?Variable not set}-admin-auth
-      # HTTPS Router
-      - traefik.http.routers.${STACK_NAME?Variable not set}-traefik-dashboard-https.entrypoints=https
-      - traefik.http.routers.${STACK_NAME?Variable not set}-traefik-dashboard-https.rule=Host(`traefik.${DOMAIN?Variable not set}`)
-      - traefik.http.routers.${STACK_NAME?Variable not set}-traefik-dashboard-https.service=api@internal
-      - traefik.http.routers.${STACK_NAME?Variable not set}-traefik-dashboard-https.middlewares=${STACK_NAME?Variable not set}-admin-auth
-      - traefik.http.routers.${STACK_NAME?Variable not set}-traefik-dashboard-https.tls=true
       # Auth Middleware
       - traefik.http.middlewares.${STACK_NAME?Variable not set}-admin-auth.basicauth.users=${USERNAME?Variable not set}:${HASHED_PASSWORD?Variable not set}
     volumes:

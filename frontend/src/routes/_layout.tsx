@@ -1,4 +1,4 @@
-import { Flex } from "@chakra-ui/react"
+import { Box, Flex } from "@chakra-ui/react"
 import { Outlet, createFileRoute, redirect } from "@tanstack/react-router"
 
 import Navbar from "@/components/Common/Navbar"
@@ -23,13 +23,13 @@ function Layout() {
   useInactivityLogout()
 
   return (
-    <Flex direction="column" h="100vh">
+    <Flex direction="column" minH="100dvh">
       <Navbar />
-      <Flex flex="1" overflow="hidden">
+      <Flex flex="1">
         <Sidebar />
-        <Flex flex="1" direction="column" p={4} overflowY="auto">
+        <Box flex="1" p={4}>
           <Outlet />
-        </Flex>
+        </Box>
       </Flex>
     </Flex>
   )

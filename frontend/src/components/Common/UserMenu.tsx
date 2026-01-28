@@ -1,6 +1,6 @@
 import { Box, Button, HStack, Text, VStack } from "@chakra-ui/react"
 import { Link } from "@tanstack/react-router"
-import { FiChevronDown, FiLogOut, FiSettings, FiUser } from "react-icons/fi"
+import { FiLogOut, FiSettings, FiUser } from "react-icons/fi"
 
 import useAuth from "@/hooks/useAuth"
 import {
@@ -46,7 +46,6 @@ const UserMenu = () => {
                   borderRadius="full"
                 />
               </Box>
-              <FiChevronDown color="gray.500" />
             </HStack>
           </Button>
         </MenuTrigger>

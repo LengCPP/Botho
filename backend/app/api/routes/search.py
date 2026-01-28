@@ -122,12 +122,12 @@ def search(
 
     users_public = []
     for user in users:
-        u_pub = filter_user_privacy(user, current_user.id)
+        u_pub = filter_user_privacy(user, current_user.id, is_admin=current_user.is_superuser)
         status = friendship_map.get(user.id)
         u_pub.friendship_status = status
         
         # Restrict data if not friends
-        if user.id != current_user.id and status != FriendshipStatus.ACCEPTED:
+        if not current_user.is_superuser and user.id != current_user.id and status != FriendshipStatus.ACCEPTED:
             u_pub.communities = []
             u_pub.interests = []
             
@@ -178,7 +178,7 @@ def search(
     for item in meili_items_raw:
         item_pub = ItemPublic.model_validate(item)
         item_pub.owners = [
-            filter_owner_privacy(owner, current_user.id)
+            filter_owner_privacy(owner, current_user.id, is_admin=current_user.is_superuser)
             for owner in item.owners
         ]
         

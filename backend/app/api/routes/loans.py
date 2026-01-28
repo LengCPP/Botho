@@ -18,6 +18,7 @@ from app.models import (
     User,
 )
 from app.api.websocket_manager import notification_manager
+from app.api.utils import filter_loan_privacy
 from app import crud
 
 router = APIRouter(prefix="/loans", tags=["loans"])
@@ -130,7 +131,7 @@ async def create_loan_request(
             owner_id
         )
 
-    return db_loan
+    return filter_loan_privacy(db_loan, current_user.id, is_admin=current_user.is_superuser)
 
 
 @router.get("/incoming", response_model=LoansPublic)
@@ -161,20 +162,10 @@ def read_incoming_loan_requests(
         .order_by(Loan.created_at.desc())
     )
     
-    count_statement = (
-        select(func.count())
-        .select_from(Loan)
-        .where(
-            or_(
-                Loan.owner_id == current_user.id,
-                Loan.community_id.in_(admin_communities) if admin_communities else False
-            )
-        )
+    return LoansPublic(
+        data=[filter_loan_privacy(l, current_user.id, is_admin=current_user.is_superuser) for l in loans], 
+        count=count
     )
-    
-    count = session.exec(count_statement).one()
-    loans = session.exec(statement.offset(skip).limit(limit)).all()
-    return LoansPublic(data=loans, count=count)
 
 
 @router.get("/outgoing", response_model=LoansPublic)
@@ -193,7 +184,10 @@ def read_outgoing_loan_requests(
     
     count = session.exec(count_statement).one()
     loans = session.exec(statement.offset(skip).limit(limit)).all()
-    return LoansPublic(data=loans, count=count)
+    return LoansPublic(
+        data=[filter_loan_privacy(l, current_user.id, is_admin=current_user.is_superuser) for l in loans], 
+        count=count
+    )
 
 
 @router.patch("/{id}/respond", response_model=LoanPublic)
@@ -247,7 +241,7 @@ async def respond_to_loan_request(
         loan.requester_id
     )
 
-    return loan
+    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)
 
 
 @router.patch("/{id}/ratify", response_model=LoanPublic)
@@ -305,7 +299,7 @@ async def ratify_loan(
             loan.owner_id
         )
 
-    return loan
+    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)
 
 
 @router.patch("/{id}/return-signal", response_model=LoanPublic)
@@ -363,7 +357,7 @@ async def signal_return(
             loan.owner_id
         )
 
-    return loan
+    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)
 
 
 @router.patch("/{id}/return", response_model=LoanPublic)
@@ -417,7 +411,7 @@ async def return_loan(
         loan.requester_id
     )
 
-    return loan
+    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)
 
 
 @router.post("/{id}/extension", response_model=LoanPublic)
@@ -481,7 +475,7 @@ async def create_extension_request(
             loan.owner_id
         )
         
-    return loan
+    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)
 
 
 @router.patch("/{id}/extension/respond", response_model=LoanPublic)
@@ -538,4 +532,4 @@ async def respond_to_extension_request(
         loan.requester_id
     )
     
-    return loan
+    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)

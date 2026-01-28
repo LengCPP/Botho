@@ -194,6 +194,13 @@ class UserBase(SQLModel):
     full_name: str | None = Field(default=None, max_length=255)
     public_id: str | None = Field(default=None, unique=True, index=True, max_length=8)
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        if isinstance(v, str):
+            return v.lower().strip()
+        return v
+
 
 # Properties to receive via API on creation
 class UserCreate(SQLModel):
@@ -202,6 +209,13 @@ class UserCreate(SQLModel):
     is_active: bool = True
     is_superuser: bool = False
     full_name: str | None = Field(default=None, max_length=255)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        if isinstance(v, str):
+            return v.lower().strip()
+        return v
 
     @field_validator("full_name", mode="before")
     @classmethod
@@ -217,6 +231,13 @@ class UserRegister(SQLModel):
     email: EmailStr = Field(max_length=255)
     password: str = Field(min_length=8, max_length=40)
     full_name: str | None = Field(default=None, max_length=255)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        if isinstance(v, str):
+            return v.lower().strip()
+        return v
 
     @field_validator("full_name", mode="before")
     @classmethod
@@ -235,6 +256,13 @@ class UserUpdate(SQLModel):
     is_active: bool | None = None
     is_superuser: bool | None = None
     full_name: str | None = Field(default=None, max_length=255)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def validate_email(cls, v: str | None) -> str | None:
+        if isinstance(v, str):
+            return v.lower().strip()
+        return v
 
     @field_validator("full_name", mode="before")
     @classmethod

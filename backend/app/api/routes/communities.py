@@ -41,7 +41,7 @@ from app.models import (
     UserPublic,
     UsersPublic,
 )
-from app.api.utils import filter_user_privacy, filter_owner_privacy
+from app.api.utils import filter_user_privacy, filter_owner_privacy, filter_loan_privacy
 from app.search import delete_community_from_search, sync_community_to_search
 
 router = APIRouter()
@@ -310,7 +310,7 @@ def read_community_members(
 
     users_with_meta = []
     for user, membership in results:
-        user_public = filter_user_privacy(user, current_user.id)
+        user_public = filter_user_privacy(user, current_user.id, is_admin=current_user.is_superuser)
         user_public.community_role = membership.role
         user_public.community_status = membership.status
 
@@ -318,7 +318,7 @@ def read_community_members(
         user_public.friendship_status = status
 
         # Restrict data if not friends
-        if user.id != current_user.id and status != FriendshipStatus.ACCEPTED:
+        if not current_user.is_superuser and user.id != current_user.id and status != FriendshipStatus.ACCEPTED:
             user_public.communities = []
             user_public.interests = []
 
@@ -393,7 +393,7 @@ async def update_community_member_role(
         )
 
     user = session.get(User, user_id)
-    user_public = filter_user_privacy(user, current_user.id)
+    user_public = filter_user_privacy(user, current_user.id, is_admin=current_user.is_superuser)
     user_public.community_role = updated_member.role
     user_public.community_status = updated_member.status
     return user_public
@@ -556,7 +556,7 @@ def read_community_items(
         item_pub.owners = [
 
 
-            filter_owner_privacy(owner, current_user.id)
+            filter_owner_privacy(owner, current_user.id, is_admin=current_user.is_superuser)
 
 
             for owner in item.owners
@@ -1298,5 +1298,8 @@ def read_community_loans(
         .offset(skip)
         .limit(limit)
     )
-    loans = session.exec(statement).all()
-    return LoansPublic(data=loans, count=count)
+    loans = session.exec(statement.offset(skip).limit(limit)).all()
+    return LoansPublic(
+        data=[filter_loan_privacy(l, current_user.id, is_admin=current_user.is_superuser) for l in loans], 
+        count=count
+    )

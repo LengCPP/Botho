@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from app.api.deps import SessionDep
 from app.core.security import get_password_hash
+from app.api.utils import filter_user_privacy
 from app.models import (
     User,
     UserPublic,
@@ -34,5 +35,6 @@ def create_user(user_in: PrivateUserCreate, session: SessionDep) -> Any:
 
     session.add(user)
     session.commit()
+    session.refresh(user)
 
-    return user
+    return filter_user_privacy(user)

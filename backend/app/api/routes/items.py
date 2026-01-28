@@ -143,7 +143,8 @@ def read_items(
             if is_avail:
                 any_available = True
             
-            owner_pub = filter_owner_privacy(owner, current_user.id)
+                owner_pub = filter_owner_privacy(owner, current_user.id, is_admin=current_user.is_superuser)
+
             owner_pub.is_available = is_avail
             owners_public.append(owner_pub)
         
@@ -202,7 +203,8 @@ def read_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> 
         if is_avail:
             any_available = True
         
-        owner_pub = filter_owner_privacy(owner, current_user.id)
+            owner_pub = filter_owner_privacy(owner, current_user.id, is_admin=current_user.is_superuser)
+
         owner_pub.is_available = is_avail
         owners_public.append(owner_pub)
     
@@ -338,7 +340,8 @@ async def create_item(
         if is_avail:
             any_available = True
         
-        owner_pub = filter_owner_privacy(owner, current_user.id)
+            owner_pub = filter_owner_privacy(owner, current_user.id, is_admin=current_user.is_superuser)
+
         owner_pub.is_available = is_avail
         owners_public.append(owner_pub)
 
@@ -414,7 +417,8 @@ async def update_item(
         if is_avail:
             any_available = True
         
-        owner_pub = filter_owner_privacy(owner, current_user.id)
+            owner_pub = filter_owner_privacy(owner, current_user.id, is_admin=current_user.is_superuser)
+
         owner_pub.is_available = is_avail
         owners_public.append(owner_pub)
     
