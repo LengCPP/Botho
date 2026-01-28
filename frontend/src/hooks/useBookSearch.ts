@@ -32,12 +32,25 @@ export const useBookSearch = (query: string) => {
           (id: any) => id.type === "ISBN_10",
         )?.identifier
 
+        const imageLinks = volumeInfo.imageLinks
+        let thumbnail = imageLinks?.thumbnail || imageLinks?.smallThumbnail || ""
+        
+        if (thumbnail) {
+          // Force HTTPS and try to get a higher quality version by increasing zoom
+          // Many Google Books thumbnails default to zoom=1 (low res)
+          thumbnail = thumbnail
+            .replace("http://", "https://")
+            .replace("zoom=1", "zoom=2")
+            // Remove edge=curl to get the clean cover if possible
+            .replace("&edge=curl", "")
+        }
+
         return {
           title: volumeInfo.title,
           authors: volumeInfo.authors || [],
           description: volumeInfo.description || "",
           isbn: isbn13 || isbn10 || "",
-          thumbnail: volumeInfo.imageLinks?.thumbnail || "",
+          thumbnail: thumbnail,
           categories: volumeInfo.categories || [],
         }
       }) as BookResult[]

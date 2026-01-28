@@ -116,6 +116,7 @@ class UserSettingsSchema(SQLModel):
     autocomplete_enabled: bool = Field(default=True)
     theme_mode: str = Field(default="system")
     show_contact_details: bool = Field(default=False)
+    show_full_name: bool = Field(default=False)
 
     @field_validator("theme_mode")
     @classmethod

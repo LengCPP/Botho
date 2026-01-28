@@ -295,6 +295,7 @@ export type UserPublic = {
     settings?: (UserSettingsSchema | null);
     interests?: Array<InterestPublic>;
     friendship_status?: (FriendshipStatus | null);
+    show_contact_details?: boolean;
 };
 
 export type UserRegister = {
@@ -306,6 +307,8 @@ export type UserRegister = {
 export type UserSettingsSchema = {
     autocomplete_enabled?: boolean;
     theme_mode?: string;
+    show_contact_details?: boolean;
+    show_full_name?: boolean;
 };
 
 export type UsersPublic = {

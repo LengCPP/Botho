@@ -59,6 +59,15 @@ const UserPreferences = () => {
     })
   }
 
+  const handleShowNameChange = (details: {
+    checked: boolean | "indeterminate"
+  }) => {
+    mutation.mutate({
+      ...currentUser?.settings,
+      show_full_name: !!details.checked,
+    })
+  }
+
   return (
     <Container maxW="full">
       <Heading size="sm" py={4}>
@@ -84,10 +93,16 @@ const UserPreferences = () => {
         <VStack align="start" gap={2}>
           <Heading size="xs">Privacy</Heading>
           <Checkbox
+            checked={currentUser?.settings?.show_full_name ?? false}
+            onCheckedChange={handleShowNameChange}
+          >
+            Show full name to others
+          </Checkbox>
+          <Checkbox
             checked={currentUser?.settings?.show_contact_details ?? false}
             onCheckedChange={handlePrivacyChange}
           >
-            Show contact details (Name and Email) to others
+            Show contact details (Email) to others
           </Checkbox>
         </VStack>
 
