@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from sqlmodel import col, select
 
 from app.api.deps import CurrentUser, SessionDep
+from app.api.utils import filter_user_privacy, filter_owner_privacy
 from app.search import client as meili_client
 from app.models import (
     Community,
@@ -121,7 +122,7 @@ def search(
 
     users_public = []
     for user in users:
-        u_pub = UserPublic.model_validate(user)
+        u_pub = filter_user_privacy(user, current_user.id)
         status = friendship_map.get(user.id)
         u_pub.friendship_status = status
         
@@ -177,7 +178,7 @@ def search(
     for item in meili_items_raw:
         item_pub = ItemPublic.model_validate(item)
         item_pub.owners = [
-            ItemOwnerPublic(id=owner.id, full_name=owner.full_name, email=owner.email)
+            filter_owner_privacy(owner, current_user.id)
             for owner in item.owners
         ]
         

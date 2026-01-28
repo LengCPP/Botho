@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from app import crud
 from app.api.deps import CurrentUser, SessionDep, get_current_active_superuser
+from app.api.utils import filter_user_privacy
 from app.core import security
 from app.core.config import settings
 from app.core.security import get_password_hash
@@ -70,7 +71,7 @@ def test_token(current_user: CurrentUser) -> Any:
     """
     Test access token
     """
-    return current_user
+    return filter_user_privacy(current_user, current_user.id)
 
 
 @router.post("/password-recovery/{email}")
@@ -216,14 +217,7 @@ def login_google_init():
     # But strictly, we should direct the user to Google.
     
     # We need the full URL for the redirect_uri that Google will call back
-    # Since we are running in docker/behind traefik, we might need a configured public URL.
-    # For now, let's assume localhost:8000 or the request base url.
-    
-    if settings.ENVIRONMENT == "production":
-        base_url = f"https://api.{settings.DOMAIN}"
-    else:
-        base_url = "http://localhost:8000"
-        
+    base_url = f"https://{settings.DOMAIN}"
     callback_url = f"{base_url}{settings.API_V1_STR}/auth/google/callback"
     
     google_auth_url = (
@@ -247,10 +241,10 @@ async def login_google_callback(
     if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
         raise HTTPException(status_code=500, detail="Google credentials not configured")
         
-    if settings.ENVIRONMENT == "production":
-        base_url = f"https://api.{settings.DOMAIN}"
-    else:
+    if settings.ENVIRONMENT == "local":
         base_url = "http://localhost:8000"
+    else:
+        base_url = f"https://{settings.DOMAIN}"
         
     callback_url = f"{base_url}{settings.API_V1_STR}/auth/google/callback"
 
@@ -320,6 +314,6 @@ async def login_google_callback(
     # Redirect to frontend with token
     # Using settings.FRONTEND_HOST
     frontend_redirect_url = f"{settings.FRONTEND_HOST}/login?token={token}"
-    if is_new_user:
+    if is_new_user or not user.has_set_password:
         frontend_redirect_url += "&new_user=true"
     return RedirectResponse(frontend_redirect_url)

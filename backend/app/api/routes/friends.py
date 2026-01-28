@@ -7,6 +7,7 @@ from sqlmodel import func, select, or_
 from app import crud
 from app.api.deps import CurrentUser, SessionDep
 from app.api.websocket_manager import notification_manager
+from app.api.utils import filter_user_privacy
 from app.models import (
     Friendship,
     FriendshipPublic,
@@ -45,7 +46,7 @@ def search_user_by_id(
     )
     friendship = session.exec(statement).first()
     
-    user_public = UserPublic.model_validate(user)
+    user_public = filter_user_privacy(user, current_user.id)
     user_public.friendship_status = friendship.status if friendship else None
     
     return user_public
@@ -78,7 +79,10 @@ def read_friends(
     count = session.exec(count_statement).one()
     friends = session.exec(statement.offset(skip).limit(limit)).all()
 
-    return UsersPublic(data=friends, count=count)
+    return UsersPublic(
+        data=[filter_user_privacy(f, current_user.id) for f in friends], 
+        count=count
+    )
 
 
 @router.get("/requests", response_model=UsersPublic)
@@ -108,7 +112,10 @@ def read_friend_requests(
     count = session.exec(count_statement).one()
     users = session.exec(statement.offset(skip).limit(limit)).all()
 
-    return UsersPublic(data=users, count=count)
+    return UsersPublic(
+        data=[filter_user_privacy(u, current_user.id) for u in users], 
+        count=count
+    )
 
 
 @router.get("/requests/sent", response_model=UsersPublic)
@@ -138,7 +145,10 @@ def read_sent_friend_requests(
     count = session.exec(count_statement).one()
     users = session.exec(statement.offset(skip).limit(limit)).all()
 
-    return UsersPublic(data=users, count=count)
+    return UsersPublic(
+        data=[filter_user_privacy(u, current_user.id) for u in users], 
+        count=count
+    )
 
 
 @router.post("/request/{friend_id}", response_model=Message)

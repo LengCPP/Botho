@@ -50,6 +50,15 @@ const UserPreferences = () => {
     mutation.mutate({ autocomplete_enabled: !!details.checked })
   }
 
+  const handlePrivacyChange = (details: {
+    checked: boolean | "indeterminate"
+  }) => {
+    mutation.mutate({
+      ...currentUser?.settings,
+      show_contact_details: !!details.checked,
+    })
+  }
+
   return (
     <Container maxW="full">
       <Heading size="sm" py={4}>
@@ -70,6 +79,16 @@ const UserPreferences = () => {
               <Radio value="dark">Dark Mode</Radio>
             </Stack>
           </RadioGroup>
+        </VStack>
+
+        <VStack align="start" gap={2}>
+          <Heading size="xs">Privacy</Heading>
+          <Checkbox
+            checked={currentUser?.settings?.show_contact_details ?? false}
+            onCheckedChange={handlePrivacyChange}
+          >
+            Show contact details (Name and Email) to others
+          </Checkbox>
         </VStack>
 
         <VStack align="start" gap={2}>

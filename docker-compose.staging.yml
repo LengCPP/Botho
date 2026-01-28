@@ -35,6 +35,9 @@ services:
       - traefik.constraint-label=traefik-public
       - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-http.rule=Host(`adminer.${DOMAIN?Variable not set}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-http.entrypoints=http
+      - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-https.rule=Host(`adminer.${DOMAIN?Variable not set}`)
+      - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-https.entrypoints=https
+      - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-https.tls=true
       - traefik.http.services.${STACK_NAME?Variable not set}-adminer.loadbalancer.server.port=8080
 
   prestart:
@@ -127,7 +130,8 @@ services:
       - traefik.docker.network=traefik-public
       - traefik.constraint-label=traefik-public
       - traefik.http.services.${STACK_NAME?Variable not set}-backend.loadbalancer.server.port=8000
-      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-http.rule=Host(`api.${DOMAIN?Variable not set}`)
+      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-http.rule=Host(`${DOMAIN?Variable not set}`) && (PathPrefix(`/api`) || PathPrefix(`/docs`) || PathPrefix(`/openapi.json`))
+      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-http.priority=100
       - traefik.http.routers.${STACK_NAME?Variable not set}-backend-http.entrypoints=http
 
   minio:
@@ -158,13 +162,11 @@ services:
       - traefik.http.services.${STACK_NAME?Variable not set}-minio.loadbalancer.server.port=9000
       - traefik.http.routers.${STACK_NAME?Variable not set}-minio-api.rule=Host(`minio.${DOMAIN?Variable not set}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-minio-api.entrypoints=http
-      - traefik.http.routers.${STACK_NAME?Variable not set}-minio-api.service=${STACK_NAME?Variable not set}-minio
       
       # MinIO Console
       - traefik.http.services.${STACK_NAME?Variable not set}-minio-console.loadbalancer.server.port=9001
       - traefik.http.routers.${STACK_NAME?Variable not set}-minio-console.rule=Host(`console.minio.${DOMAIN?Variable not set}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-minio-console.entrypoints=http
-      - traefik.http.routers.${STACK_NAME?Variable not set}-minio-console.service=${STACK_NAME?Variable not set}-minio-console
 
   minio-mc:
     image: minio/mc
@@ -186,9 +188,8 @@ services:
   frontend:
     build:
       context: ./frontend
-      target: build-stage
       args:
-        - VITE_API_URL=https://api.${DOMAIN?Variable not set}
+        - VITE_API_URL=https://${DOMAIN?Variable not set}
         - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
         - VITE_GOOGLE_BOOKS_API_KEY=${VITE_GOOGLE_BOOKS_API_KEY}
         - NODE_ENV=development
@@ -199,17 +200,12 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    command:
-      - npm
-      - run
-      - dev
-      - --
-      - --host
+    command: ["nginx", "-g", "daemon off;"]
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik-public
       - traefik.constraint-label=traefik-public
-      - traefik.http.services.${STACK_NAME?Variable not set}-frontend.loadbalancer.server.port=5173
+      - traefik.http.services.${STACK_NAME?Variable not set}-frontend.loadbalancer.server.port=80
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.rule=Host(`dashboard.${DOMAIN?Variable not set}`) || Host(`${DOMAIN?Variable not set}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.entrypoints=http
 
@@ -233,12 +229,16 @@ services:
       - traefik.http.services.${STACK_NAME?Variable not set}-meili.loadbalancer.server.port=7700
       - traefik.http.routers.${STACK_NAME?Variable not set}-meili-http.rule=Host(`search.${DOMAIN?Variable not set}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-meili-http.entrypoints=http
+      - traefik.http.routers.${STACK_NAME?Variable not set}-meili-https.rule=Host(`search.${DOMAIN?Variable not set}`)
+      - traefik.http.routers.${STACK_NAME?Variable not set}-meili-https.entrypoints=https
+      - traefik.http.routers.${STACK_NAME?Variable not set}-meili-https.tls=true
 
   traefik:
     image: traefik:3.6.5
     restart: always
     ports:
       - "80:80"
+      - "443:443"
     labels:
       - traefik.enable=true
       - traefik.constraint-label=traefik-public
@@ -250,6 +250,12 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-traefik-dashboard-http.rule=Host(`traefik.${DOMAIN?Variable not set}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-traefik-dashboard-http.service=api@internal
       - traefik.http.routers.${STACK_NAME?Variable not set}-traefik-dashboard-http.middlewares=${STACK_NAME?Variable not set}-admin-auth
+      # HTTPS Router
+      - traefik.http.routers.${STACK_NAME?Variable not set}-traefik-dashboard-https.entrypoints=https
+      - traefik.http.routers.${STACK_NAME?Variable not set}-traefik-dashboard-https.rule=Host(`traefik.${DOMAIN?Variable not set}`)
+      - traefik.http.routers.${STACK_NAME?Variable not set}-traefik-dashboard-https.service=api@internal
+      - traefik.http.routers.${STACK_NAME?Variable not set}-traefik-dashboard-https.middlewares=${STACK_NAME?Variable not set}-admin-auth
+      - traefik.http.routers.${STACK_NAME?Variable not set}-traefik-dashboard-https.tls=true
       # Auth Middleware
       - traefik.http.middlewares.${STACK_NAME?Variable not set}-admin-auth.basicauth.users=${USERNAME?Variable not set}:${HASHED_PASSWORD?Variable not set}
     volumes:
@@ -259,6 +265,7 @@ services:
       - --providers.docker.constraints=Label(`traefik.constraint-label`, `traefik-public`)
       - --providers.docker.exposedbydefault=false
       - --entrypoints.http.address=:80
+      - --entrypoints.https.address=:443
       - --accesslog
       - --accesslog.format=json
       - --log

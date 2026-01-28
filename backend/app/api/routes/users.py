@@ -10,6 +10,7 @@ from app.api.deps import (
     SessionDep,
     get_current_active_superuser,
 )
+from app.api.utils import filter_user_privacy
 from app.core.config import settings
 from app.core.security import get_password_hash, verify_password
 from app.storage import upload_image
@@ -43,7 +44,7 @@ router = APIRouter(prefix="/users", tags=["users"])
     dependencies=[Depends(get_current_active_superuser)],
     response_model=UsersPublic,
 )
-def read_users(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
+def read_users(session: SessionDep, current_user: CurrentUser, skip: int = 0, limit: int = 100) -> Any:
     """
     Retrieve users.
     """
@@ -54,7 +55,10 @@ def read_users(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
     statement = select(User).offset(skip).limit(limit)
     users = session.exec(statement).all()
 
-    return UsersPublic(data=users, count=count)
+    return UsersPublic(
+        data=[filter_user_privacy(u, current_user.id) for u in users], 
+        count=count
+    )
 
 
 @router.post(
@@ -98,7 +102,7 @@ def update_user_me(
     session.add(current_user)
     session.commit()
     session.refresh(current_user)
-    return current_user
+    return filter_user_privacy(current_user, current_user.id)
 
 
 @router.patch("/me/password", response_model=Message)
@@ -130,7 +134,7 @@ def read_user_me(current_user: CurrentUser) -> Any:
     """
     Get current user.
     """
-    return current_user
+    return filter_user_privacy(current_user, current_user.id)
 
 
 
@@ -160,7 +164,7 @@ def update_user_profile(
     session.add(current_user)
     session.commit()
     session.refresh(current_user)
-    return current_user
+    return filter_user_privacy(current_user, current_user.id)
 
 
 @router.post("/me/profile-picture", response_model=UserPublic)
@@ -183,7 +187,7 @@ async def upload_user_profile_picture(
     session.add(current_user)
     session.commit()
     session.refresh(current_user)
-    return current_user
+    return filter_user_privacy(current_user, current_user.id)
 
 
 @router.get("/me/settings", response_model=UserSettingsSchema)
@@ -209,7 +213,7 @@ def update_user_settings(
     session.add(current_user)
     session.commit()
     session.refresh(current_user)
-    return current_user
+    return filter_user_privacy(current_user, current_user.id)
 
 
 @router.delete("/me", response_model=Message)
@@ -297,7 +301,7 @@ def read_user_by_id(
     )
     friendship = session.exec(statement).first()
     
-    user_public = UserPublic.model_validate(user)
+    user_public = filter_user_privacy(user, current_user.id)
     user_public.friendship_status = friendship.status if friendship else None
     
     # Restrict data if not friends (and not the same user, though this route is for "other" users)

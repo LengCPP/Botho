@@ -31,7 +31,7 @@ import { emailPattern, passwordRules } from "../utils"
 
 const loginSearchSchema = z.object({
   token: z.string().optional(),
-  new_user: z.string().optional(),
+  new_user: z.coerce.string().optional(),
 })
 
 export const Route = createFileRoute("/login")({

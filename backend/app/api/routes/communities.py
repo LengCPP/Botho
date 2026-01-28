@@ -41,6 +41,7 @@ from app.models import (
     UserPublic,
     UsersPublic,
 )
+from app.api.utils import filter_user_privacy, filter_owner_privacy
 from app.search import delete_community_from_search, sync_community_to_search
 
 router = APIRouter()
@@ -309,7 +310,7 @@ def read_community_members(
 
     users_with_meta = []
     for user, membership in results:
-        user_public = UserPublic.model_validate(user)
+        user_public = filter_user_privacy(user, current_user.id)
         user_public.community_role = membership.role
         user_public.community_status = membership.status
 
@@ -392,7 +393,7 @@ async def update_community_member_role(
         )
 
     user = session.get(User, user_id)
-    user_public = UserPublic.model_validate(user)
+    user_public = filter_user_privacy(user, current_user.id)
     user_public.community_role = updated_member.role
     user_public.community_status = updated_member.status
     return user_public
@@ -555,7 +556,7 @@ def read_community_items(
         item_pub.owners = [
 
 
-            ItemOwnerPublic(id=owner.id, full_name=owner.full_name, email=owner.email)
+            filter_owner_privacy(owner, current_user.id)
 
 
             for owner in item.owners

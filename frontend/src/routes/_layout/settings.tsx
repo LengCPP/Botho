@@ -60,6 +60,15 @@ function UserSettings() {
           borderBottomWidth={isMobile ? "1px" : 0}
           mr={isMobile ? 0 : 8}
           mb={isMobile ? 8 : 0}
+          overflowX={isMobile ? "auto" : "visible"}
+          display="flex"
+          flexDirection={isMobile ? "row" : "column"}
+          whiteSpace="nowrap"
+          scrollSnapType={isMobile ? "x mandatory" : "none"}
+          css={{
+            "&::-webkit-scrollbar": { display: "none" },
+            scrollbarWidth: "none",
+          }}
         >
           <Text
             fontWeight="bold"
@@ -68,16 +77,29 @@ function UserSettings() {
             mb={2}
             px={4}
             textTransform="uppercase"
+            display={isMobile ? "none" : "block"}
           >
             Configuration
           </Text>
-          <Tabs.Trigger value="preferences" justifyContent="flex-start">
+          <Tabs.Trigger
+            value="preferences"
+            justifyContent={isMobile ? "center" : "flex-start"}
+            flexShrink={0}
+            width={isMobile ? "100%" : "full"}
+            scrollSnapAlign="center"
+          >
             <Box mr={2}>
               <FiSettings />
             </Box>{" "}
             Preferences
           </Tabs.Trigger>
-          <Tabs.Trigger value="password" justifyContent="flex-start">
+          <Tabs.Trigger
+            value="password"
+            justifyContent={isMobile ? "center" : "flex-start"}
+            flexShrink={0}
+            width={isMobile ? "100%" : "full"}
+            scrollSnapAlign="center"
+          >
             <Box mr={2}>
               <FiLock />
             </Box>{" "}
@@ -85,8 +107,11 @@ function UserSettings() {
           </Tabs.Trigger>
           <Tabs.Trigger
             value="danger-zone"
-            justifyContent="flex-start"
+            justifyContent={isMobile ? "center" : "flex-start"}
             color="red.500"
+            flexShrink={0}
+            width={isMobile ? "100%" : "full"}
+            scrollSnapAlign="center"
           >
             <Box mr={2}>
               <FiAlertTriangle />

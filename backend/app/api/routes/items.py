@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from sqlmodel import func, select, col, or_
 
 from app.api.deps import CurrentUser, SessionDep
+from app.api.utils import filter_owner_privacy
 from app.storage import upload_image, delete_image
 from app.search import sync_item_to_search, delete_item_from_search
 from app.models import (
@@ -141,9 +142,10 @@ def read_items(
             is_avail = check_owner_item_availability(session, item.id, owner.id)
             if is_avail:
                 any_available = True
-            owners_public.append(
-                ItemOwnerPublic(id=owner.id, full_name=owner.full_name, email=owner.email, is_available=is_avail)
-            )
+            
+            owner_pub = filter_owner_privacy(owner, current_user.id)
+            owner_pub.is_available = is_avail
+            owners_public.append(owner_pub)
         
         public_items.append(
             ItemPublic(
@@ -199,9 +201,10 @@ def read_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> 
         is_avail = check_owner_item_availability(session, item.id, owner.id)
         if is_avail:
             any_available = True
-        owners_public.append(
-            ItemOwnerPublic(id=owner.id, full_name=owner.full_name, email=owner.email, is_available=is_avail)
-        )
+        
+        owner_pub = filter_owner_privacy(owner, current_user.id)
+        owner_pub.is_available = is_avail
+        owners_public.append(owner_pub)
     
     return ItemPublic(
         id=item.id,
@@ -334,9 +337,10 @@ async def create_item(
         is_avail = check_owner_item_availability(session, item.id, owner.id)
         if is_avail:
             any_available = True
-        owners_public.append(
-            ItemOwnerPublic(id=owner.id, full_name=owner.full_name, email=owner.email, is_available=is_avail)
-        )
+        
+        owner_pub = filter_owner_privacy(owner, current_user.id)
+        owner_pub.is_available = is_avail
+        owners_public.append(owner_pub)
 
     return ItemPublic(
         id=item.id,
@@ -409,9 +413,10 @@ async def update_item(
         is_avail = check_owner_item_availability(session, item.id, owner.id)
         if is_avail:
             any_available = True
-        owners_public.append(
-            ItemOwnerPublic(id=owner.id, full_name=owner.full_name, email=owner.email, is_available=is_avail)
-        )
+        
+        owner_pub = filter_owner_privacy(owner, current_user.id)
+        owner_pub.is_available = is_avail
+        owners_public.append(owner_pub)
     
     return ItemPublic(
         id=item.id,

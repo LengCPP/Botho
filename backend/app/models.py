@@ -115,6 +115,7 @@ class UserItem(SQLModel, table=True):
 class UserSettingsSchema(SQLModel):
     autocomplete_enabled: bool = Field(default=True)
     theme_mode: str = Field(default="system")
+    show_contact_details: bool = Field(default=False)
 
     @field_validator("theme_mode")
     @classmethod
@@ -279,7 +280,9 @@ class User(UserBase, table=True):
         back_populates="members", link_model=CommunityMember
     )
     settings: dict = Field(default={}, sa_column=Column(JSON))
-    profile: UserProfile | None = Relationship(sa_relationship_kwargs={"uselist": False})
+    profile: UserProfile | None = Relationship(
+        sa_relationship_kwargs={"uselist": False, "cascade": "all, delete-orphan"}
+    )
     interests: list["Interest"] = Relationship(back_populates="users", link_model=UserInterest)
     notifications: list["Notification"] = Relationship(back_populates="recipient", cascade_delete=True)
     loans_out: list["Loan"] = Relationship(
@@ -475,6 +478,7 @@ class UserPublic(UserBase):
     settings: UserSettingsSchema | None = None
     interests: list[InterestPublic] = []
     friendship_status: FriendshipStatus | None = None
+    show_contact_details: bool = False
 
 
 class CommunityMemberUpdate(SQLModel):
@@ -537,6 +541,7 @@ class ItemOwnerPublic(SQLModel):
     full_name: str | None
     email: str
     is_available: bool = True
+    show_contact_details: bool = False
 
 
 class ItemPublic(ItemBase):
