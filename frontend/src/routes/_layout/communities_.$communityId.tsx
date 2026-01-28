@@ -148,6 +148,45 @@ function AddAnnouncementModal({ communityId }: { communityId: string }) {
   )
 }
 
+function AnnouncementItem({ ann }: { ann: any }) {
+  const [isExpanded, setIsExpanded] = useState(false)
+
+  return (
+    <Box
+      p={4}
+      borderWidth="1px"
+      rounded="md"
+      bg="bg.panel"
+      borderColor={isExpanded ? "ui.hover" : "border.subtle"}
+      cursor="pointer"
+      onClick={() => setIsExpanded(!isExpanded)}
+      transition="all 0.2s"
+    >
+      <Flex justify="space-between" align="center" gap={4}>
+        <Heading size="sm" lineClamp={isExpanded ? undefined : 1} flex={1}>
+          {ann.title}
+        </Heading>
+        <Text fontSize="2xs" color="fg.subtle" whiteSpace="nowrap">
+          {new Date(ann.created_at).toLocaleDateString()}
+        </Text>
+      </Flex>
+      {isExpanded && (
+        <VStack align="start" mt={4} gap={3}>
+          <Separator />
+          <Text fontSize="sm" whiteSpace="pre-wrap" color="fg.muted">
+            {ann.content}
+          </Text>
+          <Box pt={2}>
+            <Text fontSize="2xs" color="fg.subtle" fontWeight="bold">
+              Posted by {ann.author.full_name || ann.author.email}
+            </Text>
+          </Box>
+        </VStack>
+      )}
+    </Box>
+  )
+}
+
 function CommunityBoard() {
   const { communityId } = Route.useParams()
   const { user: currentUser } = useAuth()
@@ -391,6 +430,49 @@ function CommunityBoard() {
               </Box>
             ) : (
               <SimpleGrid columns={{ base: 1, md: 3 }} gap={8}>
+                <Box>
+                  <VStack align="stretch" gap={4}>
+                    <Flex justify="space-between" align="center">
+                      <Heading size="md">Announcement Board</Heading>
+                      {isAdmin && (
+                        <AddAnnouncementModal communityId={communityId} />
+                      )}
+                    </Flex>
+                    <Box
+                      h="400px"
+                      overflowY="auto"
+                      pr={2}
+                      css={{
+                        "&::-webkit-scrollbar": { width: "4px" },
+                        "&::-webkit-scrollbar-thumb": {
+                          background: "gray.subtle",
+                          borderRadius: "full",
+                        },
+                      }}
+                    >
+                      <VStack align="stretch" gap={3}>
+                        {isLoadingAnnouncements ? (
+                          <Text>Loading...</Text>
+                        ) : announcements?.data.length === 0 ? (
+                          <Box
+                            p={4}
+                            borderWidth="1px"
+                            rounded="md"
+                            bg="bg.panel"
+                          >
+                            <Text color="fg.muted" fontStyle="italic">
+                              No announcements yet.
+                            </Text>
+                          </Box>
+                        ) : (
+                          announcements?.data.map((ann) => (
+                            <AnnouncementItem key={ann.id} ann={ann} />
+                          ))
+                        )}
+                      </VStack>
+                    </Box>
+                  </VStack>
+                </Box>
                 <Box md={{ colSpan: 2 }}>
                   <VStack align="stretch" gap={4}>
                     <Heading size="md">Message Board</Heading>
@@ -453,47 +535,6 @@ function CommunityBoard() {
                         </Button>
                       </Flex>
                     </form>
-                  </VStack>
-                </Box>
-                <Box>
-                  <VStack align="stretch" gap={4}>
-                    <Flex justify="space-between" align="center">
-                      <Heading size="md">Announcement Board</Heading>
-                      {isAdmin && (
-                        <AddAnnouncementModal communityId={communityId} />
-                      )}
-                    </Flex>
-                    {isLoadingAnnouncements ? (
-                      <Text>Loading...</Text>
-                    ) : announcements?.data.length === 0 ? (
-                      <Box p={4} borderWidth="1px" rounded="md" bg="bg.panel">
-                        <Text color="fg.muted" fontStyle="italic">
-                          No announcements yet.
-                        </Text>
-                      </Box>
-                    ) : (
-                      announcements?.data.map((ann) => (
-                        <Box
-                          key={ann.id}
-                          p={4}
-                          borderWidth="1px"
-                          rounded="md"
-                          bg="bg.panel"
-                          borderColor="ui.hover"
-                        >
-                          <Heading size="sm" mb={2}>
-                            {ann.title}
-                          </Heading>
-                          <Text fontSize="sm" mb={2}>
-                            {ann.content}
-                          </Text>
-                          <Text fontSize="2xs" color="fg.subtle">
-                            By {ann.author.full_name} •{" "}
-                            {new Date(ann.created_at).toLocaleDateString()}
-                          </Text>
-                        </Box>
-                      ))
-                    )}
                   </VStack>
                 </Box>
               </SimpleGrid>
