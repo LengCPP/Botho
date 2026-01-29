@@ -2,10 +2,10 @@ import { IconButton } from "@chakra-ui/react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { BsThreeDotsVertical } from "react-icons/bs"
-import { FiHeart, FiMinusCircle, FiTrash2 } from "react-icons/fi"
+import { FiHeart, FiMinusCircle, FiTrash2, FiCopy } from "react-icons/fi"
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from "../ui/menu"
 
-import { CommunitiesService, type ItemPublic } from "@/client"
+import { CommunitiesService, type ItemPublic, ItemsService } from "@/client"
 import useCustomToast from "@/hooks/useCustomToast"
 import ConfirmationModal from "./ConfirmationModal"
 import DeleteItem from "../Items/DeleteItem"
@@ -72,6 +72,15 @@ export const ItemActionsMenu = ({
     },
   })
 
+  const duplicateMutation = useMutation({
+    mutationFn: () => ItemsService.duplicateItem({ id: item.id }),
+    onSuccess: () => {
+      showSuccessToast("Another copy added to your collection!")
+      queryClient.invalidateQueries({ queryKey: ["items"] })
+    },
+    onError: () => showErrorToast("Failed to copy item"),
+  })
+
   const handleConfirm = () => {
     if (confirmationType === "donate") {
       donateMutation.mutate()
@@ -128,6 +137,17 @@ export const ItemActionsMenu = ({
         <MenuContent>
           <EditItem item={item} />
           <DeleteItem id={item.id} />
+          <MenuItem
+            value="duplicate"
+            onClick={(e) => {
+              e.stopPropagation()
+              duplicateMutation.mutate()
+            }}
+            disabled={duplicateMutation.isPending}
+          >
+            <FiCopy style={{ marginRight: "8px" }} />
+            I have another copy
+          </MenuItem>
           {onRemoveFromCollection && (
             <MenuItem
               value="remove-from-collection"

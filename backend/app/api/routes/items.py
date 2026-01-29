@@ -490,3 +490,52 @@ def delete_item(
     session.commit()
     delete_item_from_search(id)
     return Message(message="Item deleted successfully")
+
+
+@router.post("/{id}/duplicate", response_model=ItemPublic)
+def duplicate_item(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+) -> Any:
+    """
+    Duplicate an existing item for the current user.
+    """
+    source_item = session.get(Item, id)
+    if not source_item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    # Create copy
+    new_item = Item(
+        title=source_item.title,
+        description=source_item.description,
+        author=source_item.author,
+        item_type=source_item.item_type,
+        image_url=source_item.image_url,
+        extra_data=source_item.extra_data,
+        owner_id=current_user.id,
+    )
+    
+    session.add(new_item)
+    session.commit()
+    session.refresh(new_item)
+    sync_item_to_search(new_item)
+    
+    owner_pub = filter_owner_privacy(current_user, current_user.id, is_admin=current_user.is_superuser)
+    owner_pub.is_available = True
+    
+    return ItemPublic(
+        id=new_item.id,
+        owner_id=new_item.owner_id,
+        title=new_item.title,
+        description=new_item.description,
+        author=new_item.author,
+        item_type=new_item.item_type,
+        image_url=new_item.image_url,
+        extra_data=new_item.extra_data,
+        count=new_item.count,
+        created_at=new_item.created_at,
+        owner=owner_pub,
+        is_available=True
+    )

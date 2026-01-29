@@ -960,6 +960,27 @@ export class ItemsService {
             }
         });
     }
+
+    /**
+     * Duplicate Item
+     * Duplicate an existing item for the current user.
+     * @param data The data for the request.
+     * @param data.id
+     * @returns ItemPublic Successful Response
+     * @throws ApiError
+     */
+    public static duplicateItem(data: { id: string }): CancelablePromise<ItemPublic> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/items/{id}/duplicate',
+            path: {
+                id: data.id
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
     
 }
 

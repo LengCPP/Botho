@@ -1,8 +1,8 @@
-import { CommunitiesService, type ItemPublic, LoansService } from "@/client"
+import { CommunitiesService, type ItemPublic, LoansService, ItemsService } from "@/client"
 import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
 import { IconButton } from "@chakra-ui/react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { BsThreeDotsVertical } from "react-icons/bs"
 import {
@@ -11,6 +11,7 @@ import {
   FiCornerUpLeft,
   FiHeart,
   FiTrash2,
+  FiCopy,
 } from "react-icons/fi"
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from "../ui/menu"
 import { LoanRequestModal } from "./LoanRequestModal"
@@ -37,6 +38,19 @@ export const FriendItemActionsMenu = ({
 
   const isPooledByMe = item.added_by_id === currentUser?.id
   const isCommunityOwned = !!item.community_owner
+
+  // Check if user already has a copy
+  const { data: myItemsData } = useQuery({
+    queryKey: ["items", "me"],
+    queryFn: () => ItemsService.readItems({ ownerId: currentUser?.id }),
+    enabled: !!currentUser,
+  })
+
+  const hasCopy = myItemsData?.data.some(
+    (i) =>
+      i.title.toLowerCase().trim() === item.title.toLowerCase().trim() &&
+      (i.author || "").toLowerCase().trim() === (item.author || "").toLowerCase().trim()
+  )
 
   const signalReturnMutation = useMutation({
     mutationFn: () => LoansService.signalReturn({ id: loanId! }),
@@ -94,6 +108,15 @@ export const FriendItemActionsMenu = ({
     onError: () => showErrorToast("Failed to remove item"),
   })
 
+  const duplicateMutation = useMutation({
+    mutationFn: () => ItemsService.duplicateItem({ id: item.id }),
+    onSuccess: () => {
+      showSuccessToast("Item added to your collection!")
+      queryClient.invalidateQueries({ queryKey: ["items"] })
+    },
+    onError: () => showErrorToast("Failed to copy item"),
+  })
+
   if (isBorrowing) {
     return (
       <IconButton
@@ -128,6 +151,18 @@ export const FriendItemActionsMenu = ({
           >
             <FiBookOpen style={{ marginRight: "8px" }} />
             {item.is_available ? "Request Loan" : "On Loan (Unavailable)"}
+          </MenuItem>
+
+          <MenuItem
+            value="duplicate"
+            onClick={(e) => {
+              e.stopPropagation()
+              duplicateMutation.mutate()
+            }}
+            disabled={duplicateMutation.isPending}
+          >
+            <FiCopy style={{ marginRight: "8px" }} />
+            {hasCopy ? "I have another copy" : "I have a copy"}
           </MenuItem>
 
           {communityId && (
