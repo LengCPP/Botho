@@ -47,6 +47,7 @@ import {
 import useAuth from "@/hooks/useAuth"
 import { useColorModeValue } from "@/components/ui/color-mode"
 import { BOOK_CLASSIFICATION } from "@/constants"
+import { groupItems } from "@/utils"
 
 const itemsSearchSchema = z.object({
   page: z.number().catch(1),
@@ -336,6 +337,7 @@ function ItemsTable() {
     })
 
   const items = data?.data ?? []
+  const groupedItems = groupItems(items)
   const count = data?.count ?? 0
   const hasAnyItems = (allItemsCheck?.count ?? 0) > 0
 
@@ -385,17 +387,18 @@ function ItemsTable() {
         gap={6}
         opacity={isPlaceholderData ? 0.5 : 1}
       >
-        {items?.map((item) => (
-          isMobile ? (
+        {groupedItems?.map((group) => {
+          const firstItem = group[0]
+          return isMobile ? (
             <CompactItemCard
-              key={item.id}
-              item={item}
-              onShowDetails={() => setSelectedItem(item)}
+              key={firstItem.id}
+              item={group}
+              onShowDetails={() => setSelectedItem(firstItem)}
             />
           ) : (
-            <ItemCard key={item.id} item={item} displayOwnerId={user?.id} />
+            <ItemCard key={firstItem.id} item={group} displayOwnerId={user?.id} />
           )
-        ))}
+        })}
       </SimpleGrid>
 
       <ItemDetailModal

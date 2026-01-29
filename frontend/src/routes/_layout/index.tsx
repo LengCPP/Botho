@@ -18,7 +18,7 @@ import { CommunitiesService, SearchService } from "@/client"
 import CommunityCard from "@/components/Communities/CommunityCard"
 import ItemCard from "@/components/Items/ItemCard"
 import useAuth from "@/hooks/useAuth"
-import { formatPublicId } from "@/utils"
+import { formatPublicId, groupItems } from "@/utils"
 
 export const Route = createFileRoute("/_layout/")({
   component: Dashboard,
@@ -155,8 +155,8 @@ function Dashboard() {
                         templateColumns="repeat(auto-fill, minmax(250px, 1fr))"
                         gap={6}
                       >
-                        {searchResults?.items.map((item: any) => (
-                          <ItemCard key={item.id} item={item} />
+                        {groupItems(searchResults?.items || []).map((group: any) => (
+                          <ItemCard key={group[0].id} item={group} />
                         ))}
                       </Grid>
                     </Box>

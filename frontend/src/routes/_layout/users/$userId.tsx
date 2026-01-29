@@ -42,7 +42,7 @@ import {
 import type { UserPublicExtended } from "@/customTypes"
 import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
-import { formatPublicId, handleError } from "@/utils"
+import { formatPublicId, groupItems, handleError } from "@/utils"
 
 export const Route = createFileRoute("/_layout/users/$userId")({
   component: UserProfilePage,
@@ -142,6 +142,7 @@ function UserProfilePage() {
   }
 
   const userItems = items?.data || []
+  const groupedItems = groupItems(userItems)
 
   if (isLoadingUser) return <Text p={4}>Loading profile...</Text>
   if (!user) return <Text p={4}>User not found</Text>
@@ -280,17 +281,18 @@ function UserProfilePage() {
       ) : (
         <>
           <SimpleGrid columns={{ base: 2, md: 3, xl: 4 }} gap={6}>
-            {userItems.map((item) => (
-              isMobile ? (
+            {groupedItems.map((group) => {
+              const firstItem = group[0]
+              return isMobile ? (
                 <CompactItemCard
-                  key={item.id}
-                  item={item}
-                  onShowDetails={() => setSelectedItem(item)}
+                  key={firstItem.id}
+                  item={group}
+                  onShowDetails={() => setSelectedItem(firstItem)}
                 />
               ) : (
-                <ItemCard key={item.id} item={item} displayOwnerId={userId} />
+                <ItemCard key={firstItem.id} item={group} displayOwnerId={userId} />
               )
-            ))}
+            })}
           </SimpleGrid>
 
           <ItemDetailModal

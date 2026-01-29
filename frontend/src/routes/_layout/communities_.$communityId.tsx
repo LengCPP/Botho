@@ -70,6 +70,7 @@ import {
 } from "@/components/ui/menu"
 import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
+import { groupItems } from "@/utils"
 
 export const Route = createFileRoute("/_layout/communities/$communityId")({
   component: CommunityBoard,
@@ -345,6 +346,8 @@ function CommunityBoard() {
     postMessageMutation.mutate(message)
   }
 
+  const groupedCommunityItems = groupItems(communityItems?.data || [])
+
   return (
     <Container maxW="full">
       <VStack align="stretch" gap={6} pt={8}>
@@ -600,37 +603,40 @@ function CommunityBoard() {
                 ) : (
                   <>
                     <SimpleGrid columns={{ base: 2, md: 3, lg: 4 }} gap={6}>
-                      {communityItems?.data.map((item) => (
-                        <Box key={item.id} position="relative">
-                          {isMobile ? (
-                            <CompactItemCard
-                              item={item}
-                              communityId={communityId}
-                              isAdmin={isAdmin}
-                              onShowDetails={() => setSelectedItem(item)}
-                            />
-                          ) : (
-                            <ItemCard
-                              item={item}
-                              communityId={communityId}
-                              isAdmin={isAdmin}
-                            />
-                          )}
-                          {item.is_donation_pending && (
-                            <Badge
-                              colorPalette="yellow"
-                              variant="solid"
-                              size="xs"
-                              position="absolute"
-                              top={2}
-                              left={2}
-                              zIndex={1}
-                            >
-                              Donation Pending
-                            </Badge>
-                          )}
-                        </Box>
-                      ))}
+                      {groupedCommunityItems.map((group) => {
+                        const item = group[0]
+                        return (
+                          <Box key={item.id} position="relative">
+                            {isMobile ? (
+                              <CompactItemCard
+                                item={group}
+                                communityId={communityId}
+                                isAdmin={isAdmin}
+                                onShowDetails={() => setSelectedItem(item)}
+                              />
+                            ) : (
+                              <ItemCard
+                                item={group}
+                                communityId={communityId}
+                                isAdmin={isAdmin}
+                              />
+                            )}
+                            {item.is_donation_pending && (
+                              <Badge
+                                colorPalette="yellow"
+                                variant="solid"
+                                size="xs"
+                                position="absolute"
+                                top={2}
+                                left={2}
+                                zIndex={1}
+                              >
+                                Donation Pending
+                              </Badge>
+                            )}
+                          </Box>
+                        )
+                      })}
                     </SimpleGrid>
 
                     <ItemDetailModal

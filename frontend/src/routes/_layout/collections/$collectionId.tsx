@@ -40,7 +40,7 @@ import {
 } from "@/components/ui/menu"
 import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
-import { handleError } from "@/utils"
+import { groupItems, handleError } from "@/utils"
 
 export const Route = createFileRoute("/_layout/collections/$collectionId")({
   component: CollectionDetail,
@@ -207,6 +207,8 @@ function CollectionDetail() {
     fontSize: "14px",
     width: "100%",
   }
+
+  const groupedFilteredItems = groupItems(filteredItems)
 
   return (
     <Container maxW="full" pt={12} pb={20}>
@@ -463,11 +465,12 @@ function CollectionDetail() {
                 columns={{ base: 2, md: 3, xl: 4 }}
                 gap={6}
               >
-                {filteredItems.map((item) => (
-                  isMobile ? (
+                {groupedFilteredItems.map((group) => {
+                  const item = group[0]
+                  return isMobile ? (
                     <CompactItemCard
                       key={item.id}
-                      item={item as any}
+                      item={group as any}
                       onShowDetails={() => setSelectedItem(item as any)}
                       onRemoveFromCollection={
                         canManage
@@ -478,7 +481,7 @@ function CollectionDetail() {
                   ) : (
                     <ItemCard
                       key={item.id}
-                      item={item as any}
+                      item={group as any}
                       onRemoveFromCollection={
                         canManage
                           ? () => removeMutation.mutate(item.id)
@@ -486,7 +489,7 @@ function CollectionDetail() {
                       }
                     />
                   )
-                ))}
+                })}
               </SimpleGrid>
 
               <ItemDetailModal

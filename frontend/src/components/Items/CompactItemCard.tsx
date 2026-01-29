@@ -1,4 +1,4 @@
-import { Box, Card, Flex, HStack, Image, Text, VStack } from "@chakra-ui/react"
+import { Box, Card, Flex, HStack, Image, Text, VStack, Badge, IconButton } from "@chakra-ui/react"
 import type { ItemPublic, LoanPublic } from "@/client"
 import { getImageUrl } from "@/utils"
 import { useColorModeValue } from "@/components/ui/color-mode"
@@ -6,9 +6,10 @@ import { useState } from "react"
 import useAuth from "@/hooks/useAuth"
 import { ItemActionsMenu } from "@/components/Common/ItemActionsMenu"
 import { FriendItemActionsMenu } from "./FriendItemActionsMenu"
+import { FiChevronRight } from "react-icons/fi"
 
 interface CompactItemCardProps {
-  item: ItemPublic
+  item: ItemPublic | ItemPublic[]
   loan?: LoanPublic
   communityId?: string
   isAdmin?: boolean
@@ -17,7 +18,7 @@ interface CompactItemCardProps {
 }
 
 export const CompactItemCard = ({
-  item,
+  item: itemProp,
   loan,
   communityId,
   isAdmin,
@@ -25,7 +26,14 @@ export const CompactItemCard = ({
   onRemoveFromCollection,
 }: CompactItemCardProps) => {
   const [isFlipped, setIsFlipped] = useState(false)
+  const [itemIndex, setItemIndex] = useState(0)
   const { user } = useAuth()
+  
+  const items = Array.isArray(itemProp) ? itemProp : [itemProp]
+  const isGrouped = items.length > 1
+  const item = items[itemIndex]
+  const availableCount = items.filter((i) => i.is_available).length
+
   const isBook = item.item_type === "book"
   const extraData = (item.extra_data as any) || {}
 
@@ -36,6 +44,11 @@ export const CompactItemCard = ({
   const handleFlip = (e: React.MouseEvent) => {
     e.stopPropagation()
     setIsFlipped(!isFlipped)
+  }
+
+  const handleNextItem = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setItemIndex((prev) => (prev + 1) % items.length)
   }
 
   const handleDescriptionClick = (e: React.MouseEvent) => {
@@ -56,7 +69,37 @@ export const CompactItemCard = ({
       cursor="pointer"
       perspective="1000px"
       borderRadius="lg"
+      position="relative"
     >
+      {/* Layered effect for multiple items */}
+      {isGrouped && (
+        <>
+          <Box
+            position="absolute"
+            inset="0"
+            bg={bgColor}
+            borderWidth="1px"
+            borderColor={borderColor}
+            borderRadius="lg"
+            transform="translate(2px, -2px) rotate(1deg)"
+            zIndex={-1}
+            boxShadow="sm"
+          />
+          <Box
+            position="absolute"
+            inset="0"
+            bg={bgColor}
+            borderWidth="1px"
+            borderColor={borderColor}
+            borderRadius="lg"
+            transform="translate(4px, -4px) rotate(2deg)"
+            zIndex={-2}
+            boxShadow="xs"
+            opacity={0.7}
+          />
+        </>
+      )}
+
       <Box
         position="relative"
         width="100%"
@@ -110,6 +153,21 @@ export const CompactItemCard = ({
               </Text>
             </Flex>
           )}
+
+          {isGrouped && (
+            <Badge
+              position="absolute"
+              bottom={1}
+              right={1}
+              colorPalette="orange"
+              variant="solid"
+              size="2xs"
+              borderRadius="full"
+              boxShadow="md"
+            >
+              {items.length}
+            </Badge>
+          )}
         </Card.Root>
 
         {/* --- BACK FACE (Details) --- */}
@@ -128,7 +186,22 @@ export const CompactItemCard = ({
           borderColor={borderColor}
         >
           <Card.Body p={3} height="100%" display="flex" flexDirection="column">
-            <Flex justify="flex-end" mb={1}>
+            <Flex justify="space-between" align="center" mb={1}>
+              {isGrouped ? (
+                <HStack gap={1}>
+                  <Text fontSize="3xs" color="gray.500">
+                    {itemIndex + 1}/{items.length}
+                  </Text>
+                  <IconButton
+                    aria-label="Next"
+                    size="3xs"
+                    variant="ghost"
+                    onClick={handleNextItem}
+                  >
+                    <FiChevronRight />
+                  </IconButton>
+                </HStack>
+              ) : <Box />}
               <HStack gap={1} onClick={(e) => e.stopPropagation()}>
                 {isOwner ? (
                   <ItemActionsMenu
@@ -181,6 +254,22 @@ export const CompactItemCard = ({
                   TAP FOR MORE
                 </Text>
               </Box>
+
+              <Badge
+                colorPalette={availableCount > 0 ? "green" : "red"}
+                variant="outline"
+                size="2xs"
+                width="full"
+                textAlign="center"
+              >
+                {isGrouped
+                  ? availableCount > 0
+                    ? `${availableCount} Available`
+                    : "On Loan"
+                  : availableCount > 0
+                    ? "Available"
+                    : "On Loan"}
+              </Badge>
             </VStack>
           </Card.Body>
         </Card.Root>

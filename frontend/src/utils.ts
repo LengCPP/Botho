@@ -88,3 +88,22 @@ export const getImageUrl = (
   if (url.startsWith("/api")) return `${OpenAPI.BASE}${url}`
   return url
 }
+
+/**
+ * Group items by title and author.
+ * @param items - The list of items to group
+ * @returns An array of item groups, where each group is an array of items
+ */
+export const groupItems = (items: any[]): any[][] => {
+  const groups: { [key: string]: any[] } = {}
+  for (const item of items) {
+    const title = (item.title || "").toLowerCase().trim()
+    const author = (item.author || item.extra_data?.author || "").toLowerCase().trim()
+    const key = `${title}|${author}`
+    if (!groups[key]) {
+      groups[key] = []
+    }
+    groups[key].push(item)
+  }
+  return Object.values(groups)
+}

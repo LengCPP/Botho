@@ -19,11 +19,11 @@ import { Link, useNavigate } from "@tanstack/react-router"
 import { format } from "date-fns"
 import type React from "react"
 import { useState } from "react"
-import { FiExternalLink } from "react-icons/fi"
+import { FiExternalLink, FiChevronRight, FiChevronLeft } from "react-icons/fi"
 import { FriendItemActionsMenu } from "./FriendItemActionsMenu"
 
 interface ItemCardProps {
-  item: ItemPublic
+  item: ItemPublic | ItemPublic[]
   loan?: LoanPublic
   communityId?: string
   isAdmin?: boolean
@@ -32,7 +32,7 @@ interface ItemCardProps {
 }
 
 const ItemCard = ({
-  item,
+  item: itemProp,
   loan,
   communityId,
   isAdmin,
@@ -40,8 +40,14 @@ const ItemCard = ({
   onRemoveFromCollection,
 }: ItemCardProps) => {
   const [isFlipped, setIsFlipped] = useState(false)
+  const [itemIndex, setItemIndex] = useState(0)
   const { user } = useAuth()
   const navigate = useNavigate()
+
+  const items = Array.isArray(itemProp) ? itemProp : [itemProp]
+  const isGrouped = items.length > 1
+  const item = items[itemIndex]
+  const availableCount = items.filter((i) => i.is_available).length
 
   // Color Mode Values
   const bgColor = useColorModeValue("orange.50", "gray.800")
@@ -52,6 +58,16 @@ const ItemCard = ({
   const handleFlip = (e: React.MouseEvent) => {
     e.stopPropagation()
     setIsFlipped(!isFlipped)
+  }
+
+  const handleNextItem = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setItemIndex((prev) => (prev + 1) % items.length)
+  }
+
+  const handlePrevItem = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setItemIndex((prev) => (prev - 1 + items.length) % items.length)
   }
 
   const handleGoToCollection = (e: React.MouseEvent) => {
@@ -71,9 +87,6 @@ const ItemCard = ({
     loan.requester_id === user?.id &&
     ["active", "return_pending"].includes(loan.status)
 
-  // item.community_owner is now populated by the backend if it's community-owned
-  const isCommunityOwned = !!item.community_owner
-
   const isBook = item.item_type === "book"
   const extraData = (item.extra_data as any) || {}
 
@@ -83,7 +96,11 @@ const ItemCard = ({
   let isDisplayAvailable = item.is_available
   if (isOwner && item.owner) {
     isDisplayAvailable = item.owner.is_available
-  } else if (effectiveDisplayOwnerId && item.owner && item.owner.id === effectiveDisplayOwnerId) {
+  } else if (
+    effectiveDisplayOwnerId &&
+    item.owner &&
+    item.owner.id === effectiveDisplayOwnerId
+  ) {
     isDisplayAvailable = item.owner.is_available
   }
 
@@ -95,7 +112,37 @@ const ItemCard = ({
       cursor="pointer"
       perspective="1000px"
       borderRadius="lg"
+      position="relative"
     >
+      {/* Dynamic Layered effect for grouped items (up to 3 total items visible) */}
+      {items.slice(1, 3).map((layerItem, idx) => (
+        <Box
+          key={layerItem.id}
+          position="absolute"
+          inset="0"
+          bg={layerItem.image_url ? "black" : bgColor}
+          borderWidth={layerItem.image_url ? "0" : "1px"}
+          borderColor={borderColor}
+          borderRadius="lg"
+          transform={`translate(${(idx + 1) * 4}px, -${(idx + 1) * 4}px) rotate(${(idx + 1) * 2}deg)`}
+          zIndex={-(idx + 1)}
+          boxShadow={idx === 0 ? "sm" : "xs"}
+          opacity={idx === 0 ? 1 : 0.7}
+          overflow="hidden"
+        >
+          {layerItem.image_url && (
+            <Image
+              src={getImageUrl(layerItem.image_url)}
+              alt=""
+              objectFit="cover"
+              width="100%"
+              height="100%"
+              opacity={0.8}
+            />
+          )}
+        </Box>
+      ))}
+
       <Box
         position="relative"
         width="100%"
@@ -155,6 +202,21 @@ const ItemCard = ({
                 </Text>
               )}
             </Flex>
+          )}
+
+          {isGrouped && (
+            <Badge
+              position="absolute"
+              bottom={2}
+              right={2}
+              colorPalette="orange"
+              variant="solid"
+              size="sm"
+              borderRadius="full"
+              boxShadow="lg"
+            >
+              {items.length}
+            </Badge>
           )}
 
           {item.collection_id && (
@@ -298,47 +360,42 @@ const ItemCard = ({
                 </VStack>
               )}
 
-              {isOwner ? (
-                <Badge
-                  colorPalette={isDisplayAvailable ? "green" : "red"}
-                  variant="solid"
-                  mb={2}
-                  width="full"
-                  justifyContent="center"
-                >
-                  {isDisplayAvailable ? "Available" : "On Loan"}
-                </Badge>
-              ) : isBorrowing ? (
-                <Badge
-                  colorPalette={
-                    loan?.status === "return_pending" ? "blue" : "green"
-                  }
-                  variant="solid"
-                  mb={2}
-                  width="full"
-                  justifyContent="center"
-                >
-                  {loan?.status === "return_pending"
-                    ? "Return Pending"
-                    : "In your possession"}
-                </Badge>
-              ) : (
-                !isDisplayAvailable && (
-                  <Badge
-                    colorPalette="red"
-                    variant="solid"
-                    mb={2}
-                    width="full"
-                    justifyContent="center"
-                  >
-                    On Loan
-                  </Badge>
-                )
-              )}
+              <Badge
+                colorPalette={availableCount > 0 ? "green" : "red"}
+                variant="solid"
+                mb={2}
+                width="full"
+                justifyContent="center"
+              >
+                {isGrouped
+                  ? availableCount > 0
+                    ? `${availableCount} Available`
+                    : "On Loan"
+                  : availableCount > 0
+                    ? "Available"
+                    : "On Loan"}
+              </Badge>
 
-              <Text fontSize="xs" fontWeight="semibold" mb={1}>
-                {loan || effectiveDisplayOwnerId ? "Owner:" : "Owners:"}
-              </Text>
+              <Flex justify="space-between" align="center" mb={1}>
+                <Text fontSize="xs" fontWeight="semibold">
+                  Owner:
+                </Text>
+                {isGrouped && (
+                  <HStack gap={1}>
+                    <Text fontSize="2xs" color="gray.500">
+                      {itemIndex + 1}/{items.length}
+                    </Text>
+                    <IconButton
+                      aria-label="Next Owner"
+                      size="2xs"
+                      variant="ghost"
+                      onClick={handleNextItem}
+                    >
+                      <FiChevronRight />
+                    </IconButton>
+                  </HStack>
+                )}
+              </Flex>
               <HStack gap={1} flexWrap="wrap">
                 {loan ? (
                   <Link
@@ -418,41 +475,31 @@ const ItemCard = ({
                           </Link>
                         )}
                         {!effectiveDisplayOwnerId && item.owner && (
-                            <Link
-                              to={
-                                item.owner.id === user?.id
-                                  ? "/profile"
-                                  : "/users/$userId"
-                              }
-                              params={
-                                item.owner.id === user?.id
-                                  ? {}
-                                  : { userId: item.owner.id }
-                              }
-                              onClick={(e) => e.stopPropagation()}
-                              style={{ textDecoration: "none" }}
+                          <Link
+                            to={
+                              item.owner.id === user?.id
+                                ? "/profile"
+                                : "/users/$userId"
+                            }
+                            params={
+                              item.owner.id === user?.id
+                                ? {}
+                                : { userId: item.owner.id }
+                            }
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ textDecoration: "none" }}
+                          >
+                            <Text
+                              fontSize="xs"
+                              color="blue.500"
+                              _hover={{ textDecoration: "underline" }}
                             >
-                              <Text
-                                fontSize="xs"
-                                color="blue.500"
-                                _hover={{ textDecoration: "underline" }}
-                              >
-                                {item.owner.id === user?.id
-                                  ? "You"
-                                  : String(item.owner.full_name || item.owner.email)}
-                                <Text
-                                  as="span"
-                                  color={
-                                    item.owner.is_available ? "green.500" : "red.500"
-                                  }
-                                >
-                                  {item.owner.is_available
-                                    ? " (Available)"
-                                    : " (On Loan)"}
-                                </Text>
-                              </Text>
-                            </Link>
-                          )}
+                              {item.owner.id === user?.id
+                                ? "You"
+                                : String(item.owner.full_name || item.owner.email)}
+                            </Text>
+                          </Link>
+                        )}
                       </>
                     )}
                   </>
