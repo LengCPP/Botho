@@ -164,11 +164,11 @@ export type ItemPublic = {
     description?: (string | null);
     author?: (string | null);
     item_type?: ItemType;
+    owner_type: OwnerType;
     image_url?: (string | null);
     extra_data?: {
         [key: string]: unknown;
     };
-    community_owner_id?: (string | null);
     id: string;
     owner_id: string;
     count: number;
@@ -187,6 +187,8 @@ export type ItemsPublic = {
 };
 
 export type ItemType = 'general' | 'book';
+
+export type OwnerType = 'user' | 'community';
 
 export type LoanCreate = {
     item_id: string;

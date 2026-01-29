@@ -2,7 +2,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from sqlmodel import func, select
+from sqlmodel import func, select, or_
 
 from app import crud
 from app.api.deps import CurrentUser, SessionDep
@@ -43,6 +43,7 @@ from app.models import (
     CollectionCreate,
     CollectionType,
     ItemType,
+    OwnerType,
     Collection,
     CollectionItem,
 )
@@ -461,14 +462,17 @@ def read_community_items(
     # Query for exclusively community-owned items
     owned_stmt = (
         select(Item)
-        .where(Item.community_owner_id == id)
+        .where(
+            Item.owner_id == id,
+            Item.owner_type == OwnerType.COMMUNITY
+        )
     )
     
     # Combine using OR
     statement = select(Item).where(
         or_(
             Item.id.in_(pooled_stmt.with_only_columns(Item.id)),
-            Item.community_owner_id == id
+            (Item.owner_id == id) & (Item.owner_type == OwnerType.COMMUNITY)
         )
     )
 
@@ -498,8 +502,8 @@ def read_community_items(
         ).first()
         
         owner_pub = None
-        if item.owner:
-            owner_pub = filter_owner_privacy(item.owner, current_user.id, is_admin=current_user.is_superuser)
+        if item.owner_type == OwnerType.USER and item.user_owner:
+            owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser)
             owner_pub.is_available = is_avail
             
         item_pub = ItemPublic(
@@ -509,13 +513,13 @@ def read_community_items(
             description=item.description,
             author=item.author,
             item_type=item.item_type,
+            owner_type=item.owner_type,
             image_url=item.image_url,
             extra_data=item.extra_data,
             count=item.count,
             created_at=item.created_at,
             owner=owner_pub,
-            is_available=is_avail,
-            community_owner_id=item.community_owner_id
+            is_available=is_avail
         )
         
         # Add pooling metadata if applicable
@@ -555,7 +559,7 @@ def add_item_to_community(
         raise HTTPException(status_code=404, detail="Item not found")
 
     # Check if current user is the owner
-    if item.owner_id != current_user.id:
+    if item.owner_type != OwnerType.USER or item.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the owner can add this item to a pool")
 
     # Check if already added
@@ -598,250 +602,84 @@ def add_item_to_community(
     return Message(message="Item added to community pool")
 
 
-
-
-
-
-
-
 @router.post("/{id}/items/{item_id}/donate", response_model=Message)
-
-
 def initiate_donation(
-
-
     *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, item_id: uuid.UUID
-
-
 ) -> Any:
-
-
     """
-
-
     Initiate a donation of an item to the community.
-
-
     """
-
-
     statement = select(CommunityItem).where(
-
-
         CommunityItem.community_id == id,
-
-
         CommunityItem.item_id == item_id
-
-
     )
-
-
     comm_item = session.exec(statement).first()
-
-
     if not comm_item:
-
-
         raise HTTPException(status_code=404, detail="Item not found in community")
-
-
     
-
-
     if comm_item.added_by != current_user.id:
-
-
         raise HTTPException(status_code=403, detail="Only the person who pooled the item can donate it")
 
-
-
-
-
     comm_item.is_donation_pending = True
-
-
     session.add(comm_item)
-
-
     session.commit()
-
-
     
-
-
     # Notify admins
-
-
     admin_statement = select(CommunityMember).where(
-
-
         CommunityMember.community_id == id,
-
-
         CommunityMember.role == CommunityMemberRole.ADMIN
-
-
     )
-
-
     admins = session.exec(admin_statement).all()
-
-
     for admin in admins:
-
-
         crud.create_notification(
-
-
             session=session,
-
-
             recipient_id=admin.user_id,
-
-
             title="Item Donation Pending",
-
-
             message=f"{current_user.full_name or current_user.email} wants to donate an item to the community.",
-
-
             type=NotificationType.INFO,
-
-
             link=f"/communities/{id}"
-
-
         )
-
-
     
-
-
     return Message(message="Donation request sent to admins")
 
 
-
-
-
-
-
-
 @router.post("/{id}/items/{item_id}/ratify-donation", response_model=Message)
-
-
 def ratify_donation(
-
-
     *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, item_id: uuid.UUID
-
-
 ) -> Any:
-
-
     """
-
-
     Ratify a donation (Admin only).
-
-
     """
-
-
     # Admin check
-
-
     statement = select(CommunityMember).where(
-
-
         CommunityMember.community_id == id,
-
-
         CommunityMember.user_id == current_user.id,
-
-
         CommunityMember.role == CommunityMemberRole.ADMIN
-
-
     )
-
-
     if not session.exec(statement).first() and not current_user.is_superuser:
-
-
         raise HTTPException(status_code=403, detail="Only admins can ratify donations")
 
-
-
-
-
     statement = select(CommunityItem).where(
-
-
         CommunityItem.community_id == id,
-
-
         CommunityItem.item_id == item_id
-
-
     )
-
-
     comm_item = session.exec(statement).first()
-
-
     if not comm_item or not comm_item.is_donation_pending:
-
-
         raise HTTPException(status_code=400, detail="No pending donation found")
 
-
-
-
-
     item = session.get(Item, item_id)
-
-
     # Change ownership
-
-
-    item.community_owner_id = id
-
-
-    item.owners = [] # Clear personal owners
-
-
+    item.owner_id = id
+    item.owner_type = OwnerType.COMMUNITY
     
-
-
     # Update comm_item status
-
-
     comm_item.is_donation_pending = False
-
-
     
-
-
     session.add(item)
-
-
     session.add(comm_item)
-
-
     session.commit()
-
-
     
-
-
     return Message(message="Donation ratified! The community now owns this item.")
-
-
-
-
-
-
 
 
 @router.delete("/{id}/items/{item_id}", response_model=Message)

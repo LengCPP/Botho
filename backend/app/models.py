@@ -4,7 +4,8 @@ import uuid
 from typing import Optional
 
 from pydantic import EmailStr, field_validator
-from sqlalchemy import Column, JSON, DateTime, func
+from sqlalchemy import Column, JSON, DateTime, func, and_
+from sqlalchemy.orm import foreign
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -13,19 +14,19 @@ from sqlmodel import Field, Relationship, SQLModel
 
 
 class CommunityMemberRole(str, Enum):
-    ADMIN = "admin"
-    MEMBER = "member"
+    ADMIN = "ADMIN"
+    MEMBER = "MEMBER"
 
 
 class CommunityMemberStatus(str, Enum):
-    PENDING = "pending"
-    ACCEPTED = "accepted"
-    REJECTED = "rejected"
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
+    REJECTED = "REJECTED"
 
 
 class FriendshipStatus(str, Enum):
-    PENDING = "pending"
-    ACCEPTED = "accepted"
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
 
 
 class ItemType(str, Enum):
@@ -33,26 +34,31 @@ class ItemType(str, Enum):
     book = "book"
 
 
+class OwnerType(str, Enum):
+    USER = "user"
+    COMMUNITY = "community"
+
+
 class CollectionType(str, Enum):
-    GENERAL = "general"
-    LIBRARY = "library"
-    BUCKET = "bucket"
+    GENERAL = "GENERAL"
+    LIBRARY = "LIBRARY"
+    BUCKET = "BUCKET"
 
 
 class LoanStatus(str, Enum):
-    PENDING = "pending"
-    ACCEPTED = "accepted"
-    REJECTED = "rejected"
-    ACTIVE = "active"  # Ratified by requester
-    RETURN_PENDING = "return_pending" # Requester signaled return
-    RETURNED = "returned"
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
+    REJECTED = "REJECTED"
+    ACTIVE = "ACTIVE"  # Ratified by requester
+    RETURN_PENDING = "RETURN_PENDING" # Requester signaled return
+    RETURNED = "RETURNED"
 
 
 class NotificationType(str, Enum):
-    INFO = "info"
-    SUCCESS = "success"
-    WARNING = "warning"
-    ERROR = "error"
+    INFO = "INFO"
+    SUCCESS = "SUCCESS"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
 
 
 # Link Models
@@ -300,7 +306,12 @@ class User(UserBase, table=True):
     public_id: Optional[str] = Field(default=None, unique=True, index=True, max_length=8)
     hashed_password: str
     has_set_password: bool = Field(default=True)
-    items: list["Item"] = Relationship(back_populates="owner")
+    items: list["Item"] = Relationship(
+        sa_relationship_kwargs={
+            "primaryjoin": "and_(foreign(Item.owner_id)==User.id, Item.owner_type=='user')",
+            "viewonly": True
+        }
+    )
     collections: list["Collection"] = Relationship(back_populates="owner")
     communities: list["Community"] = Relationship(
         back_populates="members", link_model=CommunityMember
@@ -350,7 +361,12 @@ class Community(CommunityBase, table=True):
     messages: list["CommunityMessage"] = Relationship(
         back_populates="community", cascade_delete=True
     )
-    items: list["Item"] = Relationship(back_populates="communities", link_model=CommunityItem)
+    items: list["Item"] = Relationship(
+        sa_relationship_kwargs={
+            "primaryjoin": "and_(foreign(Item.owner_id)==Community.id, Item.owner_type=='community')",
+            "viewonly": True
+        }
+    )
     loans: list["Loan"] = Relationship(back_populates="community")
     collections: list["Collection"] = Relationship(back_populates="community")
 
@@ -408,23 +424,32 @@ class ItemBase(SQLModel):
     description: Optional[str] = Field(default=None, max_length=1000)
     author: Optional[str] = Field(default=None, max_length=255)
     item_type: ItemType = Field(default=ItemType.general)
+    owner_type: OwnerType = Field(default=OwnerType.USER)
     image_url: Optional[str] = Field(default=None, max_length=512)
     extra_data: dict = Field(default={}, sa_column=Column(JSON))
-    community_owner_id: Optional[uuid.UUID] = Field(
-        default=None, foreign_key="community.id", ondelete="CASCADE"
-    )
 
 
 class Item(ItemBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    owner_id: Optional[uuid.UUID] = Field(default=None, foreign_key="user.id", ondelete="CASCADE", index=True)
+    owner_id: uuid.UUID = Field(index=True)
     title: str = Field(max_length=255, index=True)
     count: int = Field(default=1)
     created_at: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
-    owner: "User" = Relationship(back_populates="items")
+    user_owner: Optional["User"] = Relationship(
+        sa_relationship_kwargs={
+            "primaryjoin": "and_(foreign(Item.owner_id)==User.id, Item.owner_type=='user')",
+            "viewonly": True
+        }
+    )
+    community_owner: Optional["Community"] = Relationship(
+        sa_relationship_kwargs={
+            "primaryjoin": "and_(foreign(Item.owner_id)==Community.id, Item.owner_type=='community')",
+            "viewonly": True
+        }
+    )
     communities: list["Community"] = Relationship(back_populates="items", link_model=CommunityItem)
     loans: list["Loan"] = Relationship(back_populates="item")
 

@@ -16,6 +16,9 @@ from app.models import (
     Friendship,
     FriendshipStatus,
     CollectionItem,
+    OwnerType,
+    CommunityMember,
+    CommunityMemberStatus,
 )
 
 router = APIRouter(prefix="/search", tags=["search"])
@@ -58,7 +61,7 @@ def search(
     users_raw = session.exec(user_statement).all()
     users_public = [filter_user_privacy(u, current_user.id, is_admin=current_user.is_superuser) for u in users_raw]
 
-    # 2. Search Items (Expansion: Filter by visibility/friends)
+    # 2. Search Items (Expansion: Filter by visibility/friends/communities)
     # Get friend IDs
     friends_stmt = select(Friendship.friend_id).where(
         Friendship.user_id == current_user.id,
@@ -71,7 +74,15 @@ def search(
         Friendship.status == FriendshipStatus.ACCEPTED
     )
     friend_ids_2 = session.exec(friends_stmt_2).all()
-    globe_user_ids = set([current_user.id] + list(friend_ids) + list(friend_ids_2))
+    
+    # Get community IDs
+    comm_stmt = select(CommunityMember.community_id).where(
+        CommunityMember.user_id == current_user.id,
+        CommunityMember.status == CommunityMemberStatus.ACCEPTED
+    )
+    user_comm_ids = session.exec(comm_stmt).all()
+    
+    accessible_owner_ids = set([current_user.id] + list(friend_ids) + list(friend_ids_2) + list(user_comm_ids))
 
     meili_items_raw = []
     try:
@@ -90,7 +101,7 @@ def search(
                 select(Item)
                 .where(
                     Item.id.in_(item_ids),
-                    Item.owner_id.in_(list(globe_user_ids))
+                    Item.owner_id.in_(list(accessible_owner_ids))
                 )
                 .limit(limit)
             )
@@ -106,7 +117,7 @@ def search(
             select(Item)
             .where(
                 col(Item.title).ilike(f"%{q}%"),
-                Item.owner_id.in_(list(globe_user_ids))
+                Item.owner_id.in_(list(accessible_owner_ids))
             )
             .limit(limit)
         )
@@ -114,8 +125,14 @@ def search(
 
     # Convert raw items to ItemPublic and add collection info
     items_public = []
+    from app.api.routes.items import check_item_availability
     for item in meili_items_raw:
-        owner_pub = filter_owner_privacy(item.owner, current_user.id, is_admin=current_user.is_superuser)
+        is_avail = check_item_availability(session, item.id)
+        
+        owner_pub = None
+        if item.owner_type == OwnerType.USER and item.user_owner:
+            owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser)
+            owner_pub.is_available = is_avail
         
         # Manually construct ItemPublic
         item_pub = ItemPublic(
@@ -125,13 +142,13 @@ def search(
             description=item.description,
             author=item.author,
             item_type=item.item_type,
+            owner_type=item.owner_type,
             image_url=item.image_url,
             extra_data=item.extra_data,
             count=item.count,
             created_at=item.created_at,
             owner=owner_pub,
-            is_available=True, # Search results usually show as available, or we can check
-            community_owner_id=item.community_owner_id
+            is_available=is_avail
         )
         
         # Check for collection

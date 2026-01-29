@@ -30,7 +30,7 @@ export const ItemActionsMenu = ({
     "donate" | "removeCommunity" | "removeCollection" | null
   >(null)
 
-  const isCommunityOwned = !!item.community_owner_id
+  const isCommunityOwned = item.owner_type === "community"
 
   const donateMutation = useMutation({
     mutationFn: () =>

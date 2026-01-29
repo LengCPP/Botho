@@ -36,7 +36,7 @@ export const FriendItemActionsMenu = ({
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
   const isPooledByMe = item.added_by_id === currentUser?.id
-  const isCommunityOwned = !!item.community_owner_id
+  const isCommunityOwned = item.owner_type === "community"
 
   const signalReturnMutation = useMutation({
     mutationFn: () => LoansService.signalReturn({ id: loanId! }),

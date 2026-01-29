@@ -16,12 +16,15 @@ from app.models import (
     ItemsPublic,
     ItemUpdate,
     ItemType,
+    OwnerType,
     Message,
     Friendship,
     FriendshipStatus,
     ItemOwnerPublic,
     Loan,
     LoanStatus,
+    CommunityMember,
+    CommunityMemberStatus,
 )
 
 router = APIRouter(prefix="/items", tags=["items"])
@@ -59,16 +62,26 @@ def read_items(
     
     # Permission check and target owner selection
     if owner_id and owner_id != current_user.id:
-        # Check if friend
-        is_friend = session.exec(
-            select(Friendship).where(
-                ((Friendship.user_id == current_user.id) & (Friendship.friend_id == owner_id)) |
-                ((Friendship.user_id == owner_id) & (Friendship.friend_id == current_user.id)),
-                Friendship.status == FriendshipStatus.ACCEPTED
+        # Check if it's a community owner_id
+        is_community = session.exec(
+            select(CommunityMember).where(
+                CommunityMember.community_id == owner_id,
+                CommunityMember.user_id == current_user.id,
+                CommunityMember.status == CommunityMemberStatus.ACCEPTED
             )
         ).first()
-        if not is_friend and not current_user.is_superuser:
-            raise HTTPException(status_code=403, detail="Not enough permissions to view this user's items")
+        
+        if not is_community:
+            # Check if friend
+            is_friend = session.exec(
+                select(Friendship).where(
+                    ((Friendship.user_id == current_user.id) & (Friendship.friend_id == owner_id)) |
+                    ((Friendship.user_id == owner_id) & (Friendship.friend_id == current_user.id)),
+                    Friendship.status == FriendshipStatus.ACCEPTED
+                )
+            ).first()
+            if not is_friend and not current_user.is_superuser:
+                raise HTTPException(status_code=403, detail="Not enough permissions to view this user's items")
         target_owner_id = owner_id
     else:
         target_owner_id = current_user.id
@@ -112,8 +125,11 @@ def read_items(
     public_items = []
     for item in items:
         is_avail = check_item_availability(session, item.id)
-        owner_pub = filter_owner_privacy(item.owner, current_user.id, is_admin=current_user.is_superuser)
-        owner_pub.is_available = is_avail
+        
+        owner_pub = None
+        if item.owner_type == OwnerType.USER and item.user_owner:
+            owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser)
+            owner_pub.is_available = is_avail
         
         item_pub = ItemPublic(
             id=item.id,
@@ -122,13 +138,13 @@ def read_items(
             description=item.description,
             author=item.author,
             item_type=item.item_type,
+            owner_type=item.owner_type,
             image_url=item.image_url,
             extra_data=item.extra_data,
             count=item.count,
             created_at=item.created_at,
             owner=owner_pub,
-            is_available=is_avail,
-            community_owner_id=item.community_owner_id
+            is_available=is_avail
         )
         public_items.append(item_pub)
 
@@ -146,19 +162,33 @@ def read_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> 
         
     # Permission check
     if item.owner_id != current_user.id and not current_user.is_superuser:
-        is_friend = session.exec(
-            select(Friendship).where(
-                ((Friendship.user_id == current_user.id) & (Friendship.friend_id == item.owner_id)) |
-                ((Friendship.user_id == item.owner_id) & (Friendship.friend_id == current_user.id)),
-                Friendship.status == FriendshipStatus.ACCEPTED
-            )
-        ).first()
-        if not is_friend:
-             raise HTTPException(status_code=403, detail="Not enough permissions (Not a friend of owner)")
+        if item.owner_type == OwnerType.USER:
+            is_friend = session.exec(
+                select(Friendship).where(
+                    ((Friendship.user_id == current_user.id) & (Friendship.friend_id == item.owner_id)) |
+                    ((Friendship.user_id == item.owner_id) & (Friendship.friend_id == current_user.id)),
+                    Friendship.status == FriendshipStatus.ACCEPTED
+                )
+            ).first()
+            if not is_friend:
+                 raise HTTPException(status_code=403, detail="Not enough permissions (Not a friend of owner)")
+        else: # Community item
+            is_member = session.exec(
+                select(CommunityMember).where(
+                    CommunityMember.community_id == item.owner_id,
+                    CommunityMember.user_id == current_user.id,
+                    CommunityMember.status == CommunityMemberStatus.ACCEPTED
+                )
+            ).first()
+            if not is_member:
+                raise HTTPException(status_code=403, detail="Not enough permissions (Not a member of owning community)")
 
     is_avail = check_item_availability(session, item.id)
-    owner_pub = filter_owner_privacy(item.owner, current_user.id, is_admin=current_user.is_superuser)
-    owner_pub.is_available = is_avail
+    
+    owner_pub = None
+    if item.owner_type == OwnerType.USER and item.user_owner:
+        owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser)
+        owner_pub.is_available = is_avail
     
     item_pub = ItemPublic(
         id=item.id,
@@ -167,13 +197,13 @@ def read_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> 
         description=item.description,
         author=item.author,
         item_type=item.item_type,
+        owner_type=item.owner_type,
         image_url=item.image_url,
         extra_data=item.extra_data,
         count=item.count,
         created_at=item.created_at,
         owner=owner_pub,
-        is_available=is_avail,
-        community_owner_id=item.community_owner_id
+        is_available=is_avail
     )
     return item_pub
 
@@ -192,7 +222,7 @@ def create_item(
     community_owner_id: Annotated[uuid.UUID | None, Form()] = None,
 ) -> Any:
     """
-    Create a new item. Associates with current user as owner.
+    Create a new item. Associates with current user or community as owner.
     """
     parsed_extra = {}
     if extra_data:
@@ -206,18 +236,22 @@ def create_item(
     if image:
         final_image_url = upload_image(image, folder="items")
 
-    # Determine owner_id based on exclusive ownership rule
-    # If community_owner_id is set, owner_id (personal) is None.
-    item_owner_id = None if community_owner_id else current_user.id
+    # Determine owner and type
+    if community_owner_id:
+        target_owner_id = community_owner_id
+        target_owner_type = OwnerType.COMMUNITY
+    else:
+        target_owner_id = current_user.id
+        target_owner_type = OwnerType.USER
 
     db_item = Item(
         title=title,
         description=description,
         item_type=item_type,
+        owner_type=target_owner_type,
         extra_data=parsed_extra,
         image_url=final_image_url,
-        owner_id=item_owner_id,
-        community_owner_id=community_owner_id
+        owner_id=target_owner_id,
     )
     session.add(db_item)
     session.commit()
@@ -225,13 +259,11 @@ def create_item(
     sync_item_to_search(db_item)
     
     # Prepare public response
-    if item_owner_id:
+    owner_pub = None
+    if target_owner_type == OwnerType.USER:
         owner_pub = filter_owner_privacy(current_user, current_user.id, is_admin=current_user.is_superuser)
         owner_pub.is_available = True
-    else:
-        owner_pub = None
     
-    # Manually construct ItemPublic to avoid Pydantic validation issues with User model
     item_pub = ItemPublic(
         id=db_item.id,
         owner_id=db_item.owner_id,
@@ -239,13 +271,13 @@ def create_item(
         description=db_item.description,
         author=db_item.author,
         item_type=db_item.item_type,
+        owner_type=db_item.owner_type,
         image_url=db_item.image_url,
         extra_data=db_item.extra_data,
         count=db_item.count,
         created_at=db_item.created_at,
         owner=owner_pub,
-        is_available=True,
-        community_owner_id=db_item.community_owner_id
+        is_available=True
     )
     return item_pub
 
@@ -270,8 +302,21 @@ def update_item(
     if not db_item:
         raise HTTPException(status_code=404, detail="Item not found")
     
-    if db_item.owner_id != current_user.id and not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="Not enough permissions")
+    # Permission check: User must be owner OR admin of owning community
+    if db_item.owner_type == OwnerType.USER:
+        if db_item.owner_id != current_user.id and not current_user.is_superuser:
+            raise HTTPException(status_code=403, detail="Not enough permissions")
+    else: # Community owned
+        is_member = session.exec(
+            select(CommunityMember).where(
+                CommunityMember.community_id == db_item.owner_id,
+                CommunityMember.user_id == current_user.id,
+                CommunityMember.role == 'admin',
+                CommunityMember.status == CommunityMemberStatus.ACCEPTED
+            )
+        ).first()
+        if not is_member and not current_user.is_superuser:
+            raise HTTPException(status_code=403, detail="Not enough permissions (Community admin required)")
 
     if title is not None:
         db_item.title = title
@@ -298,8 +343,11 @@ def update_item(
     sync_item_to_search(db_item)
     
     is_avail = check_item_availability(session, db_item.id)
-    owner_pub = filter_owner_privacy(db_item.owner, current_user.id, is_admin=current_user.is_superuser)
-    owner_pub.is_available = is_avail
+    
+    owner_pub = None
+    if db_item.owner_type == OwnerType.USER and db_item.user_owner:
+        owner_pub = filter_owner_privacy(db_item.user_owner, current_user.id, is_admin=current_user.is_superuser)
+        owner_pub.is_available = is_avail
     
     item_pub = ItemPublic(
         id=db_item.id,
@@ -308,13 +356,13 @@ def update_item(
         description=db_item.description,
         author=db_item.author,
         item_type=db_item.item_type,
+        owner_type=db_item.owner_type,
         image_url=db_item.image_url,
         extra_data=db_item.extra_data,
         count=db_item.count,
         created_at=db_item.created_at,
         owner=owner_pub,
-        is_available=is_avail,
-        community_owner_id=db_item.community_owner_id
+        is_available=is_avail
     )
     return item_pub
 
@@ -333,8 +381,21 @@ def delete_item(
     if not db_item:
         raise HTTPException(status_code=404, detail="Item not found")
     
-    if db_item.owner_id != current_user.id and not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="Not enough permissions")
+    # Permission check: User must be owner OR admin of owning community
+    if db_item.owner_type == OwnerType.USER:
+        if db_item.owner_id != current_user.id and not current_user.is_superuser:
+            raise HTTPException(status_code=403, detail="Not enough permissions")
+    else: # Community owned
+        is_member = session.exec(
+            select(CommunityMember).where(
+                CommunityMember.community_id == db_item.owner_id,
+                CommunityMember.user_id == current_user.id,
+                CommunityMember.role == 'admin',
+                CommunityMember.status == CommunityMemberStatus.ACCEPTED
+            )
+        ).first()
+        if not is_member and not current_user.is_superuser:
+            raise HTTPException(status_code=403, detail="Not enough permissions (Community admin required)")
 
     if db_item.image_url:
         delete_image(db_item.image_url)

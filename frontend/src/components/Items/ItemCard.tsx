@@ -64,17 +64,19 @@ const ItemCard = ({
     }
   }
 
-  const isOwner = item.owners?.some((o) => o.id === user?.id)
+  const isOwner = item.owner_type === "user" && item.owner_id === user?.id
   const isBorrowing =
     !!loan &&
     loan.requester_id === user?.id &&
     ["active", "return_pending"].includes(loan.status)
 
+  const isCommunityOwned = item.owner_type === "community"
+
   const { data: ownerCommunity } = useQuery({
-    queryKey: ["community", item.community_owner_id],
+    queryKey: ["community", item.owner_id],
     queryFn: () =>
-      CommunitiesService.readCommunity({ id: item.community_owner_id! }),
-    enabled: !!item.community_owner_id,
+      CommunitiesService.readCommunity({ id: item.owner_id }),
+    enabled: isCommunityOwned,
   })
 
   const isBook = item.item_type === "book"
@@ -84,14 +86,10 @@ const ItemCard = ({
 
   // Determine availability status based on context
   let isDisplayAvailable = item.is_available
-  if (isOwner) {
-    const myOwner = item.owners?.find((o) => o.id === user?.id)
-    if (myOwner) isDisplayAvailable = myOwner.is_available
-  } else if (effectiveDisplayOwnerId) {
-    const displayOwner = item.owners?.find(
-      (o) => o.id === effectiveDisplayOwnerId,
-    )
-    if (displayOwner) isDisplayAvailable = displayOwner.is_available
+  if (isOwner && item.owner) {
+    isDisplayAvailable = item.owner.is_available
+  } else if (effectiveDisplayOwnerId && item.owner && item.owner.id === effectiveDisplayOwnerId) {
+    isDisplayAvailable = item.owner.is_available
   }
 
   return (
