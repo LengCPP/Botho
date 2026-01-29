@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from sqlmodel import func, select, col, or_
 
 from app.api.deps import CurrentUser, SessionDep
-from app.api.utils import filter_owner_privacy
+from app.api.utils import filter_owner_privacy, check_item_availability
 from app.storage import upload_image, delete_image, upload_image_from_url
 from app.search import sync_item_to_search, delete_item_from_search
 from app.models import (

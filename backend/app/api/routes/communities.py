@@ -46,7 +46,7 @@ from app.models import (
     Collection,
     CollectionItem,
 )
-from app.api.utils import filter_user_privacy, filter_owner_privacy, filter_loan_privacy
+from app.api.utils import filter_user_privacy, filter_owner_privacy, filter_loan_privacy, check_item_availability
 from app.search import delete_community_from_search, sync_community_to_search
 
 router = APIRouter()
@@ -79,7 +79,7 @@ def read_communities(
     
     communities = session.exec(statement.offset(skip).limit(limit)).all()
 
-    # Populate current_user_role and notifications_enabled
+    # Populate current_user_role, current_user_status and notifications_enabled
     communities_public = []
 
     # Get all memberships for current user in fetched communities
@@ -91,7 +91,13 @@ def read_communities(
                 CommunityMember.community_id.in_(community_ids)
             )
         ).all()
-        membership_map = {m.community_id: {"role": m.role, "notif": m.notifications_enabled} for m in memberships}
+        membership_map = {
+            m.community_id: {
+                "role": m.role, 
+                "status": m.status,
+                "notif": m.notifications_enabled
+            } for m in memberships
+        }
     else:
         membership_map = {}
 
@@ -100,6 +106,7 @@ def read_communities(
         meta = membership_map.get(community.id)
         if meta:
             comm_pub.current_user_role = meta["role"]
+            comm_pub.current_user_status = meta["status"]
             comm_pub.notifications_enabled = meta["notif"]
         communities_public.append(comm_pub)
 
@@ -330,15 +337,21 @@ def read_community_members(
 
     users_with_meta = []
     for user, membership in results:
-        user_public = filter_user_privacy(user, current_user.id, is_admin=current_user.is_superuser)
+        status = friendship_map.get(user.id)
+        is_friend = status == FriendshipStatus.ACCEPTED
+        
+        user_public = filter_user_privacy(
+            user, 
+            current_user.id, 
+            is_admin=current_user.is_superuser,
+            is_friend=is_friend
+        )
         user_public.community_role = membership.role
         user_public.community_status = membership.status
-
-        status = friendship_map.get(user.id)
         user_public.friendship_status = status
 
         # Restrict data if not friends
-        if not current_user.is_superuser and user.id != current_user.id and status != FriendshipStatus.ACCEPTED:
+        if not current_user.is_superuser and user.id != current_user.id and not is_friend:
             user_public.communities = []
             user_public.interests = []
 
@@ -507,12 +520,7 @@ def read_community_items(
     items_public = []
     for item in items:
         # Check availability
-        is_avail = not session.exec(
-            select(Loan).where(
-                Loan.item_id == item.id,
-                Loan.status.in_([LoanStatus.ACTIVE, LoanStatus.ACCEPTED, LoanStatus.PENDING])
-            )
-        ).first()
+        is_avail = check_item_availability(session, item.id)
         
         owner_pub = None
         community_pub = None

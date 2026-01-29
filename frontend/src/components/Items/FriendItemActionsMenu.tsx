@@ -1,4 +1,9 @@
-import { CommunitiesService, type ItemPublic, LoansService, ItemsService } from "@/client"
+import {
+  CommunitiesService,
+  type ItemPublic,
+  ItemsService,
+  LoansService,
+} from "@/client"
 import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
 import { IconButton } from "@chakra-ui/react"
@@ -8,10 +13,10 @@ import { BsThreeDotsVertical } from "react-icons/bs"
 import {
   FiBookOpen,
   FiCheck,
+  FiCopy,
   FiCornerUpLeft,
   FiHeart,
   FiTrash2,
-  FiCopy,
 } from "react-icons/fi"
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from "../ui/menu"
 import { LoanRequestModal } from "./LoanRequestModal"
@@ -49,7 +54,8 @@ export const FriendItemActionsMenu = ({
   const hasCopy = myItemsData?.data.some(
     (i) =>
       i.title.toLowerCase().trim() === item.title.toLowerCase().trim() &&
-      (i.author || "").toLowerCase().trim() === (item.author || "").toLowerCase().trim()
+      (i.author || "").toLowerCase().trim() ===
+        (item.author || "").toLowerCase().trim(),
   )
 
   const signalReturnMutation = useMutation({

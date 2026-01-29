@@ -1,13 +1,5 @@
-import {
-  Box,
-  Heading,
-  HStack,
-  Image,
-  Text,
-  VStack,
-  Badge,
-} from "@chakra-ui/react"
 import type { ItemPublic } from "@/client"
+import { useColorModeValue } from "@/components/ui/color-mode"
 import {
   DialogBody,
   DialogCloseTrigger,
@@ -17,7 +9,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { getImageUrl } from "@/utils"
-import { useColorModeValue } from "@/components/ui/color-mode"
+import {
+  Badge,
+  Box,
+  HStack,
+  Heading,
+  Image,
+  Text,
+  VStack,
+} from "@chakra-ui/react"
 
 interface ItemDetailModalProps {
   item: ItemPublic | null
@@ -51,42 +51,47 @@ export const ItemDetailModal = ({
         </DialogHeader>
         <DialogCloseTrigger />
         <DialogBody pb={6}>
-            <VStack align="start" gap={4}>
-              <HStack gap={2}>
-                <Badge colorPalette="teal" variant="solid">
-                  {String(item.item_type || "General")}
+          <VStack align="start" gap={4}>
+            <HStack gap={2}>
+              <Badge colorPalette="teal" variant="solid">
+                {String(item.item_type || "General")}
+              </Badge>
+              {isBook && extraData.category && (
+                <Badge variant="outline" colorPalette="blue">
+                  {extraData.category}
                 </Badge>
-                {isBook && extraData.category && (
-                  <Badge variant="outline" colorPalette="blue">
-                    {extraData.category}
-                  </Badge>
-                )}
-                {isBook && extraData.genre && (
-                  <Badge variant="outline" colorPalette="purple">
-                    {extraData.genre}
-                  </Badge>
-                )}
-              </HStack>
-
-              {isBook && extraData.author && (
-                <Text fontSize="md" fontWeight="bold">
-                  Author: <Text as="span" fontWeight="normal" fontStyle="italic">{extraData.author}</Text>
-                </Text>
               )}
-
-              <Box>
-                <Heading size="sm" mb={2}>Description</Heading>
-                <Text fontSize="md" whiteSpace="pre-wrap">
-                  {item.description || "No description provided."}
-                </Text>
-              </Box>
-
-              {isBook && extraData.isbn && (
-                <Text fontSize="xs" color="fg.muted" fontFamily="mono" mt={4}>
-                  ISBN: {String(extraData.isbn)}
-                </Text>
+              {isBook && extraData.genre && (
+                <Badge variant="outline" colorPalette="purple">
+                  {extraData.genre}
+                </Badge>
               )}
-            </VStack>
+            </HStack>
+
+            {isBook && extraData.author && (
+              <Text fontSize="md" fontWeight="bold">
+                Author:{" "}
+                <Text as="span" fontWeight="normal" fontStyle="italic">
+                  {extraData.author}
+                </Text>
+              </Text>
+            )}
+
+            <Box>
+              <Heading size="sm" mb={2}>
+                Description
+              </Heading>
+              <Text fontSize="md" whiteSpace="pre-wrap">
+                {item.description || "No description provided."}
+              </Text>
+            </Box>
+
+            {isBook && extraData.isbn && (
+              <Text fontSize="xs" color="fg.muted" fontFamily="mono" mt={4}>
+                ISBN: {String(extraData.isbn)}
+              </Text>
+            )}
+          </VStack>
         </DialogBody>
       </DialogContent>
     </DialogRoot>

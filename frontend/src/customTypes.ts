@@ -32,6 +32,7 @@ export interface CommunityUpdateExtended extends CommunityUpdate {
 export interface CommunityPublicExtended extends CommunityPublic {
   requires_approval?: boolean
   is_private?: boolean
+  current_user_status?: CommunityMemberStatus | null
 }
 
 export interface UserPublicWithRole extends UserPublic {

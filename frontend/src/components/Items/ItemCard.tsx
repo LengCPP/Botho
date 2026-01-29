@@ -19,7 +19,7 @@ import { Link, useNavigate } from "@tanstack/react-router"
 import { format } from "date-fns"
 import type React from "react"
 import { useState } from "react"
-import { FiExternalLink, FiChevronRight, FiChevronLeft } from "react-icons/fi"
+import { FiChevronLeft, FiChevronRight, FiExternalLink } from "react-icons/fi"
 import { FriendItemActionsMenu } from "./FriendItemActionsMenu"
 
 interface ItemCardProps {
@@ -124,7 +124,9 @@ const ItemCard = ({
           borderWidth={layerItem.image_url ? "0" : "1px"}
           borderColor={borderColor}
           borderRadius="lg"
-          transform={`translate(${(idx + 1) * 4}px, -${(idx + 1) * 4}px) rotate(${(idx + 1) * 2}deg)`}
+          transform={`translate(${(idx + 1) * 4}px, -${
+            (idx + 1) * 4
+          }px) rotate(${(idx + 1) * 2}deg)`}
           zIndex={-(idx + 1)}
           boxShadow={idx === 0 ? "sm" : "xs"}
           opacity={idx === 0 ? 1 : 0.7}
@@ -468,7 +470,7 @@ const ItemCard = ({
                                 ? "You"
                                 : String(
                                     item.owner?.id === effectiveDisplayOwnerId
-                                      ? (item.owner.full_name || item.owner.email)
+                                      ? item.owner.full_name || item.owner.email
                                       : "Owner",
                                   )}
                             </Text>
@@ -496,7 +498,9 @@ const ItemCard = ({
                             >
                               {item.owner.id === user?.id
                                 ? "You"
-                                : String(item.owner.full_name || item.owner.email)}
+                                : String(
+                                    item.owner.full_name || item.owner.email,
+                                  )}
                             </Text>
                           </Link>
                         )}

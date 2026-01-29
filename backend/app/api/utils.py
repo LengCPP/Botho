@@ -1,12 +1,14 @@
 from typing import Any
-from app.models import User, UserPublic, ItemOwnerPublic, UserSettingsSchema, Loan, LoanPublic
+import uuid
+from sqlmodel import Session, select
+from app.models import User, UserPublic, ItemOwnerPublic, UserSettingsSchema, Loan, LoanPublic, LoanStatus, Friendship, FriendshipStatus
 
-def filter_user_privacy(user: User, current_user_id: Any = None, is_admin: bool = False) -> UserPublic:
+def filter_user_privacy(user: User, current_user_id: Any = None, is_admin: bool = False, is_friend: bool = False) -> UserPublic:
     """
     Apply privacy filters to a user object based on their settings.
-    Superusers bypass these filters.
+    Superusers or friends bypass these filters.
     """
-    # If the user is the current user or an admin, don't filter anything
+    # If the user is the current user or an admin or a friend, don't filter anything
     is_me = current_user_id and str(user.id) == str(current_user_id)
     
     settings = user.settings or {}
@@ -16,7 +18,7 @@ def filter_user_privacy(user: User, current_user_id: Any = None, is_admin: bool 
     user_public = UserPublic.model_validate(user)
     user_public.show_contact_details = show_contact
     
-    if not is_me and not is_admin:
+    if not is_me and not is_admin and not is_friend:
         if not show_contact:
             # Hide email
             user_public.email = "[Hidden]"
@@ -30,10 +32,10 @@ def filter_user_privacy(user: User, current_user_id: Any = None, is_admin: bool 
             
     return user_public
 
-def filter_owner_privacy(owner: User, current_user_id: Any = None, is_admin: bool = False) -> ItemOwnerPublic:
+def filter_owner_privacy(owner: User, current_user_id: Any = None, is_admin: bool = False, is_friend: bool = False) -> ItemOwnerPublic:
     """
     Apply privacy filters to an owner object for item listings.
-    Superusers bypass these filters.
+    Superusers or friends bypass these filters.
     """
     is_me = current_user_id and str(owner.id) == str(current_user_id)
     
@@ -41,9 +43,9 @@ def filter_owner_privacy(owner: User, current_user_id: Any = None, is_admin: boo
     show_contact = settings.get("show_contact_details", False)
     show_name = settings.get("show_full_name", False)
     
-    email = owner.email if (is_me or is_admin or show_contact) else "[Hidden]"
+    email = owner.email if (is_me or is_admin or is_friend or show_contact) else "[Hidden]"
     
-    if is_me or is_admin or show_name:
+    if is_me or is_admin or is_friend or show_name:
         full_name = owner.full_name
     else:
         full_name = "Private User"
@@ -70,3 +72,15 @@ def filter_loan_privacy(loan: Loan, current_user_id: Any = None, is_admin: bool 
         loan_public.requester = filter_user_privacy(loan.requester, current_user_id, is_admin)
         
     return loan_public
+
+def check_item_availability(session: Session, item_id: uuid.UUID) -> bool:
+    """
+    Check if an item is available (not currently loaned out).
+    """
+    active_loan = session.exec(
+        select(Loan).where(
+            Loan.item_id == item_id,
+            Loan.status.in_([LoanStatus.ACTIVE, LoanStatus.PENDING, LoanStatus.ACCEPTED, LoanStatus.RETURN_PENDING])
+        )
+    ).first()
+    return active_loan is None

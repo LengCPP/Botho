@@ -98,7 +98,9 @@ export const groupItems = (items: any[]): any[][] => {
   const groups: { [key: string]: any[] } = {}
   for (const item of items) {
     const title = (item.title || "").toLowerCase().trim()
-    const author = (item.author || item.extra_data?.author || "").toLowerCase().trim()
+    const author = (item.author || item.extra_data?.author || "")
+      .toLowerCase()
+      .trim()
     const key = `${title}|${author}`
     if (!groups[key]) {
       groups[key] = []

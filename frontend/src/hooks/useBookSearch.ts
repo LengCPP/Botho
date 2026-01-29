@@ -9,7 +9,8 @@ export interface BookResult {
   categories: string[]
 }
 
-const FALLBACK_BOOK_COVER = "https://via.placeholder.com/400x600?text=No+Cover+Available"
+const FALLBACK_BOOK_COVER =
+  "https://via.placeholder.com/400x600?text=No+Cover+Available"
 
 export const useBookSearch = (query: string) => {
   return useQuery({
@@ -35,12 +36,12 @@ export const useBookSearch = (query: string) => {
         )?.identifier
 
         const imageLinks = volumeInfo.imageLinks
-        let thumbnail = 
-          imageLinks?.medium || 
+        let thumbnail =
+          imageLinks?.medium ||
           imageLinks?.small ||
-          imageLinks?.smallThumbnail || 
+          imageLinks?.smallThumbnail ||
           FALLBACK_BOOK_COVER
-        
+
         if (thumbnail && thumbnail !== FALLBACK_BOOK_COVER) {
           // Force HTTPS and try to get a higher quality version by increasing zoom
           // Many Google Books thumbnails default to zoom=1 (low res)

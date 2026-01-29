@@ -38,9 +38,9 @@ const useAuth = () => {
       UsersService.registerUser({ requestBody: data }),
 
     onSuccess: (data, variables) => {
-      navigate({ 
+      navigate({
         to: "/signup-success",
-        search: { email: variables.email }
+        search: { email: variables.email },
       })
     },
     onError: (err: ApiError) => {
@@ -64,18 +64,18 @@ const useAuth = () => {
       navigate({ to: "/" })
     },
     onError: (err: ApiError, variables) => {
-      const errDetail = (err.body as any)?.detail;
-      
+      const errDetail = (err.body as any)?.detail
+
       if (errDetail === "User not verified") {
-        navigate({ 
-            to: "/signup-success", 
-            search: { email: variables.username }
-        });
-        return; 
+        navigate({
+          to: "/signup-success",
+          search: { email: variables.username },
+        })
+        return
       }
 
       if (typeof errDetail === "string") {
-        setError(errDetail);
+        setError(errDetail)
       }
       handleError(err)
     },

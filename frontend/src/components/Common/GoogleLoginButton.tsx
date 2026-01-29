@@ -17,7 +17,9 @@ const GoogleLoginButton = () => {
   const googleLoginMutation = useMutation({
     mutationFn: async (token: string) => {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL || "http://localhost:8000"}/api/v1/login/google`,
+        `${
+          import.meta.env.VITE_API_URL || "http://localhost:8000"
+        }/api/v1/login/google`,
         {
           method: "POST",
           headers: {

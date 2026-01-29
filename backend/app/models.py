@@ -467,6 +467,7 @@ class CommunityPublic(CommunityBase):
     id: uuid.UUID
     created_by: uuid.UUID
     current_user_role: Optional[CommunityMemberRole] = None
+    current_user_status: Optional[CommunityMemberStatus] = None
     notifications_enabled: Optional[bool] = None
 
 

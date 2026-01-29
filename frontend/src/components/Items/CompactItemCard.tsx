@@ -1,12 +1,22 @@
-import { Box, Card, Flex, HStack, Image, Text, VStack, Badge, IconButton } from "@chakra-ui/react"
 import type { ItemPublic, LoanPublic } from "@/client"
-import { getImageUrl } from "@/utils"
-import { useColorModeValue } from "@/components/ui/color-mode"
-import { useState } from "react"
-import useAuth from "@/hooks/useAuth"
 import { ItemActionsMenu } from "@/components/Common/ItemActionsMenu"
-import { FriendItemActionsMenu } from "./FriendItemActionsMenu"
+import { useColorModeValue } from "@/components/ui/color-mode"
+import useAuth from "@/hooks/useAuth"
+import { getImageUrl } from "@/utils"
+import {
+  Badge,
+  Box,
+  Card,
+  Flex,
+  HStack,
+  IconButton,
+  Image,
+  Text,
+  VStack,
+} from "@chakra-ui/react"
+import { useState } from "react"
 import { FiChevronRight } from "react-icons/fi"
+import { FriendItemActionsMenu } from "./FriendItemActionsMenu"
 
 interface CompactItemCardProps {
   item: ItemPublic | ItemPublic[]
@@ -28,7 +38,7 @@ export const CompactItemCard = ({
   const [isFlipped, setIsFlipped] = useState(false)
   const [itemIndex, setItemIndex] = useState(0)
   const { user } = useAuth()
-  
+
   const items = Array.isArray(itemProp) ? itemProp : [itemProp]
   const isGrouped = items.length > 1
   const item = items[itemIndex]
@@ -201,7 +211,9 @@ export const CompactItemCard = ({
                     <FiChevronRight />
                   </IconButton>
                 </HStack>
-              ) : <Box />}
+              ) : (
+                <Box />
+              )}
               <HStack gap={1} onClick={(e) => e.stopPropagation()}>
                 {isOwner ? (
                   <ItemActionsMenu
@@ -247,8 +259,14 @@ export const CompactItemCard = ({
                 borderRadius="md"
                 overflow="hidden"
               >
-                <Text fontSize="2xs" color="inherit" opacity={0.9} lineClamp={5}>
-                  {item.description || "No description provided. Click to see more."}
+                <Text
+                  fontSize="2xs"
+                  color="inherit"
+                  opacity={0.9}
+                  lineClamp={5}
+                >
+                  {item.description ||
+                    "No description provided. Click to see more."}
                 </Text>
                 <Text fontSize="3xs" color="blue.500" mt={1} fontWeight="bold">
                   TAP FOR MORE

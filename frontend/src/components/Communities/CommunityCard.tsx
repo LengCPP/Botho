@@ -1,10 +1,20 @@
-import { Badge, Box, Button, Flex, Heading, Text } from "@chakra-ui/react"
+import {
+  Badge,
+  Box,
+  Button,
+  Card,
+  Flex,
+  Heading,
+  Text,
+  VStack,
+} from "@chakra-ui/react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { FiTrash2 } from "react-icons/fi"
 
 import { CommunitiesService } from "@/client"
 import EditCommunity from "@/components/Communities/EditCommunity"
+import { useColorModeValue } from "@/components/ui/color-mode"
 import type { CommunityPublicExtended } from "@/customTypes"
 import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
@@ -17,6 +27,10 @@ const CommunityCard = ({ community }: CommunityCardProps) => {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const { user: currentUser } = useAuth()
+
+  const bgColor = useColorModeValue("orange.50", "gray.800")
+  const borderColor = useColorModeValue("orange.200", "gray.600")
+  const textColor = useColorModeValue("gray.800", "gray.100")
 
   const requiresApproval = community.requires_approval
   const isPrivate = community.is_private
@@ -44,88 +58,118 @@ const CommunityCard = ({ community }: CommunityCardProps) => {
     onError: () => showErrorToast("Failed to disband community"),
   })
 
-  const isMember = currentUser?.communities?.some((c) => c.id === community.id)
+  const isMember = community.current_user_status === "ACCEPTED"
+  const isPending = community.current_user_status === "PENDING"
+
   const isAdmin =
     community.created_by === currentUser?.id ||
     currentUser?.is_superuser ||
-    community.current_user_role === "admin"
+    community.current_user_role === "ADMIN"
 
   return (
-    <Box p={6} rounded="lg" borderWidth="1px" bg="bg.panel" h="fit-content">
-      <Flex justify="space-between" align="start">
-        <Box>
-          <Flex align="center" gap={2} wrap="wrap">
-            <Heading size="md">{community.name}</Heading>
-            {isPrivate ? (
-              <Badge colorPalette="gray" variant="solid">
-                Private
-              </Badge>
-            ) : (
-              <Badge colorPalette="blue" variant="subtle">
-                Global
-              </Badge>
-            )}
-            {requiresApproval ? (
-              <Badge colorPalette="red" variant="subtle">
-                Closed
-              </Badge>
-            ) : (
-              <Badge colorPalette="green" variant="subtle">
-                Open
-              </Badge>
-            )}
-          </Flex>
-          <Text mt={2} color="fg.muted">
-            {community.description || "No description"}
+    <Card.Root
+      width="100%"
+      variant="outline"
+      bg={bgColor}
+      borderColor={borderColor}
+      overflow="hidden"
+      transition="transform 0.2s"
+      _hover={{ transform: "translateY(-4px)", boxShadow: "lg" }}
+      display="flex"
+      flexDirection="column"
+      h="100%"
+    >
+      <Card.Body p={6} as={Flex} direction="column" h="100%">
+        <Flex justify="space-between" align="start" mb={4}>
+          <VStack align="start" gap={2}>
+            <Heading size="md" color={textColor} lineClamp={2} minH="3em">
+              {community.name}
+            </Heading>
+            <Flex gap={2} wrap="wrap">
+              {isPrivate ? (
+                <Badge colorPalette="gray" variant="solid">
+                  Private
+                </Badge>
+              ) : (
+                <Badge colorPalette="blue" variant="subtle">
+                  Global
+                </Badge>
+              )}
+              {requiresApproval ? (
+                <Badge colorPalette="red" variant="subtle">
+                  Closed
+                </Badge>
+              ) : (
+                <Badge colorPalette="green" variant="subtle">
+                  Open
+                </Badge>
+              )}
+            </Flex>
+          </VStack>
+          {isAdmin && (
+            <Flex gap={2}>
+              <EditCommunity community={community} />
+              <Button
+                size="xs"
+                variant={"danger" as any}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      "Are you sure you want to disband this community?",
+                    )
+                  ) {
+                    disbandMutation.mutate()
+                  }
+                }}
+                title="Disband Community"
+              >
+                <FiTrash2 />
+              </Button>
+            </Flex>
+          )}
+        </Flex>
+
+        <Box flex="1">
+          <Text color="fg.muted" lineClamp={3} minH="4.5em">
+            {community.description || "No description provided."}
           </Text>
         </Box>
-        {isAdmin && (
-          <Flex gap={2}>
-            <EditCommunity community={community} />
-            <Button
-              size="xs"
-              variant={"danger" as any}
-              onClick={() => {
-                if (
-                  window.confirm(
-                    "Are you sure you want to disband this community?",
-                  )
-                ) {
-                  disbandMutation.mutate()
-                }
-              }}
-              title="Disband Community"
-            >
-              <FiTrash2 />
-            </Button>
-          </Flex>
-        )}
-      </Flex>
 
-      <Flex mt={4} gap={2}>
-        {!isMember ? (
-          <Button
-            size="sm"
-            variant={"primary" as any}
-            onClick={() => joinMutation.mutate()}
-            loading={joinMutation.isPending}
-          >
-            {requiresApproval ? "Request to Join" : "Join Community"}
-          </Button>
-        ) : (
-          <>
-            <Link
-              to="/communities/$communityId"
-              params={{ communityId: community.id }}
+        <Flex mt={6} gap={2}>
+          {isMember ? (
+            <Button
+              asChild
+              size="sm"
+              colorPalette="orange"
+              variant="solid"
+              width="full"
             >
-              <Button size="sm" colorPalette="orange" variant="solid">
-                View Community
-              </Button>
-            </Link>
-          </>
-        )}
-      </Flex>
-    </Box>
+              <Link to={`/communities/${community.id}`}>View Community</Link>
+            </Button>
+          ) : isPending ? (
+            <Button
+              size="sm"
+              variant="outline"
+              colorPalette="gray"
+              disabled
+              width="full"
+            >
+              Pending Approval
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant={"primary" as any}
+              onClick={() => joinMutation.mutate()}
+              loading={joinMutation.isPending}
+              width="full"
+            >
+              {requiresApproval ? "Request to Join" : "Join Community"}
+            </Button>
+          )}
+        </Flex>
+      </Card.Body>
+    </Card.Root>
   )
 }
 

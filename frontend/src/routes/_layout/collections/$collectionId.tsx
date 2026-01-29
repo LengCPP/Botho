@@ -12,25 +12,30 @@ import {
   Portal,
   Select,
   Separator,
+  SimpleGrid,
   Skeleton,
   Text,
   VStack,
   useBreakpointValue,
-  SimpleGrid,
 } from "@chakra-ui/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useMemo, useState } from "react"
 import { FaFilter } from "react-icons/fa"
-import { FiPlus, FiTrash2, FiMoreVertical, FiEdit } from "react-icons/fi"
+import { FiEdit, FiMoreVertical, FiPlus, FiTrash2 } from "react-icons/fi"
 
-import { CollectionsService, ItemsService, CommunitiesService, type ItemPublic } from "@/client"
-import AddItem from "@/components/Items/AddItem"
-import ItemCard from "@/components/Items/ItemCard"
-import { CompactItemCard } from "@/components/Items/CompactItemCard"
-import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
+import {
+  CollectionsService,
+  CommunitiesService,
+  type ItemPublic,
+  ItemsService,
+} from "@/client"
 import EditCollection from "@/components/Collections/EditCollection"
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
+import AddItem from "@/components/Items/AddItem"
+import { CompactItemCard } from "@/components/Items/CompactItemCard"
+import ItemCard from "@/components/Items/ItemCard"
+import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { useColorModeValue } from "@/components/ui/color-mode"
 import {
   MenuContent,
@@ -74,22 +79,26 @@ function CollectionDetail() {
   // Get community info if it's a community collection
   const { data: community } = useQuery({
     queryKey: ["community", collection?.community_id],
-    queryFn: () => CommunitiesService.readCommunity({ id: collection!.community_id! }),
+    queryFn: () =>
+      CommunitiesService.readCommunity({ id: collection!.community_id! }),
     enabled: !!collection?.community_id,
   })
 
   const isOwner = user?.id === collection?.owner_id
-  const isCommunityAdmin = community?.current_user_role === "admin" || community?.created_by === user?.id
+  const isCommunityAdmin =
+    community?.current_user_role === "admin" ||
+    community?.created_by === user?.id
   const canManage = isOwner || isCommunityAdmin || !!user?.is_superuser
 
   // Get items to allow adding them
   const { data: availableItemsData } = useQuery({
-    queryKey: collection?.community_id 
+    queryKey: collection?.community_id
       ? ["communityItems", collection.community_id]
       : ["items", "me", { excludeCollections: true }],
-    queryFn: () => collection?.community_id
-      ? CommunitiesService.readCommunityItems({ id: collection.community_id })
-      : ItemsService.readItems({ limit: 100, excludeCollections: true }),
+    queryFn: () =>
+      collection?.community_id
+        ? CommunitiesService.readCommunityItems({ id: collection.community_id })
+        : ItemsService.readItems({ limit: 100, excludeCollections: true }),
     enabled: !!user && !!collection && canManage,
   })
 
@@ -119,8 +128,13 @@ function CollectionDetail() {
       showSuccessToast("Collection deleted")
       queryClient.invalidateQueries({ queryKey: ["collections"] })
       if (collection?.community_id) {
-        queryClient.invalidateQueries({ queryKey: ["communityCollections", collection.community_id] })
-        navigate({ to: "/communities/$communityId", params: { communityId: collection.community_id } })
+        queryClient.invalidateQueries({
+          queryKey: ["communityCollections", collection.community_id],
+        })
+        navigate({
+          to: "/communities/$communityId",
+          params: { communityId: collection.community_id },
+        })
       } else {
         navigate({ to: "/items" })
       }
@@ -195,7 +209,9 @@ function CollectionDetail() {
   // For community collections, we only show items from the community pool
   const availableItems =
     availableItemsData?.data.filter(
-      (item) => !item.collection_id && !collection.items?.some((ci) => ci.id === item.id),
+      (item) =>
+        !item.collection_id &&
+        !collection.items?.some((ci) => ci.id === item.id),
     ) || []
 
   const selectStyle = {
@@ -222,9 +238,15 @@ function CollectionDetail() {
               </Text>
               {collection.community_id && community && (
                 <HStack mt={1}>
-                  <Text fontSize="sm" fontWeight="bold">Owned by Community:</Text>
+                  <Text fontSize="sm" fontWeight="bold">
+                    Owned by Community:
+                  </Text>
                   <Link to={`/communities/${community.id}`}>
-                    <Text fontSize="sm" color="ui.hover" _hover={{ textDecoration: "underline" }}>
+                    <Text
+                      fontSize="sm"
+                      color="ui.hover"
+                      _hover={{ textDecoration: "underline" }}
+                    >
                       {community.name}
                     </Text>
                   </Link>
@@ -239,7 +261,7 @@ function CollectionDetail() {
                 <Badge colorPalette="orange" size="lg" variant="solid">
                   {isOwner ? "Owner View" : "Admin View"}
                 </Badge>
-                
+
                 <MenuRoot>
                   <MenuTrigger asChild>
                     <IconButton
@@ -372,8 +394,8 @@ function CollectionDetail() {
           </HStack>
 
           {canManage && (
-            <AddItem 
-              collectionId={collection.id} 
+            <AddItem
+              collectionId={collection.id}
               communityId={collection.community_id || undefined}
               isAdmin={isCommunityAdmin}
             />
@@ -395,7 +417,7 @@ function CollectionDetail() {
             <Flex wrap="wrap" gap={2}>
               {availableItems.length === 0 ? (
                 <Text fontSize="sm" color="gray.500">
-                  {collection.community_id 
+                  {collection.community_id
                     ? "No available items in the community pool. Pooled items that aren't in any collection will appear here."
                     : "All your existing items are already in this collection. Use 'Add Item' to create new ones."}
                 </Text>
@@ -461,10 +483,7 @@ function CollectionDetail() {
             </Flex>
           ) : (
             <>
-              <SimpleGrid
-                columns={{ base: 2, md: 3, xl: 4 }}
-                gap={6}
-              >
+              <SimpleGrid columns={{ base: 2, md: 3, xl: 4 }} gap={6}>
                 {groupedFilteredItems.map((group) => {
                   const item = group[0]
                   return isMobile ? (

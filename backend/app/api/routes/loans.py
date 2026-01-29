@@ -16,9 +16,14 @@ from app.models import (
     Message,
     NotificationType,
     User,
+    CommunityItem,
+    CommunityMember,
+    CommunityMemberRole,
+    CommunityMemberStatus,
+    Community,
 )
 from app.api.websocket_manager import notification_manager
-from app.api.utils import filter_loan_privacy
+from app.api.utils import filter_loan_privacy, check_item_availability
 from app import crud
 
 router = APIRouter(prefix="/loans", tags=["loans"])
@@ -41,17 +46,21 @@ async def create_loan_request(
 
     # Determine if this is a community loan or personal loan
     owner_id = None
-    community_id = loan_in.community_id
+    community_id = None
 
-    if community_id:
-        # Check if item is in this community
-        from app.models import CommunityItem, CommunityMember, CommunityMemberRole, CommunityMemberStatus
+    if loan_in.community_id:
+        # Borrowing from a community pool
+        community_id = loan_in.community_id
+        
+        # Check if item is in this community pool
         statement = select(CommunityItem).where(
             CommunityItem.community_id == community_id,
             CommunityItem.item_id == loan_in.item_id
         )
         if not session.exec(statement).first():
-            raise HTTPException(status_code=400, detail="Item is not in this community")
+            # Also check if it's exclusively community owned
+            if item.owner_id != community_id:
+                raise HTTPException(status_code=400, detail="Item is not in this community")
         
         # Check if requester is a member
         statement = select(CommunityMember).where(
@@ -62,18 +71,22 @@ async def create_loan_request(
         if not session.exec(statement).first():
             raise HTTPException(status_code=403, detail="Must be a member of the community to borrow its items")
     else:
-        # Personal loan
-        owner_id = item.owner_id
+        # Personal loan OR borrowing community-owned item directly
+        if item.user_owner:
+            owner_id = item.owner_id
+        elif item.community_owner:
+            community_id = item.owner_id
+            # Ensure they are members if it's community owned
+            statement = select(CommunityMember).where(
+                CommunityMember.community_id == community_id,
+                CommunityMember.user_id == current_user.id,
+                CommunityMember.status == CommunityMemberStatus.ACCEPTED
+            )
+            if not session.exec(statement).first():
+                raise HTTPException(status_code=403, detail="Must be a member of the community to borrow its items")
 
     # Check for existing active or pending loans for this item
-    existing_loan = session.exec(
-        select(Loan).where(
-            Loan.item_id == loan_in.item_id,
-            Loan.status.in_([LoanStatus.PENDING, LoanStatus.ACCEPTED, LoanStatus.ACTIVE])
-        )
-    ).first()
-    
-    if existing_loan:
+    if not check_item_availability(session, loan_in.item_id):
         raise HTTPException(status_code=400, detail="Item is already requested or on loan")
 
     db_loan = Loan(
@@ -92,7 +105,6 @@ async def create_loan_request(
     # Notify owner or admins
     if community_id:
         # Notify all admins of the community
-        from app.models import CommunityMember, CommunityMemberRole, Community
         community = session.get(Community, community_id)
         admin_statement = select(CommunityMember).where(
             CommunityMember.community_id == community_id,
@@ -114,7 +126,7 @@ async def create_loan_request(
                 {"type": "new_notification"},
                 admin.user_id
             )
-    else:
+    elif owner_id:
         # Notify single owner
         crud.create_notification(
             session=session,
@@ -139,8 +151,6 @@ def read_incoming_loan_requests(
     """
     Retrieve loan requests for items owned by the current user or their communities.
     """
-    from app.models import CommunityMember, CommunityMemberRole
-    
     # Get IDs of communities where user is an admin
     admin_communities = session.exec(
         select(CommunityMember.community_id).where(
@@ -159,6 +169,20 @@ def read_incoming_loan_requests(
         )
         .order_by(Loan.created_at.desc())
     )
+    
+    count_statement = (
+        select(func.count())
+        .select_from(Loan)
+        .where(
+            or_(
+                Loan.owner_id == current_user.id,
+                Loan.community_id.in_(admin_communities) if admin_communities else False
+            )
+        )
+    )
+    
+    count = session.exec(count_statement).one()
+    loans = session.exec(statement.offset(skip).limit(limit)).all()
     
     return LoansPublic(
         data=[filter_loan_privacy(l, current_user.id, is_admin=current_user.is_superuser) for l in loans], 
@@ -204,7 +228,6 @@ async def respond_to_loan_request(
     if loan.owner_id == current_user.id:
         can_respond = True
     elif loan.community_id:
-        from app.models import CommunityMember, CommunityMemberRole
         statement = select(CommunityMember).where(
             CommunityMember.community_id == loan.community_id,
             CommunityMember.user_id == current_user.id,
@@ -264,7 +287,6 @@ async def ratify_loan(
 
     # Notify owner or admins
     if loan.community_id:
-        from app.models import CommunityMember, CommunityMemberRole
         admin_statement = select(CommunityMember).where(
             CommunityMember.community_id == loan.community_id,
             CommunityMember.role == CommunityMemberRole.ADMIN
@@ -322,7 +344,6 @@ async def signal_return(
 
     # Notify owner or admins
     if loan.community_id:
-        from app.models import CommunityMember, CommunityMemberRole
         admin_statement = select(CommunityMember).where(
             CommunityMember.community_id == loan.community_id,
             CommunityMember.role == CommunityMemberRole.ADMIN
@@ -375,7 +396,6 @@ async def return_loan(
     if loan.owner_id == current_user.id:
         can_confirm = True
     elif loan.community_id:
-        from app.models import CommunityMember, CommunityMemberRole
         statement = select(CommunityMember).where(
             CommunityMember.community_id == loan.community_id,
             CommunityMember.user_id == current_user.id,
@@ -440,7 +460,6 @@ async def create_extension_request(
     # Notify owner or admins
     message_text = f"{current_user.full_name or current_user.email} requested an extension for '{loan.item.title}' until {new_end_date.strftime('%Y-%m-%d')}."
     if loan.community_id:
-        from app.models import CommunityMember, CommunityMemberRole
         admin_statement = select(CommunityMember).where(
             CommunityMember.community_id == loan.community_id,
             CommunityMember.role == CommunityMemberRole.ADMIN
@@ -492,7 +511,6 @@ async def respond_to_extension_request(
     if loan.owner_id == current_user.id:
         can_respond = True
     elif loan.community_id:
-        from app.models import CommunityMember, CommunityMemberRole
         statement = select(CommunityMember).where(
             CommunityMember.community_id == loan.community_id,
             CommunityMember.user_id == current_user.id,

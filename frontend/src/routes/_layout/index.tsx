@@ -10,15 +10,16 @@ import {
   VStack,
 } from "@chakra-ui/react"
 import { useQuery } from "@tanstack/react-query"
-import { Link, createFileRoute } from "@tanstack/react-router"
+import { createFileRoute } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
-import { FiSearch, FiUserPlus } from "react-icons/fi"
+import { FiSearch } from "react-icons/fi"
 
 import { CommunitiesService, SearchService } from "@/client"
+import UserCard from "@/components/Common/UserCard"
 import CommunityCard from "@/components/Communities/CommunityCard"
 import ItemCard from "@/components/Items/ItemCard"
 import useAuth from "@/hooks/useAuth"
-import { formatPublicId, groupItems } from "@/utils"
+import { groupItems } from "@/utils"
 
 export const Route = createFileRoute("/_layout/")({
   component: Dashboard,
@@ -87,60 +88,11 @@ function Dashboard() {
                         Users
                       </Heading>
                       <Grid
-                        templateColumns="repeat(auto-fill, minmax(200px, 1fr))"
+                        templateColumns="repeat(auto-fill, minmax(250px, 1fr))"
                         gap={4}
                       >
                         {searchResults?.users.map((user: any) => (
-                          <Link
-                            key={user.id}
-                            to={
-                              user.id === currentUser?.id
-                                ? "/profile"
-                                : "/users/$userId"
-                            }
-                            params={
-                              user.id === currentUser?.id
-                                ? {}
-                                : { userId: user.id }
-                            }
-                            style={{ textDecoration: "none" }}
-                          >
-                            <Box
-                              p={4}
-                              borderWidth="1px"
-                              borderRadius="lg"
-                              _hover={{ bg: "bg.muted", cursor: "pointer" }}
-                              transition="background 0.2s"
-                              position="relative"
-                            >
-                              <Flex justify="space-between" align="center">
-                                <Box>
-                                  <Text fontWeight="bold">
-                                    {user.full_name || "Anonymous"}
-                                  </Text>
-                                  <Text fontSize="sm" color="gray.500">
-                                    ID: {formatPublicId(user.public_id)}
-                                  </Text>
-                                </Box>
-                                {user.friendship_status && (
-                                  <Box
-                                    color={
-                                      user.friendship_status === "accepted"
-                                        ? "green.500"
-                                        : "orange.500"
-                                    }
-                                    title={
-                                      user.friendship_status === "accepted"
-                                        ? "Friends"
-                                        : "Friend Request Pending"
-                                    }
-                                  >
-                                    <FiUserPlus />
-                                  </Box>
-                                )}
-                              </Flex>
-                            </Box>
-                          </Link>
+                          <UserCard key={user.id} user={user} />
                         ))}
                       </Grid>
                     </Box>
@@ -155,9 +107,11 @@ function Dashboard() {
                         templateColumns="repeat(auto-fill, minmax(250px, 1fr))"
                         gap={6}
                       >
-                        {groupItems(searchResults?.items || []).map((group: any) => (
-                          <ItemCard key={group[0].id} item={group} />
-                        ))}
+                        {groupItems(searchResults?.items || []).map(
+                          (group: any) => (
+                            <ItemCard key={group[0].id} item={group} />
+                          ),
+                        )}
                       </Grid>
                     </Box>
                   )}

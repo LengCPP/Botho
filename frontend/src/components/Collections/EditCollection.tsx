@@ -12,7 +12,11 @@ import {
 } from "@chakra-ui/react"
 import { useState } from "react"
 
-import { type CollectionPublic, type CollectionUpdate, CollectionsService } from "@/client"
+import {
+  type CollectionPublic,
+  type CollectionUpdate,
+  CollectionsService,
+} from "@/client"
 import type { ApiError } from "@/client/core/ApiError"
 import useCustomToast from "@/hooks/useCustomToast"
 import { handleError } from "@/utils"
@@ -32,7 +36,11 @@ interface EditCollectionProps {
   onClose: () => void
 }
 
-const EditCollection = ({ collection, isOpen, onClose }: EditCollectionProps) => {
+const EditCollection = ({
+  collection,
+  isOpen,
+  onClose,
+}: EditCollectionProps) => {
   const queryClient = useQueryClient()
   const { showSuccessToast } = useCustomToast()
 
@@ -57,7 +65,10 @@ const EditCollection = ({ collection, isOpen, onClose }: EditCollectionProps) =>
 
   const mutation = useMutation({
     mutationFn: (data: CollectionUpdate) =>
-      CollectionsService.updateCollection({ id: collection.id, requestBody: data }),
+      CollectionsService.updateCollection({
+        id: collection.id,
+        requestBody: data,
+      }),
     onSuccess: () => {
       showSuccessToast("Collection updated successfully.")
       onClose()
@@ -67,9 +78,13 @@ const EditCollection = ({ collection, isOpen, onClose }: EditCollectionProps) =>
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["collections"] })
-      queryClient.invalidateQueries({ queryKey: ["collections", collection.id] })
+      queryClient.invalidateQueries({
+        queryKey: ["collections", collection.id],
+      })
       if (collection.community_id) {
-        queryClient.invalidateQueries({ queryKey: ["communityCollections", collection.community_id] })
+        queryClient.invalidateQueries({
+          queryKey: ["communityCollections", collection.community_id],
+        })
       }
     },
   })

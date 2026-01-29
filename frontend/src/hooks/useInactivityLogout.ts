@@ -1,6 +1,6 @@
+import { SESSION_INACTIVITY_TIMEOUT } from "@/constants"
 import { useEffect, useRef } from "react"
 import useAuth from "./useAuth"
-import { SESSION_INACTIVITY_TIMEOUT } from "@/constants"
 
 const useInactivityLogout = () => {
   const { logout } = useAuth()

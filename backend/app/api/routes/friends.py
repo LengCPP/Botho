@@ -45,8 +45,14 @@ def search_user_by_id(
         Friendship.friend_id == user.id
     )
     friendship = session.exec(statement).first()
+    is_friend = friendship.status == FriendshipStatus.ACCEPTED if friendship else False
     
-    user_public = filter_user_privacy(user, current_user.id, is_admin=current_user.is_superuser)
+    user_public = filter_user_privacy(
+        user, 
+        current_user.id, 
+        is_admin=current_user.is_superuser,
+        is_friend=is_friend
+    )
     user_public.friendship_status = friendship.status if friendship else None
     
     return user_public
@@ -80,7 +86,7 @@ def read_friends(
     friends = session.exec(statement.offset(skip).limit(limit)).all()
 
     return UsersPublic(
-        data=[filter_user_privacy(f, current_user.id, is_admin=current_user.is_superuser) for f in friends], 
+        data=[filter_user_privacy(f, current_user.id, is_admin=current_user.is_superuser, is_friend=True) for f in friends], 
         count=count
     )
 

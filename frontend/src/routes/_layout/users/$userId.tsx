@@ -22,13 +22,13 @@ import { FiShare2, FiUserCheck, FiUserMinus, FiUserPlus } from "react-icons/fi"
 import {
   CollectionsService,
   FriendsService,
+  type ItemPublic,
   ItemsService,
   UsersService,
-  type ItemPublic,
 } from "@/client"
 import CollectionCard from "@/components/Collections/CollectionCard"
-import ItemCard from "@/components/Items/ItemCard"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
+import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import UserInformation from "@/components/UserSettings/UserInformation"
 import UserProfilePicture from "@/components/UserSettings/UserProfilePicture"
@@ -290,7 +290,11 @@ function UserProfilePage() {
                   onShowDetails={() => setSelectedItem(firstItem)}
                 />
               ) : (
-                <ItemCard key={firstItem.id} item={group} displayOwnerId={userId} />
+                <ItemCard
+                  key={firstItem.id}
+                  item={group}
+                  displayOwnerId={userId}
+                />
               )
             })}
           </SimpleGrid>

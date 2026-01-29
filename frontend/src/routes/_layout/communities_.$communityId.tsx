@@ -37,18 +37,18 @@ import {
 } from "react-icons/fi"
 
 import {
-  CommunitiesService,
   CollectionsService,
+  CommunitiesService,
   type CommunityPublic,
   FriendsService,
   type ItemPublic,
 } from "@/client"
-import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import AddCollection from "@/components/Collections/AddCollection"
 import CollectionCard from "@/components/Collections/CollectionCard"
+import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import AddItem from "@/components/Items/AddItem"
-import ItemCard from "@/components/Items/ItemCard"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
+import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { LoanCard } from "@/components/Items/LoanCard"
 import {
@@ -210,11 +210,12 @@ function CommunityBoard() {
       }) as Promise<CommunityPublic>,
   })
 
-  const isMember = !!community?.current_user_role
+  const isMember = community?.current_user_status === "ACCEPTED"
+  const isPending = community?.current_user_status === "PENDING"
   const isAdmin =
     community?.created_by === currentUser?.id ||
     currentUser?.is_superuser ||
-    community?.current_user_role === "admin"
+    community?.current_user_role === "ADMIN"
 
   const { data: members, isLoading: isLoadingMembers } = useQuery({
     queryKey: ["communityMembers", communityId],
@@ -226,10 +227,11 @@ function CommunityBoard() {
     queryFn: () => CommunitiesService.readCommunityItems({ id: communityId }),
   })
 
-  const { data: communityCollections, isLoading: isLoadingCollections } = useQuery({
-    queryKey: ["communityCollections", communityId],
-    queryFn: () => CollectionsService.readCollections({ communityId }),
-  })
+  const { data: communityCollections, isLoading: isLoadingCollections } =
+    useQuery({
+      queryKey: ["communityCollections", communityId],
+      queryFn: () => CollectionsService.readCollections({ communityId }),
+    })
 
   const { data: messages, isLoading: isLoadingMessages } = useQuery({
     queryKey: ["communityMessages", communityId],
@@ -560,28 +562,37 @@ function CommunityBoard() {
           <Tabs.Content value="items" pt={6}>
             <VStack align="stretch" gap={10}>
               {/* Community Collections Section */}
-              {communityCollections?.data && communityCollections.data.length > 0 && (
-                <Box>
-                  <Flex justify="space-between" align="center" mb={4}>
-                    <Heading size="md">Community Collections</Heading>
-                    {isAdmin && <AddCollection communityId={communityId} />}
-                  </Flex>
-                  <SimpleGrid columns={{ base: 1, sm: 2, lg: 3, xl: 4 }} gap={6}>
-                    {communityCollections.data.map((collection) => (
-                      <CollectionCard key={collection.id} collection={collection} />
-                    ))}
-                  </SimpleGrid>
-                </Box>
-              )}
+              {communityCollections?.data &&
+                communityCollections.data.length > 0 && (
+                  <Box>
+                    <Flex justify="space-between" align="center" mb={4}>
+                      <Heading size="md">Community Collections</Heading>
+                      {isAdmin && <AddCollection communityId={communityId} />}
+                    </Flex>
+                    <SimpleGrid
+                      columns={{ base: 1, sm: 2, lg: 3, xl: 4 }}
+                      gap={6}
+                    >
+                      {communityCollections.data.map((collection) => (
+                        <CollectionCard
+                          key={collection.id}
+                          collection={collection}
+                        />
+                      ))}
+                    </SimpleGrid>
+                  </Box>
+                )}
 
               {/* Community Items Section */}
               <Box>
                 <Flex justify="space-between" align="center" mb={4}>
                   <Heading size="md">All Items</Heading>
                   <HStack gap={2}>
-                    {isAdmin && (!communityCollections?.data || communityCollections.data.length === 0) && (
-                      <AddCollection communityId={communityId} />
-                    )}
+                    {isAdmin &&
+                      (!communityCollections?.data ||
+                        communityCollections.data.length === 0) && (
+                        <AddCollection communityId={communityId} />
+                      )}
                     <AddItem communityId={communityId} isAdmin={isAdmin} />
                   </HStack>
                 </Flex>

@@ -2,14 +2,14 @@ import { IconButton } from "@chakra-ui/react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { BsThreeDotsVertical } from "react-icons/bs"
-import { FiHeart, FiMinusCircle, FiTrash2, FiCopy } from "react-icons/fi"
+import { FiCopy, FiHeart, FiMinusCircle, FiTrash2 } from "react-icons/fi"
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from "../ui/menu"
 
 import { CommunitiesService, type ItemPublic, ItemsService } from "@/client"
 import useCustomToast from "@/hooks/useCustomToast"
-import ConfirmationModal from "./ConfirmationModal"
 import DeleteItem from "../Items/DeleteItem"
 import EditItem from "../Items/EditItem"
+import ConfirmationModal from "./ConfirmationModal"
 
 interface ItemActionsMenuProps {
   item: ItemPublic
@@ -145,8 +145,7 @@ export const ItemActionsMenu = ({
             }}
             disabled={duplicateMutation.isPending}
           >
-            <FiCopy style={{ marginRight: "8px" }} />
-            I have another copy
+            <FiCopy style={{ marginRight: "8px" }} />I have another copy
           </MenuItem>
           {onRemoveFromCollection && (
             <MenuItem

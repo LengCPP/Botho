@@ -14,11 +14,12 @@ import {
   VStack,
 } from "@chakra-ui/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Link, createFileRoute } from "@tanstack/react-router"
+import { createFileRoute } from "@tanstack/react-router"
 import { useState } from "react"
 import { FiPlus, FiSend, FiUserPlus, FiUsers } from "react-icons/fi"
 
 import { FriendsService } from "@/client"
+import UserCard from "@/components/Common/UserCard"
 import {
   DialogBody,
   DialogCloseTrigger,
@@ -291,37 +292,9 @@ function Friends() {
             </EmptyState.Content>
           </EmptyState.Root>
         ) : (
-          <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={4}>
+          <SimpleGrid columns={{ base: 1, md: 2, lg: 3, xl: 4 }} gap={6}>
             {friends?.data.map((user) => (
-              <Box
-                key={user.id}
-                p={4}
-                borderWidth="1px"
-                rounded="md"
-                bg="bg.panel"
-              >
-                <Link
-                  to={
-                    user.id === currentUser?.id ? "/profile" : "/users/$userId"
-                  }
-                  params={
-                    user.id === currentUser?.id ? {} : { userId: user.id }
-                  }
-                >
-                  <Text
-                    fontWeight="bold"
-                    _hover={{
-                      textDecoration: "underline",
-                      color: "orange.500",
-                    }}
-                  >
-                    {user.full_name || user.email}
-                  </Text>
-                </Link>
-                <Text fontSize="xs" color="fg.muted" mb={3}>
-                  ID: {formatPublicId(user.public_id)}
-                </Text>
-              </Box>
+              <UserCard key={user.id} user={user} />
             ))}
           </SimpleGrid>
         )}

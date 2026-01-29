@@ -22,14 +22,15 @@ import { FaFilter, FaSortAmountDown } from "react-icons/fa"
 import { FiSearch } from "react-icons/fi"
 import { z } from "zod"
 
-import { CollectionsService, ItemsService, type ItemPublic } from "@/client"
+import { CollectionsService, type ItemPublic, ItemsService } from "@/client"
 import AddCollection from "@/components/Collections/AddCollection"
 import CollectionCard from "@/components/Collections/CollectionCard"
 import AddItem from "@/components/Items/AddItem"
-import ItemCard from "@/components/Items/ItemCard"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
+import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import PendingItems from "@/components/Pending/PendingItems"
+import { useColorModeValue } from "@/components/ui/color-mode"
 import {
   MenuContent,
   MenuItemGroup,
@@ -44,9 +45,8 @@ import {
   PaginationPrevTrigger,
   PaginationRoot,
 } from "@/components/ui/pagination"
-import useAuth from "@/hooks/useAuth"
-import { useColorModeValue } from "@/components/ui/color-mode"
 import { BOOK_CLASSIFICATION } from "@/constants"
+import useAuth from "@/hooks/useAuth"
 import { groupItems } from "@/utils"
 
 const itemsSearchSchema = z.object({
@@ -381,7 +381,7 @@ function ItemsTable() {
       <Heading size="md" mb={4}>
         My Items
       </Heading>
-      
+
       <SimpleGrid
         columns={{ base: 2, md: 3, lg: 4 }}
         gap={6}
@@ -396,7 +396,11 @@ function ItemsTable() {
               onShowDetails={() => setSelectedItem(firstItem)}
             />
           ) : (
-            <ItemCard key={firstItem.id} item={group} displayOwnerId={user?.id} />
+            <ItemCard
+              key={firstItem.id}
+              item={group}
+              displayOwnerId={user?.id}
+            />
           )
         })}
       </SimpleGrid>
