@@ -60,10 +60,25 @@ def read_communities(
     """
     Retrieve communities.
     """
-    count_statement = select(func.count()).select_from(Community)
+    # Get communities where user is a member
+    user_memberships = session.exec(
+        select(CommunityMember.community_id).where(
+            CommunityMember.user_id == current_user.id
+        )
+    ).all()
+
+    # Filter: Public OR (Private AND Member)
+    statement = select(Community).where(
+        or_(
+            Community.is_private == False,
+            Community.id.in_(user_memberships)
+        )
+    )
+    
+    count_statement = select(func.count()).select_from(statement.subquery())
     count = session.exec(count_statement).one()
-    statement = select(Community).offset(skip).limit(limit)
-    communities = session.exec(statement).all()
+    
+    communities = session.exec(statement.offset(skip).limit(limit)).all()
 
     # Populate current_user_role and notifications_enabled
     communities_public = []
@@ -212,7 +227,7 @@ async def join_community(
     crud.join_community(session=session, community_id=id, user_id=current_user.id)
 
     # If closed, notify admins
-    if community.is_closed:
+    if community.requires_approval:
         admin_statement = select(CommunityMember).where(
             CommunityMember.community_id == id,
             CommunityMember.role == CommunityMemberRole.ADMIN
@@ -278,7 +293,7 @@ def read_community_members(
         raise HTTPException(status_code=404, detail="Community not found")
 
     # Privacy check for closed communities
-    if community.is_closed and not current_user.is_superuser:
+    if community.requires_approval and not current_user.is_superuser:
         statement = select(CommunityMember).where(
             CommunityMember.community_id == id,
             CommunityMember.user_id == current_user.id,

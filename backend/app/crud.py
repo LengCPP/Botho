@@ -206,7 +206,7 @@ def join_community(
 ) -> CommunityMember:
     community = session.get(Community, community_id)
     status = CommunityMemberStatus.ACCEPTED
-    if community and community.is_closed:
+    if community and community.requires_approval:
         status = CommunityMemberStatus.PENDING
 
     membership = CommunityMember(

@@ -21,6 +21,9 @@ def test_update_member_role(
     password1 = random_lower_string()
     user_in1 = UserCreate(email=email1, password=password1)
     user1 = crud.create_user(session=db, user_create=user_in1)
+    user1.is_verified = True
+    db.add(user1)
+    db.commit()
     
     login_data1 = {"username": email1, "password": password1}
     r1 = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data1)
@@ -31,6 +34,9 @@ def test_update_member_role(
     password2 = random_lower_string()
     user_in2 = UserCreate(email=email2, password=password2)
     user2 = crud.create_user(session=db, user_create=user_in2)
+    user2.is_verified = True
+    db.add(user2)
+    db.commit()
     
     login_data2 = {"username": email2, "password": password2}
     r2 = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data2)
@@ -57,7 +63,7 @@ def test_update_member_role(
     )
     assert response.status_code == 200
     content = response.json()
-    assert content["email"] == email2
+    assert content["email"] == "[Hidden]"
     assert content["community_role"] == CommunityMemberRole.ADMIN
     
     # User 2 tries to promote themselves back to member (should succeed because they are admin now)

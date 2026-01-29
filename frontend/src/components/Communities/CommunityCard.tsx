@@ -18,13 +18,14 @@ const CommunityCard = ({ community }: CommunityCardProps) => {
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const { user: currentUser } = useAuth()
 
-  const isClosed = community.is_closed
+  const requiresApproval = community.requires_approval
+  const isPrivate = community.is_private
 
   const joinMutation = useMutation({
     mutationFn: () => CommunitiesService.joinCommunity({ id: community.id }),
     onSuccess: () => {
       showSuccessToast(
-        isClosed ? "Request sent to admins!" : "Joined community!",
+        requiresApproval ? "Request sent to admins!" : "Joined community!",
       )
       queryClient.invalidateQueries({ queryKey: ["communities"] })
       queryClient.invalidateQueries({ queryKey: ["currentUser"] })
@@ -53,9 +54,18 @@ const CommunityCard = ({ community }: CommunityCardProps) => {
     <Box p={6} rounded="lg" borderWidth="1px" bg="bg.panel" h="fit-content">
       <Flex justify="space-between" align="start">
         <Box>
-          <Flex align="center" gap={2}>
+          <Flex align="center" gap={2} wrap="wrap">
             <Heading size="md">{community.name}</Heading>
-            {isClosed ? (
+            {isPrivate ? (
+              <Badge colorPalette="gray" variant="solid">
+                Private
+              </Badge>
+            ) : (
+              <Badge colorPalette="blue" variant="subtle">
+                Global
+              </Badge>
+            )}
+            {requiresApproval ? (
               <Badge colorPalette="red" variant="subtle">
                 Closed
               </Badge>
@@ -100,7 +110,7 @@ const CommunityCard = ({ community }: CommunityCardProps) => {
             onClick={() => joinMutation.mutate()}
             loading={joinMutation.isPending}
           >
-            {isClosed ? "Request to Join" : "Join Community"}
+            {requiresApproval ? "Request to Join" : "Join Community"}
           </Button>
         ) : (
           <>

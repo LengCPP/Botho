@@ -69,7 +69,8 @@ describe("CommunityCard", () => {
     name: "Test Community",
     description: "A test community",
     created_by: "current-user-id", // User is admin
-    is_closed: false,
+    requires_approval: false,
+    is_private: false,
   }
 
   const mockMembers = [

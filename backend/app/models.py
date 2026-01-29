@@ -335,7 +335,8 @@ class User(UserBase, table=True):
 class CommunityBase(SQLModel):
     name: str = Field(min_length=1, max_length=255, unique=True, index=True)
     description: Optional[str] = Field(default=None, max_length=255)
-    is_closed: bool = Field(default=False)
+    requires_approval: bool = Field(default=False)
+    is_private: bool = Field(default=False)
 
 
 class CommunityCreate(CommunityBase):
@@ -345,7 +346,8 @@ class CommunityCreate(CommunityBase):
 class CommunityUpdate(SQLModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     description: Optional[str] = Field(default=None, max_length=255)
-    is_closed: Optional[bool] = Field(default=None)
+    requires_approval: Optional[bool] = Field(default=None)
+    is_private: Optional[bool] = Field(default=None)
 
 
 class Community(CommunityBase, table=True):

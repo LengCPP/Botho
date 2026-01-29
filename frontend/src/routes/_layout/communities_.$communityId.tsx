@@ -351,7 +351,12 @@ function CommunityBoard() {
         <Flex align="center" gap={4} wrap="wrap">
           <Heading size="xl">{community.name}</Heading>
           <HStack>
-            {community.is_closed ? (
+            {community.is_private ? (
+              <Badge colorPalette="gray">Private</Badge>
+            ) : (
+              <Badge colorPalette="blue">Global</Badge>
+            )}
+            {community.requires_approval ? (
               <Badge colorPalette="red">Closed</Badge>
             ) : (
               <Badge colorPalette="green">Open</Badge>

@@ -44,7 +44,8 @@ const AddCommunity = () => {
     defaultValues: {
       name: "",
       description: "",
-      is_closed: false,
+      requires_approval: false,
+      is_private: false,
     },
   })
 
@@ -119,14 +120,29 @@ const AddCommunity = () => {
 
               <Controller
                 control={control}
-                name="is_closed"
+                name="requires_approval"
                 render={({ field }) => (
                   <Field disabled={field.disabled}>
                     <Checkbox
                       checked={field.value}
                       onCheckedChange={({ checked }) => field.onChange(checked)}
                     >
-                      Private / Closed Community
+                      Require approval to join (Closed)
+                    </Checkbox>
+                  </Field>
+                )}
+              />
+
+              <Controller
+                control={control}
+                name="is_private"
+                render={({ field }) => (
+                  <Field disabled={field.disabled}>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={({ checked }) => field.onChange(checked)}
+                    >
+                      Hide from search (Private)
                     </Checkbox>
                   </Field>
                 )}

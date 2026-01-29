@@ -93,7 +93,8 @@ export type CommunityAnnouncementsPublic = {
 export type CommunityCreate = {
     name: string;
     description?: (string | null);
-    is_closed?: boolean;
+    requires_approval?: boolean;
+    is_private?: boolean;
 };
 
 export type CommunityMemberRole = 'admin' | 'member';
@@ -127,7 +128,8 @@ export type CommunityMessagesPublic = {
 export type CommunityPublic = {
     name: string;
     description?: (string | null);
-    is_closed?: boolean;
+    requires_approval?: boolean;
+    is_private?: boolean;
     id: string;
     created_by: string;
     current_user_role?: (CommunityMemberRole | null);
@@ -137,7 +139,8 @@ export type CommunityPublic = {
 export type CommunityUpdate = {
     name?: (string | null);
     description?: (string | null);
-    is_closed?: (boolean | null);
+    requires_approval?: (boolean | null);
+    is_private?: (boolean | null);
 };
 
 export type FriendshipStatus = 'pending' | 'accepted';

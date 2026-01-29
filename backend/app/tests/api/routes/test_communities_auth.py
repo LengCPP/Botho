@@ -15,6 +15,9 @@ def test_update_community_auth(
     password = random_lower_string()
     user_in = UserCreate(email=email, password=password)
     user1 = crud.create_user(session=db, user_create=user_in)
+    user1.is_verified = True
+    db.add(user1)
+    db.commit()
     
     # Login user 1
     login_data = {
@@ -31,6 +34,9 @@ def test_update_community_auth(
     password = random_lower_string()
     user_in2 = UserCreate(email=email2, password=password)
     user2 = crud.create_user(session=db, user_create=user_in2)
+    user2.is_verified = True
+    db.add(user2)
+    db.commit()
     
     # Login user 2
     login_data2 = {

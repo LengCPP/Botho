@@ -42,3 +42,4 @@ openapi.json
 /scripts/populate_db.sql
 
 manual-testing-scripts/
+playwright/

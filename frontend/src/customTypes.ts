@@ -20,15 +20,18 @@ export type {
 }
 
 export interface CommunityCreateExtended extends CommunityCreate {
-  is_closed?: boolean
+  requires_approval?: boolean
+  is_private?: boolean
 }
 
 export interface CommunityUpdateExtended extends CommunityUpdate {
-  is_closed?: boolean
+  requires_approval?: boolean
+  is_private?: boolean
 }
 
 export interface CommunityPublicExtended extends CommunityPublic {
-  is_closed?: boolean
+  requires_approval?: boolean
+  is_private?: boolean
 }
 
 export interface UserPublicWithRole extends UserPublic {

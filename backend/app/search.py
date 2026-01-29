@@ -22,12 +22,15 @@ def delete_item_from_search(item_id: uuid.UUID):
 
 def sync_community_to_search(community: Community):
     index = client.index("communities")
-    document = {
-        "id": str(community.id),
-        "name": community.name,
-        "description": community.description,
-    }
-    index.add_documents([document])
+    if community.is_private:
+        index.delete_document(str(community.id))
+    else:
+        document = {
+            "id": str(community.id),
+            "name": community.name,
+            "description": community.description,
+        }
+        index.add_documents([document])
 
 def delete_community_from_search(community_id: uuid.UUID):
     index = client.index("communities")
