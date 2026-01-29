@@ -242,12 +242,28 @@ def create_item(
             final_image_url = stored_url
 
     # Determine owner and type
+    target_owner_id = current_user.id
+    target_owner_type = OwnerType.USER
+    should_pool = False
+
     if community_owner_id:
-        target_owner_id = community_owner_id
-        target_owner_type = OwnerType.COMMUNITY
-    else:
-        target_owner_id = current_user.id
-        target_owner_type = OwnerType.USER
+        # Check if user is admin of this community
+        statement = select(CommunityMember).where(
+            CommunityMember.community_id == community_owner_id,
+            CommunityMember.user_id == current_user.id,
+            CommunityMember.role == CommunityMemberRole.ADMIN,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED
+        )
+        is_admin = session.exec(statement).first() or current_user.is_superuser
+        
+        if is_admin:
+            target_owner_id = community_owner_id
+            target_owner_type = OwnerType.COMMUNITY
+        else:
+            # If not admin, item is owned by user but pooled in community
+            target_owner_id = current_user.id
+            target_owner_type = OwnerType.USER
+            should_pool = True
 
     db_item = Item(
         title=title,
@@ -259,6 +275,23 @@ def create_item(
         owner_id=target_owner_id,
     )
     session.add(db_item)
+    session.flush() # Get ID for pooling if needed
+
+    if should_pool and community_owner_id:
+        # Check if user is at least a member
+        statement = select(CommunityMember).where(
+            CommunityMember.community_id == community_owner_id,
+            CommunityMember.user_id == current_user.id,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED
+        )
+        if session.exec(statement).first():
+            comm_item = CommunityItem(
+                community_id=community_owner_id,
+                item_id=db_item.id,
+                added_by=current_user.id
+            )
+            session.add(comm_item)
+
     session.commit()
     session.refresh(db_item)
     sync_item_to_search(db_item)
@@ -316,7 +349,7 @@ def update_item(
             select(CommunityMember).where(
                 CommunityMember.community_id == db_item.owner_id,
                 CommunityMember.user_id == current_user.id,
-                CommunityMember.role == 'admin',
+                CommunityMember.role == CommunityMemberRole.ADMIN,
                 CommunityMember.status == CommunityMemberStatus.ACCEPTED
             )
         ).first()
@@ -400,7 +433,7 @@ def delete_item(
             select(CommunityMember).where(
                 CommunityMember.community_id == db_item.owner_id,
                 CommunityMember.user_id == current_user.id,
-                CommunityMember.role == 'admin',
+                CommunityMember.role == CommunityMemberRole.ADMIN,
                 CommunityMember.status == CommunityMemberStatus.ACCEPTED
             )
         ).first()
