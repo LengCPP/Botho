@@ -20,7 +20,7 @@ async def upload(
     Upload an image.
     """
     contents = await file.read()
-    url = await upload_image(contents, file.filename)
+    url = upload_image(contents, file.filename)
     if not url:
         raise HTTPException(status_code=500, detail="Failed to upload image")
     return Message(message=url)
@@ -48,7 +48,7 @@ async def get_image(folder: str, filename: str):
         raise HTTPException(status_code=404, detail="Image not found")
 
 @router.delete("/image/{folder}/{filename}", response_model=Message)
-async def delete(
+def delete(
     folder: str,
     filename: str,
     current_user: CurrentUser
@@ -57,7 +57,7 @@ async def delete(
     Delete an image.
     """
     file_path = f"{folder}/{filename}"
-    success = await delete_image(file_path)
+    success = delete_image(file_path)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to delete image")
     return Message(message="Image deleted successfully")

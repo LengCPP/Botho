@@ -7,7 +7,7 @@ from sqlmodel import func, select, col, or_
 
 from app.api.deps import CurrentUser, SessionDep
 from app.api.utils import filter_owner_privacy
-from app.storage import upload_image, delete_image
+from app.storage import upload_image, delete_image, upload_image_from_url
 from app.search import sync_item_to_search, delete_item_from_search
 from app.models import (
     Item,
@@ -234,7 +234,12 @@ def create_item(
     # Handle image upload
     final_image_url = image_url
     if image:
-        final_image_url = upload_image(image, folder="items")
+        final_image_url = upload_image(image.file.read(), image.filename, folder="items")
+    elif image_url and image_url.startswith("http"):
+        # Download and store external image (e.g. from Google Books)
+        stored_url = upload_image_from_url(image_url, folder="items")
+        if stored_url:
+            final_image_url = stored_url
 
     # Determine owner and type
     if community_owner_id:
@@ -325,7 +330,12 @@ def update_item(
     if item_type is not None:
         db_item.item_type = item_type
     if image_url is not None:
-        db_item.image_url = image_url
+        if image_url.startswith("http"):
+            stored_url = upload_image_from_url(image_url, folder="items")
+            if stored_url:
+                db_item.image_url = stored_url
+        else:
+            db_item.image_url = image_url
     if extra_data is not None:
         try:
             db_item.extra_data = json.loads(extra_data)
@@ -335,7 +345,7 @@ def update_item(
     if image:
         if db_item.image_url:
             delete_image(db_item.image_url)
-        db_item.image_url = upload_image(image, folder="items")
+        db_item.image_url = upload_image(image.file.read(), image.filename, folder="items")
 
     session.add(db_item)
     session.commit()
