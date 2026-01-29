@@ -94,8 +94,8 @@ To run the application in the staging environment (mirroring development with ho
    docker compose -f docker-compose.staging.yml up -d
    ```
 3. **Access**:
-   - App: [https://staging.rsc-xchange.app](https://staging.rsc-xchange.app)
-   - API: [https://api.staging.rsc-xchange.app](https://api.staging.rsc-xchange.app)
+   - App: [https://staging.rsc-xchange.app](https://staging.yourdomain.com)
+   - API: [https://api.staging.rsc-xchange.app](https://api.staging.yourdomain.com)
 4. **Database Migrations (Staging)**:
    ```bash
    docker compose -f docker-compose.staging.yml exec backend alembic upgrade head
