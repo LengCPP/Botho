@@ -16,7 +16,6 @@ from app.models import (
     Friendship,
     FriendshipStatus,
     CollectionItem,
-    OwnerType,
     CommunityMember,
     CommunityMemberStatus,
 )
@@ -130,9 +129,12 @@ def search(
         is_avail = check_item_availability(session, item.id)
         
         owner_pub = None
-        if item.owner_type == OwnerType.USER and item.user_owner:
+        community_pub = None
+        if item.user_owner:
             owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser)
             owner_pub.is_available = is_avail
+        elif item.community_owner:
+            community_pub = item.community_owner
         
         # Manually construct ItemPublic
         item_pub = ItemPublic(
@@ -142,12 +144,12 @@ def search(
             description=item.description,
             author=item.author,
             item_type=item.item_type,
-            owner_type=item.owner_type,
             image_url=item.image_url,
             extra_data=item.extra_data,
             count=item.count,
             created_at=item.created_at,
             owner=owner_pub,
+            community_owner=community_pub,
             is_available=is_avail
         )
         

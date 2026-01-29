@@ -34,11 +34,6 @@ class ItemType(str, Enum):
     book = "book"
 
 
-class OwnerType(str, Enum):
-    USER = "user"
-    COMMUNITY = "community"
-
-
 class CollectionType(str, Enum):
     GENERAL = "GENERAL"
     LIBRARY = "LIBRARY"
@@ -308,7 +303,7 @@ class User(UserBase, table=True):
     has_set_password: bool = Field(default=True)
     items: list["Item"] = Relationship(
         sa_relationship_kwargs={
-            "primaryjoin": "and_(foreign(Item.owner_id)==User.id, Item.owner_type=='user')",
+            "primaryjoin": "foreign(Item.owner_id)==User.id",
             "viewonly": True
         }
     )
@@ -365,7 +360,7 @@ class Community(CommunityBase, table=True):
     )
     items: list["Item"] = Relationship(
         sa_relationship_kwargs={
-            "primaryjoin": "and_(foreign(Item.owner_id)==Community.id, Item.owner_type=='community')",
+            "primaryjoin": "foreign(Item.owner_id)==Community.id",
             "viewonly": True
         }
     )
@@ -426,14 +421,13 @@ class ItemBase(SQLModel):
     description: Optional[str] = Field(default=None, max_length=1000)
     author: Optional[str] = Field(default=None, max_length=255)
     item_type: ItemType = Field(default=ItemType.general)
-    owner_type: OwnerType = Field(default=OwnerType.USER)
     image_url: Optional[str] = Field(default=None, max_length=512)
     extra_data: dict = Field(default={}, sa_column=Column(JSON))
 
 
 class Item(ItemBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    owner_id: uuid.UUID = Field(index=True)
+    owner_id: uuid.UUID = Field(index=True, nullable=False)
     title: str = Field(max_length=255, index=True)
     count: int = Field(default=1)
     created_at: Optional[datetime] = Field(
@@ -442,13 +436,13 @@ class Item(ItemBase, table=True):
     )
     user_owner: Optional["User"] = Relationship(
         sa_relationship_kwargs={
-            "primaryjoin": "and_(foreign(Item.owner_id)==User.id, Item.owner_type=='user')",
+            "primaryjoin": "foreign(Item.owner_id)==User.id",
             "viewonly": True
         }
     )
     community_owner: Optional["Community"] = Relationship(
         sa_relationship_kwargs={
-            "primaryjoin": "and_(foreign(Item.owner_id)==Community.id, Item.owner_type=='community')",
+            "primaryjoin": "foreign(Item.owner_id)==Community.id",
             "viewonly": True
         }
     )
@@ -608,6 +602,7 @@ class ItemPublic(ItemBase):
     count: int
     created_at: datetime
     owner: Optional[ItemOwnerPublic] = None
+    community_owner: Optional[CommunityPublic] = None
     communities: list["CommunityPublic"] = []
     collection_id: Optional[uuid.UUID] = None
     is_available: bool = True

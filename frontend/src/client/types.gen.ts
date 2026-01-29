@@ -3,7 +3,8 @@
 export type Body_items_create_item = {
     title: string;
     description?: (string | null);
-    item_type?: string;
+    author?: (string | null);
+    item_type?: ItemType;
     extra_data?: (string | null);
     image?: ((Blob | File) | null);
     image_url?: (string | null);
@@ -13,7 +14,8 @@ export type Body_items_create_item = {
 export type Body_items_update_item = {
     title?: (string | null);
     description?: (string | null);
-    item_type?: (string | null);
+    author?: (string | null);
+    item_type?: (ItemType | null);
     extra_data?: (string | null);
     image?: ((Blob | File) | null);
     image_url?: (string | null);
@@ -57,7 +59,7 @@ export type CollectionsPublic = {
     count: number;
 };
 
-export type CollectionType = 'general' | 'library' | 'bucket';
+export type CollectionType = 'GENERAL' | 'LIBRARY' | 'BUCKET';
 
 export type CollectionUpdate = {
     title?: (string | null);
@@ -97,9 +99,9 @@ export type CommunityCreate = {
     is_private?: boolean;
 };
 
-export type CommunityMemberRole = 'admin' | 'member';
+export type CommunityMemberRole = 'ADMIN' | 'MEMBER';
 
-export type CommunityMemberStatus = 'pending' | 'accepted' | 'rejected';
+export type CommunityMemberStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
 
 export type CommunityMemberUpdate = {
     role?: (CommunityMemberRole | null);
@@ -143,7 +145,7 @@ export type CommunityUpdate = {
     is_private?: (boolean | null);
 };
 
-export type FriendshipStatus = 'pending' | 'accepted';
+export type FriendshipStatus = 'PENDING' | 'ACCEPTED';
 
 export type HTTPValidationError = {
     detail?: Array<ValidationError>;
@@ -160,6 +162,7 @@ export type ItemOwnerPublic = {
     full_name: (string | null);
     email: string;
     is_available?: boolean;
+    show_contact_details?: boolean;
 };
 
 export type ItemPublic = {
@@ -167,7 +170,6 @@ export type ItemPublic = {
     description?: (string | null);
     author?: (string | null);
     item_type?: ItemType;
-    owner_type: OwnerType;
     image_url?: (string | null);
     extra_data?: {
         [key: string]: unknown;
@@ -177,6 +179,7 @@ export type ItemPublic = {
     count: number;
     created_at: string;
     owner?: (ItemOwnerPublic | null);
+    community_owner?: (CommunityPublic | null);
     communities?: Array<CommunityPublic>;
     collection_id?: (string | null);
     is_available?: boolean;
@@ -190,8 +193,6 @@ export type ItemsPublic = {
 };
 
 export type ItemType = 'general' | 'book';
-
-export type OwnerType = 'user' | 'community';
 
 export type LoanCreate = {
     item_id: string;
@@ -221,7 +222,7 @@ export type LoansPublic = {
     count: number;
 };
 
-export type LoanStatus = 'pending' | 'accepted' | 'rejected' | 'active' | 'return_pending' | 'returned';
+export type LoanStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'ACTIVE' | 'RETURN_PENDING' | 'RETURNED';
 
 export type Message = {
     message: string;
@@ -248,7 +249,7 @@ export type NotificationsPublic = {
     unread_count: number;
 };
 
-export type NotificationType = 'info' | 'success' | 'warning' | 'error';
+export type NotificationType = 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR';
 
 export type SearchResults = {
     users: Array<UserPublic>;

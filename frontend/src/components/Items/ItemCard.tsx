@@ -64,20 +64,15 @@ const ItemCard = ({
     }
   }
 
-  const isOwner = item.owner_type === "user" && item.owner_id === user?.id
+  // Simplified ownership detection
+  const isOwner = item.owner_id === user?.id
   const isBorrowing =
     !!loan &&
     loan.requester_id === user?.id &&
     ["active", "return_pending"].includes(loan.status)
 
-  const isCommunityOwned = item.owner_type === "community"
-
-  const { data: ownerCommunity } = useQuery({
-    queryKey: ["community", item.owner_id],
-    queryFn: () =>
-      CommunitiesService.readCommunity({ id: item.owner_id }),
-    enabled: isCommunityOwned,
-  })
+  // item.community_owner is now populated by the backend if it's community-owned
+  const isCommunityOwned = !!item.community_owner
 
   const isBook = item.item_type === "book"
   const extraData = (item.extra_data as any) || {}
@@ -369,15 +364,15 @@ const ItemCard = ({
                         ? loan.owner.id === user?.id
                           ? "You"
                           : String(loan.owner.full_name || loan.owner.email)
-                        : ownerCommunity?.name || "Community"}
+                        : item.community_owner?.name || "Community"}
                     </Text>
                   </Link>
                 ) : (
                   <>
-                    {item.community_owner_id && ownerCommunity ? (
+                    {item.community_owner ? (
                       <Link
                         to="/communities/$communityId"
-                        params={{ communityId: item.community_owner_id }}
+                        params={{ communityId: item.community_owner.id }}
                         onClick={(e) => e.stopPropagation()}
                         style={{ textDecoration: "none" }}
                       >
@@ -387,7 +382,7 @@ const ItemCard = ({
                           fontWeight="bold"
                           _hover={{ textDecoration: "underline" }}
                         >
-                          {ownerCommunity.name}
+                          {item.community_owner.name}
                         </Text>
                       </Link>
                     ) : (
@@ -415,33 +410,24 @@ const ItemCard = ({
                               {effectiveDisplayOwnerId === user?.id
                                 ? "You"
                                 : String(
-                                    item.owners?.find(
-                                      (o) => o.id === effectiveDisplayOwnerId,
-                                    )?.full_name ||
-                                      item.owners?.find(
-                                        (o) => o.id === effectiveDisplayOwnerId,
-                                      )?.email ||
-                                      "Owner",
+                                    item.owner?.id === effectiveDisplayOwnerId
+                                      ? (item.owner.full_name || item.owner.email)
+                                      : "Owner",
                                   )}
-                              {/* If we are showing specific owner, we usually don't need others unless specifically multiple ownership is key. 
-                                  For now, hiding others if effectiveDisplayOwnerId is set to reduce clutter/confusion. 
-                              */}
                             </Text>
                           </Link>
                         )}
-                        {!effectiveDisplayOwnerId &&
-                          item.owners?.map((owner, index, arr) => (
+                        {!effectiveDisplayOwnerId && item.owner && (
                             <Link
-                              key={owner.id}
                               to={
-                                owner.id === user?.id
+                                item.owner.id === user?.id
                                   ? "/profile"
                                   : "/users/$userId"
                               }
                               params={
-                                owner.id === user?.id
+                                item.owner.id === user?.id
                                   ? {}
-                                  : { userId: owner.id }
+                                  : { userId: item.owner.id }
                               }
                               onClick={(e) => e.stopPropagation()}
                               style={{ textDecoration: "none" }}
@@ -451,23 +437,22 @@ const ItemCard = ({
                                 color="blue.500"
                                 _hover={{ textDecoration: "underline" }}
                               >
-                                {owner.id === user?.id
+                                {item.owner.id === user?.id
                                   ? "You"
-                                  : String(owner.full_name || owner.email)}
+                                  : String(item.owner.full_name || item.owner.email)}
                                 <Text
                                   as="span"
                                   color={
-                                    owner.is_available ? "green.500" : "red.500"
+                                    item.owner.is_available ? "green.500" : "red.500"
                                   }
                                 >
-                                  {owner.is_available
+                                  {item.owner.is_available
                                     ? " (Available)"
                                     : " (On Loan)"}
                                 </Text>
-                                {index < arr.length - 1 ? "," : ""}
                               </Text>
                             </Link>
-                          ))}
+                          )}
                       </>
                     )}
                   </>

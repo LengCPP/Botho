@@ -13,6 +13,7 @@ export class CollectionsService {
      * @param data.skip
      * @param data.limit
      * @param data.ownerId
+     * @param data.communityId
      * @returns CollectionsPublic Successful Response
      * @throws ApiError
      */
@@ -27,8 +28,8 @@ export class CollectionsService {
                 community_id: data.communityId
             },
             errors: {
-                422: `Validation Error`,
-            },
+                422: 'Validation Error'
+            }
         });
     }
     
@@ -407,6 +408,7 @@ export class CommunitiesService {
     /**
      * Read Community Items
      * Get items belonging to a community.
+     * Includes both pooled items (via CommunityItem) and exclusively community-owned items.
      * @param data The data for the request.
      * @param data.id
      * @param data.skip
@@ -457,8 +459,6 @@ export class CommunitiesService {
     /**
      * Remove Item From Community
      * Remove an item from a community.
-     *
-     *
      * Admins can remove any item. Members can only remove items they added.
      * @param data The data for the request.
      * @param data.id
@@ -842,7 +842,7 @@ export class InterestsService {
 export class ItemsService {
     /**
      * Read Items
-     * Retrieve items.
+     * Retrieve items. Filters by current user's owner_id by default.
      * @param data The data for the request.
      * @param data.skip
      * @param data.limit
@@ -877,8 +877,7 @@ export class ItemsService {
     
     /**
      * Create Item
-     * Create new item. If item with same title exists, connect user to it and increment count.
-     * If community_owner_id is provided, check if user is admin.
+     * Create a new item. Associates with current user or community as owner.
      * @param data The data for the request.
      * @param data.formData
      * @returns ItemPublic Successful Response
@@ -928,7 +927,7 @@ export class ItemsService {
      */
     public static updateItem(data: ItemsUpdateItemData): CancelablePromise<ItemsUpdateItemResponse> {
         return __request(OpenAPI, {
-            method: 'PUT',
+            method: 'PATCH',
             url: '/api/v1/items/{id}',
             path: {
                 id: data.id
@@ -943,7 +942,7 @@ export class ItemsService {
     
     /**
      * Delete Item
-     * Delete an item (or remove ownership).
+     * Delete an item.
      * @param data The data for the request.
      * @param data.id
      * @returns Message Successful Response
@@ -1431,6 +1430,9 @@ export class SearchService {
     /**
      * Search
      * Search for users, items, and communities.
+     * Users: Search by full_name, email, bio, alias.
+     * Items: Search by title, description (Accessible items only).
+     * Communities: Search by name, description.
      * @param data The data for the request.
      * @param data.q
      * @param data.limit

@@ -43,7 +43,6 @@ from app.models import (
     CollectionCreate,
     CollectionType,
     ItemType,
-    OwnerType,
     Collection,
     CollectionItem,
 )
@@ -478,8 +477,7 @@ def read_community_items(
     owned_stmt = (
         select(Item)
         .where(
-            Item.owner_id == id,
-            Item.owner_type == OwnerType.COMMUNITY
+            Item.owner_id == id
         )
     )
     
@@ -487,7 +485,7 @@ def read_community_items(
     statement = select(Item).where(
         or_(
             Item.id.in_(pooled_stmt.with_only_columns(Item.id)),
-            (Item.owner_id == id) & (Item.owner_type == OwnerType.COMMUNITY)
+            Item.owner_id == id
         )
     )
 
@@ -517,9 +515,12 @@ def read_community_items(
         ).first()
         
         owner_pub = None
-        if item.owner_type == OwnerType.USER and item.user_owner:
+        community_pub = None
+        if item.user_owner:
             owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser)
             owner_pub.is_available = is_avail
+        elif item.community_owner:
+            community_pub = item.community_owner
             
         item_pub = ItemPublic(
             id=item.id,
@@ -528,12 +529,12 @@ def read_community_items(
             description=item.description,
             author=item.author,
             item_type=item.item_type,
-            owner_type=item.owner_type,
             image_url=item.image_url,
             extra_data=item.extra_data,
             count=item.count,
             created_at=item.created_at,
             owner=owner_pub,
+            community_owner=community_pub,
             is_available=is_avail
         )
         
@@ -574,7 +575,7 @@ def add_item_to_community(
         raise HTTPException(status_code=404, detail="Item not found")
 
     # Check if current user is the owner
-    if item.owner_type != OwnerType.USER or item.owner_id != current_user.id:
+    if not item.user_owner or item.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the owner can add this item to a pool")
 
     # Check if already added
@@ -685,7 +686,6 @@ def ratify_donation(
     item = session.get(Item, item_id)
     # Change ownership
     item.owner_id = id
-    item.owner_type = OwnerType.COMMUNITY
     
     # Update comm_item status
     comm_item.is_donation_pending = False

@@ -43,7 +43,7 @@ export const CompactItemCard = ({
     onShowDetails()
   }
 
-  const isOwner = item.owners?.some((o) => o.id === user?.id)
+  const isOwner = item.owner_id === user?.id
   const isBorrowing =
     !!loan &&
     loan.requester_id === user?.id &&

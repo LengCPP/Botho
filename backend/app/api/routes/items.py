@@ -11,20 +11,18 @@ from app.storage import upload_image, delete_image, upload_image_from_url
 from app.search import sync_item_to_search, delete_item_from_search
 from app.models import (
     Item,
-    ItemCreate,
     ItemPublic,
     ItemsPublic,
-    ItemUpdate,
     ItemType,
-    OwnerType,
     Message,
     Friendship,
     FriendshipStatus,
-    ItemOwnerPublic,
     Loan,
     LoanStatus,
     CommunityMember,
     CommunityMemberStatus,
+    CommunityMemberRole,
+    CommunityItem,
 )
 
 router = APIRouter(prefix="/items", tags=["items"])
@@ -127,9 +125,13 @@ def read_items(
         is_avail = check_item_availability(session, item.id)
         
         owner_pub = None
-        if item.owner_type == OwnerType.USER and item.user_owner:
+        community_pub = None
+        
+        if item.user_owner:
             owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser)
             owner_pub.is_available = is_avail
+        elif item.community_owner:
+            community_pub = item.community_owner
         
         item_pub = ItemPublic(
             id=item.id,
@@ -138,12 +140,12 @@ def read_items(
             description=item.description,
             author=item.author,
             item_type=item.item_type,
-            owner_type=item.owner_type,
             image_url=item.image_url,
             extra_data=item.extra_data,
             count=item.count,
             created_at=item.created_at,
             owner=owner_pub,
+            community_owner=community_pub,
             is_available=is_avail
         )
         public_items.append(item_pub)
@@ -162,7 +164,7 @@ def read_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> 
         
     # Permission check
     if item.owner_id != current_user.id and not current_user.is_superuser:
-        if item.owner_type == OwnerType.USER:
+        if item.user_owner:
             is_friend = session.exec(
                 select(Friendship).where(
                     ((Friendship.user_id == current_user.id) & (Friendship.friend_id == item.owner_id)) |
@@ -172,7 +174,7 @@ def read_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> 
             ).first()
             if not is_friend:
                  raise HTTPException(status_code=403, detail="Not enough permissions (Not a friend of owner)")
-        else: # Community item
+        elif item.community_owner: # Community item
             is_member = session.exec(
                 select(CommunityMember).where(
                     CommunityMember.community_id == item.owner_id,
@@ -186,9 +188,12 @@ def read_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> 
     is_avail = check_item_availability(session, item.id)
     
     owner_pub = None
-    if item.owner_type == OwnerType.USER and item.user_owner:
+    community_pub = None
+    if item.user_owner:
         owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser)
         owner_pub.is_available = is_avail
+    elif item.community_owner:
+        community_pub = item.community_owner
     
     item_pub = ItemPublic(
         id=item.id,
@@ -197,12 +202,12 @@ def read_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> 
         description=item.description,
         author=item.author,
         item_type=item.item_type,
-        owner_type=item.owner_type,
         image_url=item.image_url,
         extra_data=item.extra_data,
         count=item.count,
         created_at=item.created_at,
         owner=owner_pub,
+        community_owner=community_pub,
         is_available=is_avail
     )
     return item_pub
@@ -215,6 +220,7 @@ def create_item(
     current_user: CurrentUser,
     title: Annotated[str, Form()],
     description: Annotated[str | None, Form()] = None,
+    author: Annotated[str | None, Form()] = None,
     item_type: Annotated[ItemType, Form()] = ItemType.general,
     extra_data: Annotated[str | None, Form()] = None,
     image: Annotated[UploadFile | None, File()] = None,
@@ -224,100 +230,119 @@ def create_item(
     """
     Create a new item. Associates with current user or community as owner.
     """
-    parsed_extra = {}
-    if extra_data:
-        try:
-            parsed_extra = json.loads(extra_data)
-        except json.JSONDecodeError:
-            pass
+    try:
+        parsed_extra = {}
+        if extra_data:
+            try:
+                parsed_extra = json.loads(extra_data)
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="Invalid JSON in extra_data")
 
-    # Handle image upload
-    final_image_url = image_url
-    if image:
-        final_image_url = upload_image(image.file.read(), image.filename, folder="items")
-    elif image_url and image_url.startswith("http"):
-        # Download and store external image (e.g. from Google Books)
-        stored_url = upload_image_from_url(image_url, folder="items")
-        if stored_url:
-            final_image_url = stored_url
+        # Auto-extract author if not provided but in extra_data (e.g. from Google Books)
+        final_author = author
+        if not final_author and parsed_extra:
+            final_author = parsed_extra.get("author") or parsed_extra.get("authors")
+            if isinstance(final_author, list):
+                final_author = ", ".join(final_author)
 
-    # Determine owner and type
-    target_owner_id = current_user.id
-    target_owner_type = OwnerType.USER
-    should_pool = False
+        # Handle image upload
+        final_image_url = image_url
+        if image:
+            try:
+                final_image_url = upload_image(image.file.read(), image.filename, folder="items")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
+        elif image_url and image_url.startswith("http"):
+            # Download and store external image (e.g. from Google Books)
+            try:
+                stored_url = upload_image_from_url(image_url, folder="items")
+                if stored_url:
+                    final_image_url = stored_url
+            except Exception as e:
+                pass
 
-    if community_owner_id:
-        # Check if user is admin of this community
-        statement = select(CommunityMember).where(
-            CommunityMember.community_id == community_owner_id,
-            CommunityMember.user_id == current_user.id,
-            CommunityMember.role == CommunityMemberRole.ADMIN,
-            CommunityMember.status == CommunityMemberStatus.ACCEPTED
-        )
-        is_admin = session.exec(statement).first() or current_user.is_superuser
-        
-        if is_admin:
-            target_owner_id = community_owner_id
-            target_owner_type = OwnerType.COMMUNITY
-        else:
-            # If not admin, item is owned by user but pooled in community
-            target_owner_id = current_user.id
-            target_owner_type = OwnerType.USER
-            should_pool = True
+        # Determine owner
+        target_owner_id = current_user.id
+        should_pool = False
 
-    db_item = Item(
-        title=title,
-        description=description,
-        item_type=item_type,
-        owner_type=target_owner_type,
-        extra_data=parsed_extra,
-        image_url=final_image_url,
-        owner_id=target_owner_id,
-    )
-    session.add(db_item)
-    session.flush() # Get ID for pooling if needed
-
-    if should_pool and community_owner_id:
-        # Check if user is at least a member
-        statement = select(CommunityMember).where(
-            CommunityMember.community_id == community_owner_id,
-            CommunityMember.user_id == current_user.id,
-            CommunityMember.status == CommunityMemberStatus.ACCEPTED
-        )
-        if session.exec(statement).first():
-            comm_item = CommunityItem(
-                community_id=community_owner_id,
-                item_id=db_item.id,
-                added_by=current_user.id
+        if community_owner_id:
+            # Check if user is admin of this community
+            statement = select(CommunityMember).where(
+                CommunityMember.community_id == community_owner_id,
+                CommunityMember.user_id == current_user.id,
+                CommunityMember.role == CommunityMemberRole.ADMIN,
+                CommunityMember.status == CommunityMemberStatus.ACCEPTED
             )
-            session.add(comm_item)
+            is_admin = session.exec(statement).first() or current_user.is_superuser
+            
+            if is_admin:
+                target_owner_id = community_owner_id
+            else:
+                target_owner_id = current_user.id
+                should_pool = True
 
-    session.commit()
-    session.refresh(db_item)
-    sync_item_to_search(db_item)
-    
-    # Prepare public response
-    owner_pub = None
-    if target_owner_type == OwnerType.USER:
-        owner_pub = filter_owner_privacy(current_user, current_user.id, is_admin=current_user.is_superuser)
-        owner_pub.is_available = True
-    
-    item_pub = ItemPublic(
-        id=db_item.id,
-        owner_id=db_item.owner_id,
-        title=db_item.title,
-        description=db_item.description,
-        author=db_item.author,
-        item_type=db_item.item_type,
-        owner_type=db_item.owner_type,
-        image_url=db_item.image_url,
-        extra_data=db_item.extra_data,
-        count=db_item.count,
-        created_at=db_item.created_at,
-        owner=owner_pub,
-        is_available=True
-    )
-    return item_pub
+        if not target_owner_id:
+            raise HTTPException(status_code=400, detail="Owner ID could not be determined")
+
+        db_item = Item(
+            title=title,
+            description=description,
+            author=final_author,
+            item_type=item_type,
+            extra_data=parsed_extra,
+            image_url=final_image_url,
+            owner_id=target_owner_id,
+        )
+        session.add(db_item)
+        session.flush()
+
+        if should_pool and community_owner_id:
+            statement = select(CommunityMember).where(
+                CommunityMember.community_id == community_owner_id,
+                CommunityMember.user_id == current_user.id,
+                CommunityMember.status == CommunityMemberStatus.ACCEPTED
+            )
+            if session.exec(statement).first():
+                comm_item = CommunityItem(
+                    community_id=community_owner_id,
+                    item_id=db_item.id,
+                    added_by=current_user.id
+                )
+                session.add(comm_item)
+
+        session.commit()
+        session.refresh(db_item)
+        sync_item_to_search(db_item)
+        
+        owner_pub = None
+        community_pub = None
+        if db_item.user_owner:
+            owner_pub = filter_owner_privacy(db_item.user_owner, current_user.id, is_admin=current_user.is_superuser)
+            owner_pub.is_available = True
+        elif db_item.community_owner:
+            community_pub = db_item.community_owner
+        
+        item_pub = ItemPublic(
+            id=db_item.id,
+            owner_id=db_item.owner_id,
+            title=db_item.title,
+            description=db_item.description,
+            author=db_item.author,
+            item_type=db_item.item_type,
+            image_url=db_item.image_url,
+            extra_data=db_item.extra_data,
+            count=db_item.count,
+            created_at=db_item.created_at,
+            owner=owner_pub,
+            community_owner=community_pub,
+            is_available=True
+        )
+        return item_pub
+    except HTTPException:
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=f"An error occurred while creating the item: {str(e)}")
 
 
 @router.patch("/{id}", response_model=ItemPublic)
@@ -328,6 +353,7 @@ def update_item(
     id: uuid.UUID,
     title: Annotated[str | None, Form()] = None,
     description: Annotated[str | None, Form()] = None,
+    author: Annotated[str | None, Form()] = None,
     item_type: Annotated[ItemType | None, Form()] = None,
     extra_data: Annotated[str | None, Form()] = None,
     image: Annotated[UploadFile | None, File()] = None,
@@ -336,78 +362,95 @@ def update_item(
     """
     Update an item.
     """
-    db_item = session.get(Item, id)
-    if not db_item:
-        raise HTTPException(status_code=404, detail="Item not found")
-    
-    # Permission check: User must be owner OR admin of owning community
-    if db_item.owner_type == OwnerType.USER:
-        if db_item.owner_id != current_user.id and not current_user.is_superuser:
-            raise HTTPException(status_code=403, detail="Not enough permissions")
-    else: # Community owned
-        is_member = session.exec(
-            select(CommunityMember).where(
-                CommunityMember.community_id == db_item.owner_id,
-                CommunityMember.user_id == current_user.id,
-                CommunityMember.role == CommunityMemberRole.ADMIN,
-                CommunityMember.status == CommunityMemberStatus.ACCEPTED
-            )
-        ).first()
-        if not is_member and not current_user.is_superuser:
-            raise HTTPException(status_code=403, detail="Not enough permissions (Community admin required)")
+    try:
+        db_item = session.get(Item, id)
+        if not db_item:
+            raise HTTPException(status_code=404, detail="Item not found")
+        
+        # Permission check
+        if db_item.user_owner:
+            if db_item.owner_id != current_user.id and not current_user.is_superuser:
+                raise HTTPException(status_code=403, detail="Not enough permissions")
+        elif db_item.community_owner:
+            is_member = session.exec(
+                select(CommunityMember).where(
+                    CommunityMember.community_id == db_item.owner_id,
+                    CommunityMember.user_id == current_user.id,
+                    CommunityMember.role == CommunityMemberRole.ADMIN,
+                    CommunityMember.status == CommunityMemberStatus.ACCEPTED
+                )
+            ).first()
+            if not is_member and not current_user.is_superuser:
+                raise HTTPException(status_code=403, detail="Not enough permissions (Community admin required)")
 
-    if title is not None:
-        db_item.title = title
-    if description is not None:
-        db_item.description = description
-    if item_type is not None:
-        db_item.item_type = item_type
-    if image_url is not None:
-        if image_url.startswith("http"):
-            stored_url = upload_image_from_url(image_url, folder="items")
-            if stored_url:
-                db_item.image_url = stored_url
-        else:
-            db_item.image_url = image_url
-    if extra_data is not None:
-        try:
-            db_item.extra_data = json.loads(extra_data)
-        except json.JSONDecodeError:
-            pass
+        if title is not None:
+            db_item.title = title
+        if description is not None:
+            db_item.description = description
+        if author is not None:
+            db_item.author = author
+        if item_type is not None:
+            db_item.item_type = item_type
+        if image_url is not None:
+            if image_url.startswith("http"):
+                try:
+                    stored_url = upload_image_from_url(image_url, folder="items")
+                    if stored_url:
+                        db_item.image_url = stored_url
+                except:
+                    db_item.image_url = image_url
+            else:
+                db_item.image_url = image_url
+        if extra_data is not None:
+            try:
+                db_item.extra_data = json.loads(extra_data)
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="Invalid JSON in extra_data")
 
-    if image:
-        if db_item.image_url:
-            delete_image(db_item.image_url)
-        db_item.image_url = upload_image(image.file.read(), image.filename, folder="items")
+        if image:
+            try:
+                if db_item.image_url:
+                    delete_image(db_item.image_url)
+                db_item.image_url = upload_image(image.file.read(), image.filename, folder="items")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
 
-    session.add(db_item)
-    session.commit()
-    session.refresh(db_item)
-    sync_item_to_search(db_item)
-    
-    is_avail = check_item_availability(session, db_item.id)
-    
-    owner_pub = None
-    if db_item.owner_type == OwnerType.USER and db_item.user_owner:
-        owner_pub = filter_owner_privacy(db_item.user_owner, current_user.id, is_admin=current_user.is_superuser)
-        owner_pub.is_available = is_avail
-    
-    item_pub = ItemPublic(
-        id=db_item.id,
-        owner_id=db_item.owner_id,
-        title=db_item.title,
-        description=db_item.description,
-        author=db_item.author,
-        item_type=db_item.item_type,
-        owner_type=db_item.owner_type,
-        image_url=db_item.image_url,
-        extra_data=db_item.extra_data,
-        count=db_item.count,
-        created_at=db_item.created_at,
-        owner=owner_pub,
-        is_available=is_avail
-    )
-    return item_pub
+        session.add(db_item)
+        session.commit()
+        session.refresh(db_item)
+        sync_item_to_search(db_item)
+        
+        is_avail = check_item_availability(session, db_item.id)
+        
+        owner_pub = None
+        community_pub = None
+        if db_item.user_owner:
+            owner_pub = filter_owner_privacy(db_item.user_owner, current_user.id, is_admin=current_user.is_superuser)
+            owner_pub.is_available = is_avail
+        elif db_item.community_owner:
+            community_pub = db_item.community_owner
+        
+        item_pub = ItemPublic(
+            id=db_item.id,
+            owner_id=db_item.owner_id,
+            title=db_item.title,
+            description=db_item.description,
+            author=db_item.author,
+            item_type=db_item.item_type,
+            image_url=db_item.image_url,
+            extra_data=db_item.extra_data,
+            count=db_item.count,
+            created_at=db_item.created_at,
+            owner=owner_pub,
+            community_owner=community_pub,
+            is_available=is_avail
+        )
+        return item_pub
+    except HTTPException:
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=f"An error occurred while updating the item: {str(e)}")
 
 
 @router.delete("/{id}", response_model=Message)
@@ -425,10 +468,10 @@ def delete_item(
         raise HTTPException(status_code=404, detail="Item not found")
     
     # Permission check: User must be owner OR admin of owning community
-    if db_item.owner_type == OwnerType.USER:
+    if db_item.user_owner:
         if db_item.owner_id != current_user.id and not current_user.is_superuser:
             raise HTTPException(status_code=403, detail="Not enough permissions")
-    else: # Community owned
+    elif db_item.community_owner:
         is_member = session.exec(
             select(CommunityMember).where(
                 CommunityMember.community_id == db_item.owner_id,
