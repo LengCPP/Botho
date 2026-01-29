@@ -178,7 +178,7 @@ async def upload_user_profile_picture(
         current_user.profile = UserProfile(user_id=current_user.id)
         
     contents = await file.read()
-    image_url = await upload_image(contents, file.filename, folder="profile-pictures")
+    image_url = upload_image(contents, file.filename, folder="profile-pictures")
     
     if not image_url:
         raise HTTPException(status_code=500, detail="Failed to upload image")

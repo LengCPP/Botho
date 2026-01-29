@@ -55,7 +55,7 @@ const CollectionCard = ({ collection }: CollectionCardProps) => {
               </Text>
             </Tooltip>
             <Badge colorPalette="orange" variant="subtle" size="sm">
-              {collection.collection_type === "library"
+              {collection.collection_type === "LIBRARY"
                 ? "Library"
                 : "Collection"}
             </Badge>
@@ -133,7 +133,7 @@ const CollectionCard = ({ collection }: CollectionCardProps) => {
             <Flex height="100%" align="center" justify="center">
               <Text fontSize="sm" color="gray.500" fontStyle="italic">
                 Empty{" "}
-                {collection.collection_type === "library"
+                {collection.collection_type === "LIBRARY"
                   ? "library"
                   : "collection"}
               </Text>
@@ -178,7 +178,7 @@ const CollectionCard = ({ collection }: CollectionCardProps) => {
             params={{ collectionId: collection.id }}
           >
             View{" "}
-            {collection.collection_type === "library"
+            {collection.collection_type === "LIBRARY"
               ? "Library"
               : "Collection"}
           </Link>

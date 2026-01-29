@@ -166,7 +166,7 @@ def verify_password_reset_token(token: str) -> str | None:
 
 def generate_unique_id(prefix: str, session: Session, model: type) -> str:
     """
-    Generate a unique 8-character alphanumeric ID with a prefix.
+    Generate a unique alphanumeric ID with a prefix and hyphen.
 
     Args:
         prefix: Single character prefix ('u' for users, 'i' for items)
@@ -174,7 +174,7 @@ def generate_unique_id(prefix: str, session: Session, model: type) -> str:
         model: SQLModel class to check against
 
     Returns:
-        A unique ID string like 'u1a2b3c4' (prefix + 7 random chars)
+        A unique ID string like 'u-1a2b3c4' (prefix + hyphen + 7 random chars)
 
     Note:
         - Excludes ambiguous characters: 0, O, o, I, l, 1
@@ -187,9 +187,9 @@ def generate_unique_id(prefix: str, session: Session, model: type) -> str:
 
     max_attempts = 100
     for _ in range(max_attempts):
-        # Generate 7 random characters (prefix + 7 = 8 total)
+        # Generate 7 random characters
         random_chars = "".join(secrets.choice(charset) for _ in range(7))
-        unique_id = f"{prefix.lower()}{random_chars}"
+        unique_id = f"{prefix.lower()}-{random_chars}"
 
         # Check if ID already exists
         statement = select(model).where(model.public_id == unique_id)

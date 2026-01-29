@@ -243,6 +243,29 @@ def update_community_member(
 
 
 def leave_community(*, session: Session, community_id: uuid.UUID, user_id: uuid.UUID):
+    # Remove user's items from the community pool and cleanup bucket
+    from app.models import CommunityItem, Collection, CollectionType
+    
+    # 1. Find and delete bucket (cascades to CollectionItem)
+    bucket_stmt = select(Collection).where(
+        Collection.owner_id == user_id,
+        Collection.community_id == community_id,
+        Collection.collection_type == CollectionType.BUCKET
+    )
+    bucket = session.exec(bucket_stmt).first()
+    if bucket:
+        session.delete(bucket)
+
+    # 2. Remove pooled items
+    pooled_items_stmt = select(CommunityItem).where(
+        CommunityItem.community_id == community_id,
+        CommunityItem.added_by == user_id
+    )
+    pooled_items = session.exec(pooled_items_stmt).all()
+    for item in pooled_items:
+        session.delete(item)
+
+    # 3. Finally remove membership
     statement = select(CommunityMember).where(
         CommunityMember.community_id == community_id,
         CommunityMember.user_id == user_id,
@@ -250,7 +273,8 @@ def leave_community(*, session: Session, community_id: uuid.UUID, user_id: uuid.
     membership = session.exec(statement).first()
     if membership:
         session.delete(membership)
-        session.commit()
+    
+    session.commit()
 
 
 def create_friend_request(

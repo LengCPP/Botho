@@ -184,12 +184,20 @@ const EditItem = ({ item }: EditItemProps) => {
           <DialogBody>
             <Text mb={4}>Update the item details below.</Text>
             <VStack gap={4}>
-              <Field label="Item Type">
+              <Field
+                label="Item Type"
+                required
+                invalid={!!errors.item_type}
+                errorText={errors.item_type?.message}
+              >
                 <select
                   id="edit_item_type"
-                  {...register("item_type")}
+                  {...register("item_type", { required: "Item type is required" })}
                   style={selectStyle}
                 >
+                  <option value="" style={{ backgroundColor: selectBg }}>
+                    -- select item type --
+                  </option>
                   <option value="general" style={{ backgroundColor: selectBg }}>
                     General
                   </option>

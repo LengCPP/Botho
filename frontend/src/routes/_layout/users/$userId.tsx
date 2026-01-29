@@ -85,7 +85,7 @@ function UserProfilePage() {
     queryFn: () => UsersService.readUserById({ userId }),
   })
 
-  const isFriend = user?.friendship_status === "accepted"
+  const isFriend = user?.friendship_status === "ACCEPTED"
   const canSeeAll = isFriend || currentUser?.is_superuser
 
   const { data: collections } = useQuery({
@@ -160,9 +160,9 @@ function UserProfilePage() {
               }
             }}
             colorPalette={
-              user.friendship_status === "pending"
+              user.friendship_status === "PENDING"
                 ? "orange"
-                : user.friendship_status === "accepted"
+                : user.friendship_status === "ACCEPTED"
                   ? "green"
                   : "blue"
             }
@@ -170,11 +170,11 @@ function UserProfilePage() {
             disabled={!!user.friendship_status}
             loading={friendMutation.isPending}
           >
-            {user.friendship_status === "pending" ? (
+            {user.friendship_status === "PENDING" ? (
               <>
                 <FiUserPlus /> Request Pending
               </>
-            ) : user.friendship_status === "accepted" ? (
+            ) : user.friendship_status === "ACCEPTED" ? (
               <>
                 <FiUserCheck /> Friends
               </>

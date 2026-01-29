@@ -13,6 +13,7 @@ import {
   Text,
   Textarea,
   VStack,
+  useBreakpointValue,
 } from "@chakra-ui/react"
 import { useRef, useState } from "react"
 import { FaPlus } from "react-icons/fa"
@@ -67,6 +68,7 @@ const AddItem = ({
   const { user: currentUser } = useAuth()
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
+  const isMobile = useBreakpointValue({ base: true, md: false })
 
   const [imageFile, setImageFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -89,7 +91,7 @@ const AddItem = ({
     defaultValues: {
       title: "",
       description: "",
-      item_type: "general",
+      item_type: "",
       extra_data: {},
       image_url: "",
     },
@@ -227,8 +229,20 @@ const AddItem = ({
             ? "Create an item that is directly owned by the community itself."
             : "Fill in the details to add a new item."}
         </Text>
-        <Field label="Item Type">
-          <select id="item_type" {...register("item_type")} style={selectStyle}>
+        <Field
+          label="Item Type"
+          required
+          invalid={!!errors.item_type}
+          errorText={errors.item_type?.message}
+        >
+          <select
+            id="item_type"
+            {...register("item_type", { required: "Item type is required" })}
+            style={selectStyle}
+          >
+            <option value="" style={{ backgroundColor: selectBg }}>
+              -- select item type --
+            </option>
             <option value="general" style={{ backgroundColor: selectBg }}>
               General
             </option>
@@ -406,7 +420,7 @@ const AddItem = ({
       <DialogTrigger asChild>
         <Button value="add-item" my={4}>
           <FaPlus fontSize="16px" />
-          New Item
+          {isMobile ? "Item" : "New Item"}
         </Button>
       </DialogTrigger>
       <DialogContent>

@@ -32,15 +32,15 @@ function LoansPage() {
 
   const borrowedItems =
     outgoing?.data.filter(
-      (l) => l.status === "active" || l.status === "return_pending",
+      (l) => l.status === "ACTIVE" || l.status === "RETURN_PENDING",
     ) || []
   const pendingOutgoing =
     outgoing?.data.filter(
-      (l) => l.status === "pending" || l.status === "accepted",
+      (l) => l.status === "PENDING" || l.status === "ACCEPTED",
     ) || []
   const pendingIncoming =
     incoming?.data.filter(
-      (l) => l.status === "pending" || l.status === "return_pending",
+      (l) => l.status === "PENDING" || l.status === "RETURN_PENDING",
     ) || []
 
   return (
@@ -75,7 +75,7 @@ function LoansPage() {
               {borrowedItems.map((loan) => (
                 <VStack key={loan.id} align="stretch" gap={2}>
                   <ItemCard item={loan.item} loan={loan} />
-                  {loan.status === "return_pending" && (
+                  {loan.status === "RETURN_PENDING" && (
                     <Badge
                       colorPalette="blue"
                       variant="subtle"

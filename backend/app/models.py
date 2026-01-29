@@ -191,7 +191,7 @@ class UserBase(SQLModel):
     is_superuser: bool = False
     is_verified: bool = False
     full_name: Optional[str] = Field(default=None, max_length=255)
-    public_id: Optional[str] = Field(default=None, unique=True, index=True, max_length=8)
+    public_id: Optional[str] = Field(default=None, unique=True, index=True, max_length=10)
 
     @field_validator("email", mode="before")
     @classmethod
@@ -298,7 +298,7 @@ class UpdatePassword(SQLModel):
 
 class User(UserBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    public_id: Optional[str] = Field(default=None, unique=True, index=True, max_length=8)
+    public_id: Optional[str] = Field(default=None, unique=True, index=True, max_length=10)
     hashed_password: str
     has_set_password: bool = Field(default=True)
     items: list["Item"] = Relationship(

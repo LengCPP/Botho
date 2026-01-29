@@ -1,5 +1,5 @@
 import { useColorModeValue } from "@/components/ui/color-mode"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { type SubmitHandler, useForm } from "react-hook-form"
 
 import {
@@ -9,11 +9,12 @@ import {
   Input,
   Text,
   VStack,
+  useBreakpointValue,
 } from "@chakra-ui/react"
 import { useState } from "react"
 import { FaPlus } from "react-icons/fa"
 
-import { type CollectionCreate, CollectionsService } from "@/client"
+import { type CollectionCreate, CollectionsService, CommunitiesService } from "@/client"
 import type { ApiError } from "@/client/core/ApiError"
 import useCustomToast from "@/hooks/useCustomToast"
 import { handleError } from "@/utils"
@@ -32,10 +33,15 @@ interface AddCollectionProps {
   communityId?: string
 }
 
+interface CollectionCreateExtended extends CollectionCreate {
+  target_community_id?: string
+}
+
 const AddCollection = ({ communityId }: AddCollectionProps) => {
   const [isOpen, setIsOpen] = useState(false)
   const queryClient = useQueryClient()
   const { showSuccessToast } = useCustomToast()
+  const isMobile = useBreakpointValue({ base: true, md: false })
 
   const selectBg = useColorModeValue("white", "gray.800")
   const selectColor = useColorModeValue("black", "white")
@@ -45,20 +51,44 @@ const AddCollection = ({ communityId }: AddCollectionProps) => {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, isValid, isSubmitting },
-  } = useForm<CollectionCreate>({
+  } = useForm<CollectionCreateExtended>({
     mode: "onBlur",
     criteriaMode: "all",
     defaultValues: {
       title: "",
       description: "",
-      collection_type: "library",
+      collection_type: "" as any,
+      target_community_id: communityId || "",
     },
   })
 
+  const collectionType = watch("collection_type")
+  const isBucket = collectionType === "BUCKET"
+
+  const { data: myCommunities } = useQuery({
+    queryKey: ["my-communities-for-collection"],
+    queryFn: () => CommunitiesService.readCommunities({}),
+    enabled: isOpen,
+  })
+
+  const acceptedCommunities = myCommunities?.data.filter(
+    (c) => c.current_user_status === "ACCEPTED"
+  ) || []
+
+  const canCreateBucket = acceptedCommunities.length > 0 || !!communityId
+
   const mutation = useMutation({
-    mutationFn: (data: CollectionCreate) =>
-      CollectionsService.createCollection({ requestBody: data, communityId }),
+    mutationFn: (data: CollectionCreateExtended) =>
+      CollectionsService.createCollection({ 
+        requestBody: {
+          title: data.title,
+          description: data.description,
+          collection_type: data.collection_type,
+        }, 
+        communityId: data.target_community_id 
+      }),
     onSuccess: () => {
       showSuccessToast("Collection created successfully.")
       reset()
@@ -68,9 +98,10 @@ const AddCollection = ({ communityId }: AddCollectionProps) => {
       handleError(err)
     },
     onSettled: () => {
-      if (communityId) {
+      const targetId = watch("target_community_id")
+      if (targetId) {
         queryClient.invalidateQueries({
-          queryKey: ["communityCollections", communityId],
+          queryKey: ["communityCollections", targetId],
         })
       } else {
         queryClient.invalidateQueries({ queryKey: ["collections"] })
@@ -78,8 +109,21 @@ const AddCollection = ({ communityId }: AddCollectionProps) => {
     },
   })
 
-  const onSubmit: SubmitHandler<CollectionCreate> = async (data) => {
-    mutation.mutate(data)
+  const onSubmit: SubmitHandler<CollectionCreateExtended> = async (data) => {
+    const finalData = { ...data }
+    if (isBucket) {
+      finalData.title = "Bucket" // Placeholder, backend overwrites
+    }
+    mutation.mutate(finalData)
+  }
+
+  const selectStyle = {
+    width: "100%",
+    padding: "8px",
+    borderRadius: "4px",
+    border: `1px solid ${selectBorder}`,
+    backgroundColor: selectBg,
+    color: selectColor,
   }
 
   return (
@@ -92,7 +136,7 @@ const AddCollection = ({ communityId }: AddCollectionProps) => {
       <DialogTrigger asChild>
         <Button variant="outline" my={4} colorPalette="orange">
           <FaPlus fontSize="16px" />
-          Create Collection
+          {isMobile ? "Collection" : "Create Collection"}
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -105,29 +149,62 @@ const AddCollection = ({ communityId }: AddCollectionProps) => {
               Organize your items into libraries or collections.
             </Text>
             <VStack gap={4}>
-              <Field label="Type">
+              <Field
+                label="Type"
+                required
+                invalid={!!errors.collection_type}
+                errorText={errors.collection_type?.message}
+              >
                 <select
-                  {...register("collection_type")}
-                  style={{
-                    width: "100%",
-                    padding: "8px",
-                    borderRadius: "4px",
-                    border: `1px solid ${selectBorder}`,
-                    backgroundColor: selectBg,
-                    color: selectColor,
-                  }}
+                  {...register("collection_type", {
+                    required: "Collection type is required",
+                  })}
+                  style={selectStyle}
                 >
-                  <option value="library" style={{ backgroundColor: selectBg }}>
+                  <option value="" style={{ backgroundColor: selectBg }}>
+                    -- select collection type --
+                  </option>
+                  <option value="LIBRARY" style={{ backgroundColor: selectBg }}>
                     Library (e.g. for Books)
                   </option>
-                  <option value="general" style={{ backgroundColor: selectBg }}>
+                  <option value="GENERAL" style={{ backgroundColor: selectBg }}>
                     General Collection
                   </option>
+                  {canCreateBucket && (
+                    <option value="BUCKET" style={{ backgroundColor: selectBg }}>
+                      Community Bucket (Pool)
+                    </option>
+                  )}
                 </select>
               </Field>
 
+              {isBucket && !communityId && (
+                <Field
+                  label="Share with Community"
+                  required
+                  invalid={!!errors.target_community_id}
+                  errorText={errors.target_community_id?.message}
+                >
+                  <select
+                    {...register("target_community_id", {
+                      required: isBucket ? "Please select a community to share with" : false,
+                    })}
+                    style={selectStyle}
+                  >
+                    <option value="" style={{ backgroundColor: selectBg }}>
+                      -- select community --
+                    </option>
+                    {acceptedCommunities.map((c) => (
+                      <option key={c.id} value={c.id} style={{ backgroundColor: selectBg }}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              )}
+
               <Field
-                required
+                required={!isBucket}
                 invalid={!!errors.title}
                 errorText={errors.title?.message}
                 label="Title"
@@ -135,10 +212,11 @@ const AddCollection = ({ communityId }: AddCollectionProps) => {
                 <Input
                   id="title"
                   {...register("title", {
-                    required: "Title is required.",
+                    required: isBucket ? false : "Title is required.",
                   })}
-                  placeholder="My Book Library"
+                  placeholder={isBucket ? "Auto-generated" : "My Book Library"}
                   type="text"
+                  disabled={isBucket}
                 />
               </Field>
 
@@ -150,8 +228,9 @@ const AddCollection = ({ communityId }: AddCollectionProps) => {
                 <Input
                   id="description"
                   {...register("description")}
-                  placeholder="A collection of my favorite books"
+                  placeholder={isBucket ? "Auto-generated" : "A collection of my favorite books"}
                   type="text"
+                  disabled={isBucket}
                 />
               </Field>
             </VStack>

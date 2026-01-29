@@ -82,6 +82,7 @@ function AddAnnouncementModal({ communityId }: { communityId: string }) {
   const [isOpen, setIsOpen] = useState(false)
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
+  const isMobile = useBreakpointValue({ base: true, md: false })
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -105,7 +106,7 @@ function AddAnnouncementModal({ communityId }: { communityId: string }) {
     <DialogRoot open={isOpen} onOpenChange={(e) => setIsOpen(e.open)}>
       <DialogTrigger asChild>
         <Button size="sm" colorPalette="orange" variant="outline">
-          <FiPlus /> Add Announcement
+          <FiPlus /> {isMobile ? "Announcement" : "Add Announcement"}
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -413,23 +414,27 @@ function CommunityBoard() {
         <Separator />
 
         <Tabs.Root defaultValue="board" variant="enclosed">
-          <Tabs.List>
-            <Tabs.Trigger value="board">
+          <Tabs.List
+            display={{ base: "grid", md: "flex" }}
+            gridTemplateColumns={{ base: "repeat(3, 1fr)", md: "none" }}
+            gap={{ base: 1, md: 0 }}
+          >
+            <Tabs.Trigger value="board" justifyContent="center">
               <FiMessageSquare /> Board
             </Tabs.Trigger>
-            <Tabs.Trigger value="items">
+            <Tabs.Trigger value="items" justifyContent="center">
               <FiBox /> Items ({communityItems?.count || 0})
             </Tabs.Trigger>
-            <Tabs.Trigger value="members">
+            <Tabs.Trigger value="members" justifyContent="center">
               <FiUsers /> Members ({members?.count || 0})
             </Tabs.Trigger>
             {isAdmin && (
               <>
-                <Tabs.Trigger value="loans">
-                  <FiClock /> Manage Loans
+                <Tabs.Trigger value="loans" justifyContent="center">
+                  <FiClock /> Loans
                 </Tabs.Trigger>
-                <Tabs.Trigger value="manage">
-                  <FiShield /> Manage Members
+                <Tabs.Trigger value="manage" justifyContent="center">
+                  <FiShield /> Manage
                 </Tabs.Trigger>
               </>
             )}
@@ -667,7 +672,7 @@ function CommunityBoard() {
                 <Text>Loading members...</Text>
               ) : (
                 members?.data
-                  .filter((m) => m.community_status === "accepted")
+                  .filter((m) => m.community_status === "ACCEPTED")
                   .map((member) => (
                     <Box
                       key={member.id}
@@ -685,7 +690,7 @@ function CommunityBoard() {
                           <Badge
                             size="xs"
                             colorPalette={
-                              member.community_role === "admin"
+                              member.community_role === "ADMIN"
                                 ? "purple"
                                 : "gray"
                             }
@@ -704,15 +709,15 @@ function CommunityBoard() {
                                 }
                               }}
                               colorPalette={
-                                member.friendship_status === "pending"
+                                member.friendship_status === "PENDING"
                                   ? "orange"
-                                  : member.friendship_status === "accepted"
+                                  : member.friendship_status === "ACCEPTED"
                                     ? "green"
                                     : "gray"
                               }
                               disabled={!!member.friendship_status}
                             >
-                              {member.friendship_status === "accepted" ? (
+                              {member.friendship_status === "ACCEPTED" ? (
                                 <FiUserCheck />
                               ) : (
                                 <FiUserPlus />
@@ -793,12 +798,12 @@ function CommunityBoard() {
                                 <Badge
                                   size="xs"
                                   colorPalette={
-                                    role === "admin" ? "purple" : "gray"
+                                    role === "ADMIN" ? "purple" : "gray"
                                   }
                                 >
                                   {role.toUpperCase()}
                                 </Badge>
-                                {status === "pending" && (
+                                {status === "PENDING" && (
                                   <Badge size="xs" colorPalette="yellow">
                                     PENDING APPROVAL
                                   </Badge>
@@ -807,7 +812,7 @@ function CommunityBoard() {
                             </VStack>
 
                             <HStack gap={2}>
-                              {status === "pending" && (
+                              {status === "PENDING" && (
                                 <Button
                                   size="xs"
                                   colorPalette="green"
@@ -840,7 +845,7 @@ function CommunityBoard() {
                                             role: "admin",
                                           })
                                         }
-                                        disabled={role === "admin"}
+                                        disabled={role === "ADMIN"}
                                       >
                                         Promote to Admin
                                       </MenuItem>
@@ -852,7 +857,7 @@ function CommunityBoard() {
                                             role: "member",
                                           })
                                         }
-                                        disabled={role === "member"}
+                                        disabled={role === "MEMBER"}
                                       >
                                         Demote to Member
                                       </MenuItem>

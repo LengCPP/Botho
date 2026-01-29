@@ -57,7 +57,7 @@ function AddFriendModal() {
       queryClient.invalidateQueries({ queryKey: ["friendRequestsSent"] })
     },
     onError: (err: any) => {
-      showErrorToast(err.detail || "User not found or request already exists")
+      showErrorToast(err.body?.detail || "User not found or request already exists")
     },
   })
 

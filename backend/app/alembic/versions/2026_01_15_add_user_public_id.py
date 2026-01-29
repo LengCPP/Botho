@@ -18,7 +18,7 @@ depends_on = None
 
 def upgrade():
     # Add public_id column to user table
-    op.add_column('user', sa.Column('public_id', sa.String(length=8), nullable=True))
+    op.add_column('user', sa.Column('public_id', sa.String(length=20), nullable=True))
     op.create_index(op.f('ix_user_public_id'), 'user', ['public_id'], unique=True)
 
 

@@ -145,6 +145,7 @@ def read_community(session: SessionDep, current_user: CurrentUser, id: uuid.UUID
     membership = session.exec(statement).first()
     if membership:
         comm_pub.current_user_role = membership.role
+        comm_pub.current_user_status = membership.status
         comm_pub.notifications_enabled = membership.notifications_enabled
 
     return comm_pub
@@ -602,25 +603,31 @@ def add_item_to_community(
     )
     session.add(comm_item)
 
-    # Auto-create collection for books
+    # Ensure one bucket per user per community for books
     if item.item_type == ItemType.book:
-        visible_name = current_user.full_name or current_user.email
-        if current_user.profile and current_user.profile.alias:
-            visible_name = current_user.full_name or current_user.profile.alias or current_user.email
-
-        collection_title = f"{item.title} {visible_name} bucket"
-        collection_in = CollectionCreate(
-            title=collection_title,
-            description="Automatically created bucket for community book sharing.",
-            collection_type=CollectionType.BUCKET
+        # Check if user already has a bucket in this community
+        bucket_stmt = select(Collection).where(
+            Collection.owner_id == current_user.id,
+            Collection.community_id == id,
+            Collection.collection_type == CollectionType.BUCKET
         )
-        new_collection = crud.create_collection(
-            session=session, 
-            collection_in=collection_in, 
-            owner_id=current_user.id,
-            community_id=id
-        )
-        crud.add_item_to_collection(session=session, collection_id=new_collection.id, item_id=item_id)
+        bucket = session.exec(bucket_stmt).first()
+        
+        if not bucket:
+            visible_name = current_user.full_name or (current_user.profile.alias if current_user.profile else None) or current_user.email
+            collection_in = CollectionCreate(
+                title=f"{visible_name}'s Bucket",
+                description=f"Collection of items {visible_name} is sharing with this community.",
+                collection_type=CollectionType.BUCKET
+            )
+            bucket = crud.create_collection(
+                session=session, 
+                collection_in=collection_in, 
+                owner_id=current_user.id,
+                community_id=id
+            )
+        
+        crud.add_item_to_collection(session=session, collection_id=bucket.id, item_id=item_id)
 
     session.commit()
     return Message(message="Item added to community pool")

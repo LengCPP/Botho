@@ -16,6 +16,8 @@ from app.models import (
     CommunityMember,
     CommunityMemberStatus,
     CommunityMemberRole,
+    CollectionType,
+    Item,
 )
 from app import crud
 
@@ -95,9 +97,37 @@ def create_collection(
     """
     Create new collection.
     """
-    owner_id = None
-    if community_id:
-        # Check if admin
+    owner_id = current_user.id
+    
+    if collection_in.collection_type == CollectionType.BUCKET:
+        if not community_id:
+            raise HTTPException(status_code=400, detail="Bucket collections must be associated with a community")
+        
+        # Check if member
+        member_stmt = select(CommunityMember).where(
+            CommunityMember.community_id == community_id,
+            CommunityMember.user_id == current_user.id,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+        )
+        if not session.exec(member_stmt).first() and not current_user.is_superuser:
+            raise HTTPException(status_code=403, detail="Must be a member of the community to create a bucket")
+
+        # Check for existing bucket
+        existing_bucket_stmt = select(Collection).where(
+            Collection.owner_id == current_user.id,
+            Collection.community_id == community_id,
+            Collection.collection_type == CollectionType.BUCKET
+        )
+        if session.exec(existing_bucket_stmt).first():
+            raise HTTPException(status_code=400, detail="You already have a bucket in this community")
+
+        # Force default title and description
+        visible_name = current_user.full_name or (current_user.profile.alias if current_user.profile else None) or current_user.email
+        collection_in.title = f"{visible_name}'s Bucket"
+        collection_in.description = f"Collection of items {visible_name} is sharing with this community."
+        
+    elif community_id:
+        # Check if admin for non-bucket community collections
         statement = select(CommunityMember).where(
             CommunityMember.community_id == community_id,
             CommunityMember.user_id == current_user.id,
@@ -106,13 +136,11 @@ def create_collection(
         )
         membership = session.exec(statement).first()
         if not membership and not current_user.is_superuser:
-            # Also check if creator
             from app.models import Community
             comm = session.get(Community, community_id)
             if not comm or comm.created_by != current_user.id:
                 raise HTTPException(status_code=403, detail="Only community admins can create community collections")
-    else:
-        owner_id = current_user.id
+        owner_id = None # Owned by community
 
     collection = crud.create_collection(
         session=session, collection_in=collection_in, owner_id=owner_id, community_id=community_id
@@ -167,6 +195,11 @@ def update_collection(
             
     if not can_edit:
         raise HTTPException(status_code=403, detail="Not enough permissions")
+    
+    # If bucket, prevent updating title or description
+    if collection.collection_type == CollectionType.BUCKET:
+        collection_in.title = None
+        collection_in.description = None
     
     collection = crud.update_collection(
         session=session, db_collection=collection, collection_in=collection_in
@@ -242,6 +275,15 @@ def add_item_to_collection(
     if not can_manage:
         raise HTTPException(status_code=403, detail="Not enough permissions")
     
+    item = session.get(Item, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    # If bucket, user must own the item
+    if collection.collection_type == CollectionType.BUCKET:
+        if item.owner_id != current_user.id:
+            raise HTTPException(status_code=403, detail="You can only add your own items to your bucket")
+
     # Check if item is already in ANY collection
     from app.models import CollectionItem
     existing_link = session.exec(

@@ -86,7 +86,7 @@ function CollectionDetail() {
 
   const isOwner = user?.id === collection?.owner_id
   const isCommunityAdmin =
-    community?.current_user_role === "admin" ||
+    community?.current_user_role === "ADMIN" ||
     community?.created_by === user?.id
   const canManage = isOwner || isCommunityAdmin || !!user?.is_superuser
 
@@ -460,7 +460,7 @@ function CollectionDetail() {
         <Box width="full">
           <Heading size="md" mb={4}>
             Items in this{" "}
-            {collection.collection_type === "library"
+            {collection.collection_type === "LIBRARY"
               ? "Library"
               : "Collection"}
           </Heading>

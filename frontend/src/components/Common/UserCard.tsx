@@ -59,12 +59,12 @@ const UserCard = ({ user }: UserCardProps) => {
           {user.friendship_status && (
             <Box
               color={
-                user.friendship_status === "accepted"
+                user.friendship_status === "ACCEPTED"
                   ? "green.500"
                   : "orange.500"
               }
               title={
-                user.friendship_status === "accepted"
+                user.friendship_status === "ACCEPTED"
                   ? "Friends"
                   : "Friend Request Pending"
               }

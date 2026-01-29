@@ -28,14 +28,17 @@ def search_user_by_id(
 ) -> Any:
     """
     Search for a user by their unique public ID.
+    Strictly expects the format 'u-xxxxxxx'.
     """
-    normalized_id = public_id.lower().strip()
-    if not normalized_id.startswith("u-"):
-        normalized_id = f"u-{normalized_id}"
+    search_id = public_id.lower().strip()
+    
+    if not search_id.startswith("u-"):
+        raise HTTPException(status_code=400, detail="Invalid ID format. Must start with 'u-'")
         
     user = session.exec(
-        select(User).where(User.public_id == normalized_id)
+        select(User).where(User.public_id == search_id)
     ).first()
+    
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     

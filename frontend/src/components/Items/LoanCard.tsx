@@ -50,9 +50,9 @@ export function LoanCard({ loan, type }: LoanCardProps) {
     },
   })
 
-  const isPending = loan.status === "pending"
-  const isAccepted = loan.status === "accepted"
-  const isActive = loan.status === "active"
+  const isPending = loan.status === "PENDING"
+  const isAccepted = loan.status === "ACCEPTED"
+  const isActive = loan.status === "ACTIVE"
 
   return (
     <Box p={4} borderWidth="1px" borderRadius="lg" bg="bg.panel" boxShadow="sm">
@@ -78,13 +78,13 @@ export function LoanCard({ loan, type }: LoanCardProps) {
         </VStack>
         <Badge
           colorPalette={
-            loan.status === "active"
+            loan.status === "ACTIVE"
               ? "green"
-              : loan.status === "pending"
+              : loan.status === "PENDING"
                 ? "orange"
-                : loan.status === "accepted"
+                : loan.status === "ACCEPTED"
                   ? "blue"
-                  : loan.status === "rejected"
+                  : loan.status === "REJECTED"
                     ? "red"
                     : "gray"
           }
