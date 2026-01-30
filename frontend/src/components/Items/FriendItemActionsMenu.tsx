@@ -6,7 +6,7 @@ import {
 } from "@/client"
 import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
-import { IconButton } from "@chakra-ui/react"
+import { Button, IconButton, VStack, useBreakpointValue } from "@chakra-ui/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { BsThreeDotsVertical } from "react-icons/bs"
@@ -20,6 +20,15 @@ import {
 } from "react-icons/fi"
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from "../ui/menu"
 import { LoanRequestModal } from "./LoanRequestModal"
+import {
+  DialogBody,
+  DialogCloseTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogRoot,
+  DialogTitle,
+  DialogTrigger,
+} from "../ui/dialog"
 
 interface FriendItemActionsMenuProps {
   item: ItemPublic
@@ -37,10 +46,13 @@ export const FriendItemActionsMenu = ({
   isAdmin = false,
 }: FriendItemActionsMenuProps) => {
   const [isLoanModalOpen, setIsLoanModalOpen] = useState(false)
+  const [isActionsModalOpen, setIsActionsModalOpen] = useState(false)
+  
   const queryClient = useQueryClient()
   const { user: currentUser } = useAuth()
   const { showSuccessToast, showErrorToast } = useCustomToast()
-
+  
+  const isMobile = useBreakpointValue({ base: true, md: false })
   const isPooledByMe = item.added_by_id === currentUser?.id
   const isCommunityOwned = !!item.community_owner
 
@@ -81,6 +93,7 @@ export const FriendItemActionsMenu = ({
         queryKey: ["communityItems", communityId],
       })
       queryClient.invalidateQueries({ queryKey: ["items"] })
+      setIsActionsModalOpen(false)
     },
     onError: () => showErrorToast("Failed to initiate donation"),
   })
@@ -94,6 +107,7 @@ export const FriendItemActionsMenu = ({
         queryKey: ["communityItems", communityId],
       })
       queryClient.invalidateQueries({ queryKey: ["items"] })
+      setIsActionsModalOpen(false)
     },
     onError: () => showErrorToast("Failed to ratify donation"),
   })
@@ -110,6 +124,7 @@ export const FriendItemActionsMenu = ({
         queryKey: ["communityItems", communityId],
       })
       queryClient.invalidateQueries({ queryKey: ["items"] })
+      setIsActionsModalOpen(false)
     },
     onError: () => showErrorToast("Failed to remove item"),
   })
@@ -119,6 +134,7 @@ export const FriendItemActionsMenu = ({
     onSuccess: () => {
       showSuccessToast("Item added to your collection!")
       queryClient.invalidateQueries({ queryKey: ["items"] })
+      setIsActionsModalOpen(false)
     },
     onError: () => showErrorToast("Failed to copy item"),
   })
@@ -141,6 +157,202 @@ export const FriendItemActionsMenu = ({
     )
   }
 
+  const actions = (
+    <>
+      {isMobile ? (
+        <Button
+          variant="ghost"
+          justifyContent="center"
+          width="full"
+          onClick={() => {
+            setIsLoanModalOpen(true)
+            setIsActionsModalOpen(false)
+          }}
+          disabled={!item.is_available}
+        >
+          <FiBookOpen style={{ marginRight: "8px" }} />
+          {item.is_available ? "Request Loan" : "On Loan (Unavailable)"}
+        </Button>
+      ) : (
+        <MenuItem
+          value="request-loan"
+          onClick={() => setIsLoanModalOpen(true)}
+          disabled={!item.is_available}
+        >
+          <FiBookOpen style={{ marginRight: "8px" }} />
+          {item.is_available ? "Request Loan" : "On Loan (Unavailable)"}
+        </MenuItem>
+      )}
+
+      {isMobile ? (
+        <Button
+          variant="ghost"
+          justifyContent="center"
+          width="full"
+          onClick={(e) => {
+            e.stopPropagation()
+            duplicateMutation.mutate()
+          }}
+          disabled={duplicateMutation.isPending}
+        >
+          <FiCopy style={{ marginRight: "8px" }} />
+          {hasCopy ? "I have another copy" : "I have a copy"}
+        </Button>
+      ) : (
+        <MenuItem
+          value="duplicate"
+          onClick={(e) => {
+            e.stopPropagation()
+            duplicateMutation.mutate()
+          }}
+          disabled={duplicateMutation.isPending}
+        >
+          <FiCopy style={{ marginRight: "8px" }} />
+          {hasCopy ? "I have another copy" : "I have a copy"}
+        </MenuItem>
+      )}
+
+      {communityId && (
+        <>
+          {isPooledByMe &&
+            !isCommunityOwned &&
+            !item.is_donation_pending && (
+              isMobile ? (
+                <Button
+                  variant="ghost"
+                  justifyContent="center"
+                  width="full"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "Donate this item to the community? You will lose personal ownership.",
+                      )
+                    ) {
+                      donateMutation.mutate()
+                    }
+                  }}
+                >
+                  <FiHeart style={{ marginRight: "8px" }} />
+                  Donate to Community
+                </Button>
+              ) : (
+                <MenuItem
+                  value="donate"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "Donate this item to the community? You will lose personal ownership.",
+                      )
+                    ) {
+                      donateMutation.mutate()
+                    }
+                  }}
+                >
+                  <FiHeart style={{ marginRight: "8px" }} />
+                  Donate to Community
+                </MenuItem>
+              )
+            )}
+
+          {item.is_donation_pending && isAdmin && (
+            isMobile ? (
+              <Button
+                variant="ghost"
+                justifyContent="center"
+                width="full"
+                onClick={() => ratifyDonationMutation.mutate()}
+              >
+                <FiCheck style={{ marginRight: "8px" }} />
+                Ratify Donation
+              </Button>
+            ) : (
+              <MenuItem
+                value="ratify"
+                onClick={() => ratifyDonationMutation.mutate()}
+              >
+                <FiCheck style={{ marginRight: "8px" }} />
+                Ratify Donation
+              </MenuItem>
+            )
+          )}
+
+          {(isAdmin || isPooledByMe) && (
+            isMobile ? (
+              <Button
+                variant="ghost"
+                justifyContent="center"
+                width="full"
+                color="red.500"
+                onClick={() => {
+                  if (
+                    window.confirm("Remove this item from community pool?")
+                  ) {
+                    removeItemMutation.mutate()
+                  }
+                }}
+              >
+                <FiTrash2 style={{ marginRight: "8px" }} />
+                Remove from Community
+              </Button>
+            ) : (
+              <MenuItem
+                value="remove-from-community"
+                color="red.500"
+                onClick={() => {
+                  if (
+                    window.confirm("Remove this item from community pool?")
+                  ) {
+                    removeItemMutation.mutate()
+                  }
+                }}
+              >
+                <FiTrash2 style={{ marginRight: "8px" }} />
+                Remove from Community
+              </MenuItem>
+            )
+          )}
+        </>
+      )}
+    </>
+  )
+
+  if (isMobile) {
+    return (
+      <>
+        <DialogRoot
+          open={isActionsModalOpen}
+          onOpenChange={(e) => setIsActionsModalOpen(e.open)}
+          placement="center"
+          size="xs"
+        >
+          <DialogTrigger asChild>
+            <IconButton variant="ghost" color="inherit">
+              <BsThreeDotsVertical />
+            </IconButton>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Item Actions</DialogTitle>
+            </DialogHeader>
+            <DialogBody pb={6}>
+              <VStack gap={2} align="stretch">
+                {actions}
+              </VStack>
+            </DialogBody>
+            <DialogCloseTrigger />
+          </DialogContent>
+        </DialogRoot>
+
+        <LoanRequestModal
+          item={item}
+          isOpen={isLoanModalOpen}
+          onClose={() => setIsLoanModalOpen(false)}
+          communityId={communityId}
+        />
+      </>
+    )
+  }
+
   return (
     <>
       <MenuRoot>
@@ -149,79 +361,7 @@ export const FriendItemActionsMenu = ({
             <BsThreeDotsVertical />
           </IconButton>
         </MenuTrigger>
-        <MenuContent>
-          <MenuItem
-            value="request-loan"
-            onClick={() => setIsLoanModalOpen(true)}
-            disabled={!item.is_available}
-          >
-            <FiBookOpen style={{ marginRight: "8px" }} />
-            {item.is_available ? "Request Loan" : "On Loan (Unavailable)"}
-          </MenuItem>
-
-          <MenuItem
-            value="duplicate"
-            onClick={(e) => {
-              e.stopPropagation()
-              duplicateMutation.mutate()
-            }}
-            disabled={duplicateMutation.isPending}
-          >
-            <FiCopy style={{ marginRight: "8px" }} />
-            {hasCopy ? "I have another copy" : "I have a copy"}
-          </MenuItem>
-
-          {communityId && (
-            <>
-              {isPooledByMe &&
-                !isCommunityOwned &&
-                !item.is_donation_pending && (
-                  <MenuItem
-                    value="donate"
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          "Donate this item to the community? You will lose personal ownership.",
-                        )
-                      ) {
-                        donateMutation.mutate()
-                      }
-                    }}
-                  >
-                    <FiHeart style={{ marginRight: "8px" }} />
-                    Donate to Community
-                  </MenuItem>
-                )}
-
-              {item.is_donation_pending && isAdmin && (
-                <MenuItem
-                  value="ratify"
-                  onClick={() => ratifyDonationMutation.mutate()}
-                >
-                  <FiCheck style={{ marginRight: "8px" }} />
-                  Ratify Donation
-                </MenuItem>
-              )}
-
-              {(isAdmin || isPooledByMe) && (
-                <MenuItem
-                  value="remove-from-community"
-                  color="red.500"
-                  onClick={() => {
-                    if (
-                      window.confirm("Remove this item from community pool?")
-                    ) {
-                      removeItemMutation.mutate()
-                    }
-                  }}
-                >
-                  <FiTrash2 style={{ marginRight: "8px" }} />
-                  Remove from Community
-                </MenuItem>
-              )}
-            </>
-          )}
-        </MenuContent>
+        <MenuContent>{actions}</MenuContent>
       </MenuRoot>
 
       <LoanRequestModal

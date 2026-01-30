@@ -17,7 +17,13 @@ import {
 } from "@/components/ui/dialog"
 import useCustomToast from "@/hooks/useCustomToast"
 
-const DeleteItem = ({ id }: { id: string }) => {
+interface DeleteItemProps {
+  id: string
+  width?: string
+  justifyContent?: string
+}
+
+const DeleteItem = ({ id, width, justifyContent }: DeleteItemProps) => {
   const [isOpen, setIsOpen] = useState(false)
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
@@ -57,7 +63,12 @@ const DeleteItem = ({ id }: { id: string }) => {
       onOpenChange={({ open }) => setIsOpen(open)}
     >
       <DialogTrigger asChild>
-        <Button variant={"dangerSecondary" as any} size="sm">
+        <Button
+          variant={"dangerSecondary" as any}
+          size="sm"
+          width={width}
+          justifyContent={justifyContent}
+        >
           <FiTrash2 fontSize="16px" />
           Delete Item
         </Button>

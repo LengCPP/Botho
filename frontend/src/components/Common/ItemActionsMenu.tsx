@@ -1,4 +1,4 @@
-import { IconButton } from "@chakra-ui/react"
+import { Button, IconButton, VStack, useBreakpointValue } from "@chakra-ui/react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { BsThreeDotsVertical } from "react-icons/bs"
@@ -9,6 +9,15 @@ import { CommunitiesService, type ItemPublic, ItemsService } from "@/client"
 import useCustomToast from "@/hooks/useCustomToast"
 import DeleteItem from "../Items/DeleteItem"
 import EditItem from "../Items/EditItem"
+import {
+  DialogBody,
+  DialogCloseTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogRoot,
+  DialogTitle,
+  DialogTrigger,
+} from "../ui/dialog"
 import ConfirmationModal from "./ConfirmationModal"
 
 interface ItemActionsMenuProps {
@@ -29,7 +38,9 @@ export const ItemActionsMenu = ({
   const [confirmationType, setConfirmationType] = useState<
     "donate" | "removeCommunity" | "removeCollection" | null
   >(null)
+  const [isActionsModalOpen, setIsActionsModalOpen] = useState(false)
 
+  const isMobile = useBreakpointValue({ base: true, md: false })
   const isCommunityOwned = !!item.community_owner
 
   const donateMutation = useMutation({
@@ -45,6 +56,7 @@ export const ItemActionsMenu = ({
       })
       queryClient.invalidateQueries({ queryKey: ["items"] })
       setConfirmationType(null)
+      setIsActionsModalOpen(false)
     },
     onError: () => {
       showErrorToast("Failed to initiate donation")
@@ -65,6 +77,7 @@ export const ItemActionsMenu = ({
       })
       queryClient.invalidateQueries({ queryKey: ["items"] })
       setConfirmationType(null)
+      setIsActionsModalOpen(false)
     },
     onError: () => {
       showErrorToast("Failed to remove item")
@@ -77,6 +90,7 @@ export const ItemActionsMenu = ({
     onSuccess: () => {
       showSuccessToast("Another copy added to your collection!")
       queryClient.invalidateQueries({ queryKey: ["items"] })
+      setIsActionsModalOpen(false)
     },
     onError: () => showErrorToast("Failed to copy item"),
   })
@@ -91,6 +105,7 @@ export const ItemActionsMenu = ({
         onRemoveFromCollection()
       }
       setConfirmationType(null)
+      setIsActionsModalOpen(false)
     }
   }
 
@@ -113,7 +128,7 @@ export const ItemActionsMenu = ({
         return {
           title: "Remove from Collection",
           message: "Remove this item from the collection?",
-          isLoading: false, // Since it's a callback, we don't track loading state here easily unless passed in
+          isLoading: false,
         }
       default:
         return {
@@ -126,6 +141,184 @@ export const ItemActionsMenu = ({
 
   const config = getConfirmationConfig()
 
+  const actions = (
+    <>
+      {isMobile ? (
+        <>
+          <EditItem
+            item={item}
+            width="full"
+            justifyContent="center"
+          />
+          <DeleteItem
+            id={item.id}
+            width="full"
+            justifyContent="center"
+          />
+        </>
+      ) : (
+        <>
+          <EditItem item={item} />
+          <DeleteItem id={item.id} />
+        </>
+      )}
+      {isMobile ? (
+        <Button
+          variant="ghost"
+          justifyContent="center"
+          width="full"
+          onClick={(e) => {
+            e.stopPropagation()
+            duplicateMutation.mutate()
+          }}
+          disabled={duplicateMutation.isPending}
+        >
+          <FiCopy style={{ marginRight: "8px" }} />I have another copy
+        </Button>
+      ) : (
+        <MenuItem
+          value="duplicate"
+          onClick={(e) => {
+            e.stopPropagation()
+            duplicateMutation.mutate()
+          }}
+          disabled={duplicateMutation.isPending}
+        >
+          <FiCopy style={{ marginRight: "8px" }} />I have another copy
+        </MenuItem>
+      )}
+
+      {onRemoveFromCollection &&
+        (isMobile ? (
+          <Button
+            variant="ghost"
+            justifyContent="center"
+            width="full"
+            color="red.500"
+            onClick={(e) => {
+              e.stopPropagation()
+              setConfirmationType("removeCollection")
+            }}
+          >
+            <FiMinusCircle style={{ marginRight: "8px" }} />
+            Remove from Collection
+          </Button>
+        ) : (
+          <MenuItem
+            value="remove-from-collection"
+            color="red.500"
+            onClick={(e) => {
+              e.stopPropagation()
+              setConfirmationType("removeCollection")
+            }}
+          >
+            <FiMinusCircle style={{ marginRight: "8px" }} />
+            Remove from Collection
+          </MenuItem>
+        ))}
+
+      {communityId && (
+        <>
+          {!isCommunityOwned && !item.is_donation_pending && (
+            isMobile ? (
+              <Button
+                variant="ghost"
+                justifyContent="center"
+                width="full"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setConfirmationType("donate")
+                }}
+              >
+                <FiHeart style={{ marginRight: "8px" }} />
+                Donate to Community
+              </Button>
+            ) : (
+              <MenuItem
+                value="donate"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setConfirmationType("donate")
+                }}
+              >
+                <FiHeart style={{ marginRight: "8px" }} />
+                Donate to Community
+              </MenuItem>
+            )
+          )}
+          {(isAdmin || !isCommunityOwned) && (
+            isMobile ? (
+              <Button
+                variant="ghost"
+                justifyContent="center"
+                width="full"
+                color="red.500"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setConfirmationType("removeCommunity")
+                }}
+              >
+                <FiTrash2 style={{ marginRight: "8px" }} />
+                Remove from Community
+              </Button>
+            ) : (
+              <MenuItem
+                value="remove-from-community"
+                color="red.500"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setConfirmationType("removeCommunity")
+                }}
+              >
+                <FiTrash2 style={{ marginRight: "8px" }} />
+                Remove from Community
+              </MenuItem>
+            )
+          )}
+        </>
+      )}
+    </>
+  )
+
+  if (isMobile) {
+    return (
+      <>
+        <DialogRoot
+          open={isActionsModalOpen}
+          onOpenChange={(e) => setIsActionsModalOpen(e.open)}
+          placement="center"
+          size="xs"
+        >
+          <DialogTrigger asChild>
+            <IconButton variant="ghost" color="inherit">
+              <BsThreeDotsVertical />
+            </IconButton>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Item Actions</DialogTitle>
+            </DialogHeader>
+            <DialogBody pb={6}>
+              <VStack gap={2} align="stretch">
+                {actions}
+              </VStack>
+            </DialogBody>
+            <DialogCloseTrigger />
+          </DialogContent>
+        </DialogRoot>
+
+        <ConfirmationModal
+          isOpen={!!confirmationType}
+          onClose={() => setConfirmationType(null)}
+          onConfirm={handleConfirm}
+          title={config.title}
+          message={config.message}
+          isLoading={config.isLoading}
+        />
+      </>
+    )
+  }
+
   return (
     <>
       <MenuRoot>
@@ -134,62 +327,7 @@ export const ItemActionsMenu = ({
             <BsThreeDotsVertical />
           </IconButton>
         </MenuTrigger>
-        <MenuContent>
-          <EditItem item={item} />
-          <DeleteItem id={item.id} />
-          <MenuItem
-            value="duplicate"
-            onClick={(e) => {
-              e.stopPropagation()
-              duplicateMutation.mutate()
-            }}
-            disabled={duplicateMutation.isPending}
-          >
-            <FiCopy style={{ marginRight: "8px" }} />I have another copy
-          </MenuItem>
-          {onRemoveFromCollection && (
-            <MenuItem
-              value="remove-from-collection"
-              color="red.500"
-              onClick={(e) => {
-                e.stopPropagation()
-                setConfirmationType("removeCollection")
-              }}
-            >
-              <FiMinusCircle style={{ marginRight: "8px" }} />
-              Remove from Collection
-            </MenuItem>
-          )}
-          {communityId && (
-            <>
-              {!isCommunityOwned && !item.is_donation_pending && (
-                <MenuItem
-                  value="donate"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setConfirmationType("donate")
-                  }}
-                >
-                  <FiHeart style={{ marginRight: "8px" }} />
-                  Donate to Community
-                </MenuItem>
-              )}
-              {(isAdmin || !isCommunityOwned) && (
-                <MenuItem
-                  value="remove-from-community"
-                  color="red.500"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setConfirmationType("removeCommunity")
-                  }}
-                >
-                  <FiTrash2 style={{ marginRight: "8px" }} />
-                  Remove from Community
-                </MenuItem>
-              )}
-            </>
-          )}
-        </MenuContent>
+        <MenuContent>{actions}</MenuContent>
       </MenuRoot>
 
       <ConfirmationModal

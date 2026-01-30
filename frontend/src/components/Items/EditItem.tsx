@@ -38,6 +38,8 @@ import { Field } from "../ui/field"
 
 interface EditItemProps {
   item: ItemPublic
+  width?: string
+  justifyContent?: string
 }
 
 const BOOK_CLASSIFICATION: Record<string, string[]> = {
@@ -88,7 +90,7 @@ const BOOK_CLASSIFICATION: Record<string, string[]> = {
   ],
 }
 
-const EditItem = ({ item }: EditItemProps) => {
+const EditItem = ({ item, width, justifyContent }: EditItemProps) => {
   const [isOpen, setIsOpen] = useState(false)
   const queryClient = useQueryClient()
   const { showSuccessToast } = useCustomToast()
@@ -171,7 +173,7 @@ const EditItem = ({ item }: EditItemProps) => {
       onOpenChange={({ open }) => setIsOpen(open)}
     >
       <DialogTrigger asChild>
-        <Button variant="ghost">
+        <Button variant="ghost" width={width} justifyContent={justifyContent}>
           <FaExchangeAlt fontSize="16px" />
           Edit Item
         </Button>
