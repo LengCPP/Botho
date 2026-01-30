@@ -5,6 +5,7 @@ import {
   HStack,
   Text,
   VStack,
+  useBreakpointValue,
 } from "@chakra-ui/react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
@@ -37,6 +38,10 @@ const UserMenu = () => {
   const queryClient = useQueryClient()
   const { data: notifications } = useNotifications()
   const [showNotifications, setShowNotifications] = useState(false)
+
+  // Only show the notification dot on the avatar if we are on mobile 
+  // (where the standalone bell icon is hidden)
+  const isMobile = useBreakpointValue({ base: true, md: false })
 
   const handleLogout = async () => {
     logout()
@@ -71,7 +76,7 @@ const UserMenu = () => {
                 <UserAvatar
                   user={user as any}
                   size="32px"
-                  hasNotification={hasNotifications}
+                  hasNotification={isMobile && hasNotifications}
                 />
                 <Box
                   position="absolute"
