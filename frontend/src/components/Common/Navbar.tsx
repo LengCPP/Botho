@@ -103,8 +103,8 @@ function Navbar() {
           <Image
             src={Logo}
             alt="botho logo"
-            w={{ base: "100px", md: "180px" }}
-            maxW="2xs"
+            w={{ base: "80px", md: "140px" }}
+            maxW="150px"
           />
         </Link>
       </HStack>
