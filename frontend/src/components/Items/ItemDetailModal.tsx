@@ -34,8 +34,8 @@ export const ItemDetailModal = ({
 
   const isBook = item.item_type === "book"
   const extraData = (item.extra_data as any) || {}
-  const bgColor = useColorModeValue("orange.50", "gray.800")
-  const borderColor = useColorModeValue("orange.200", "gray.600")
+  const bgColor = useColorModeValue("accent.50", "gray.800")
+  const borderColor = useColorModeValue("accent.200", "gray.600")
 
   return (
     <DialogRoot
@@ -57,7 +57,7 @@ export const ItemDetailModal = ({
                 {String(item.item_type || "General")}
               </Badge>
               {isBook && extraData.category && (
-                <Badge variant="outline" colorPalette="blue">
+                <Badge variant="outline" colorPalette="main">
                   {extraData.category}
                 </Badge>
               )}

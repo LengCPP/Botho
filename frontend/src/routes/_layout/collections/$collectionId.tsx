@@ -65,8 +65,8 @@ function CollectionDetail() {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   const isMobile = useBreakpointValue({ base: true, md: false })
 
-  const bgColor = useColorModeValue("orange.50", "gray.800")
-  const borderColor = useColorModeValue("orange.200", "gray.600")
+  const bgColor = useColorModeValue("accent.50", "gray.800")
+  const borderColor = useColorModeValue("accent.200", "gray.600")
   const selectBg = useColorModeValue("white", "gray.800")
   const selectColor = useColorModeValue("black", "white")
   const selectBorder = useColorModeValue("gray.300", "gray.600")
@@ -258,7 +258,7 @@ function CollectionDetail() {
           <HStack gap={4}>
             {canManage && (
               <>
-                <Badge colorPalette="orange" size="lg" variant="solid">
+                <Badge colorPalette="accent" size="lg" variant="solid">
                   {isOwner ? "Owner View" : "Admin View"}
                 </Badge>
 
@@ -305,7 +305,7 @@ function CollectionDetail() {
                   variant="outline"
                   size="sm"
                   colorPalette={
-                    categoryFilter || genreFilter ? "orange" : "gray"
+                    categoryFilter || genreFilter ? "accent" : "gray"
                   }
                 >
                   <FaFilter /> Filter
@@ -439,7 +439,7 @@ function CollectionDetail() {
                     <IconButton
                       aria-label="Add to collection"
                       size="xs"
-                      colorPalette="orange"
+                      colorPalette="accent"
                       onClick={() => addMutation.mutate(item.id)}
                       loading={
                         addMutation.isPending &&

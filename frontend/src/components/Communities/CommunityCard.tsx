@@ -28,8 +28,8 @@ const CommunityCard = ({ community }: CommunityCardProps) => {
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const { user: currentUser } = useAuth()
 
-  const bgColor = useColorModeValue("orange.50", "gray.800")
-  const borderColor = useColorModeValue("orange.200", "gray.600")
+  const bgColor = useColorModeValue("accent.50", "gray.800")
+  const borderColor = useColorModeValue("accent.200", "gray.600")
   const textColor = useColorModeValue("gray.800", "gray.100")
 
   const requiresApproval = community.requires_approval
@@ -91,7 +91,7 @@ const CommunityCard = ({ community }: CommunityCardProps) => {
                   Private
                 </Badge>
               ) : (
-                <Badge colorPalette="blue" variant="subtle">
+                <Badge colorPalette="main" variant="subtle">
                   Global
                 </Badge>
               )}
@@ -140,7 +140,7 @@ const CommunityCard = ({ community }: CommunityCardProps) => {
             <Button
               asChild
               size="sm"
-              colorPalette="orange"
+              colorPalette="accent"
               variant="solid"
               width="full"
             >

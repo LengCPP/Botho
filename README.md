@@ -1,4 +1,4 @@
-# RSC-Xchange
+# Botho
 
 A resource sharing, selling, and lending platform designed for circles of friends and trusted communities. Built with modern web technologies for a seamless experience.
 
@@ -8,7 +8,7 @@ A resource sharing, selling, and lending platform designed for circles of friend
 
 ## Project Architecture
 
-RSC-Xchange follows a modern, containerized monorepo architecture designed for scalability and developer productivity.
+Botho follows a modern, containerized monorepo architecture designed for scalability and developer productivity.
 
 - **Frontend**: A single-page application (SPA) built with **React** and **TypeScript**, powered by **Vite**. It uses **Chakra UI** for styling, **TanStack Router** for navigation, and **TanStack Query** for data fetching.
 - **Backend**: A high-performance asynchronous API built with **FastAPI**. It utilizes **SQLModel** (combining SQLAlchemy and Pydantic) for database interactions and data validation.

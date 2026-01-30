@@ -134,7 +134,7 @@ const AddCollection = ({ communityId }: AddCollectionProps) => {
       onOpenChange={({ open }) => setIsOpen(open)}
     >
       <DialogTrigger asChild>
-        <Button variant="outline" my={4} colorPalette="orange">
+        <Button variant="outline" my={4} colorPalette="accent">
           <FaPlus fontSize="16px" />
           {isMobile ? "Collection" : "Create Collection"}
         </Button>
@@ -249,7 +249,7 @@ const AddCollection = ({ communityId }: AddCollectionProps) => {
             <Button
               variant="solid"
               type="submit"
-              colorPalette="orange"
+              colorPalette="accent"
               disabled={!isValid}
               loading={isSubmitting}
             >

@@ -23,8 +23,8 @@ interface UserCardProps {
 
 const UserCard = ({ user }: UserCardProps) => {
   const { user: currentUser } = useAuth()
-  const bgColor = useColorModeValue("orange.50", "gray.800")
-  const borderColor = useColorModeValue("orange.200", "gray.600")
+  const bgColor = useColorModeValue("accent.50", "gray.800")
+  const borderColor = useColorModeValue("accent.200", "gray.600")
   const textColor = useColorModeValue("gray.800", "gray.100")
 
   const isSelf = user.id === currentUser?.id
@@ -61,7 +61,7 @@ const UserCard = ({ user }: UserCardProps) => {
               color={
                 user.friendship_status === "ACCEPTED"
                   ? "green.500"
-                  : "orange.500"
+                  : "accent.500"
               }
               title={
                 user.friendship_status === "ACCEPTED"
@@ -84,7 +84,7 @@ const UserCard = ({ user }: UserCardProps) => {
         <Button
           asChild
           variant="solid"
-          colorPalette="orange"
+          colorPalette="accent"
           width="full"
           size="sm"
           mt={6}

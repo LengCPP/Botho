@@ -105,7 +105,7 @@ function AddAnnouncementModal({ communityId }: { communityId: string }) {
   return (
     <DialogRoot open={isOpen} onOpenChange={(e) => setIsOpen(e.open)}>
       <DialogTrigger asChild>
-        <Button size="sm" colorPalette="orange" variant="outline">
+        <Button size="sm" colorPalette="accent" variant="outline">
           <FiPlus /> {isMobile ? "Announcement" : "Add Announcement"}
         </Button>
       </DialogTrigger>
@@ -139,7 +139,7 @@ function AddAnnouncementModal({ communityId }: { communityId: string }) {
             Cancel
           </Button>
           <Button
-            colorPalette="orange"
+            colorPalette="accent"
             loading={mutation.isPending}
             onClick={() => mutation.mutate()}
             disabled={!title.trim() || !content.trim()}
@@ -360,7 +360,7 @@ function CommunityBoard() {
             {community.is_private ? (
               <Badge colorPalette="gray">Private</Badge>
             ) : (
-              <Badge colorPalette="blue">Global</Badge>
+              <Badge colorPalette="main">Global</Badge>
             )}
             {community.requires_approval ? (
               <Badge colorPalette="red">Closed</Badge>
@@ -551,7 +551,7 @@ function CommunityBoard() {
                         />
                         <Button
                           type="submit"
-                          colorPalette="orange"
+                          colorPalette="accent"
                           loading={postMessageMutation.isPending}
                         >
                           <FiSend />
@@ -710,7 +710,7 @@ function CommunityBoard() {
                               }}
                               colorPalette={
                                 member.friendship_status === "PENDING"
-                                  ? "orange"
+                                  ? "accent"
                                   : member.friendship_status === "ACCEPTED"
                                     ? "green"
                                     : "gray"

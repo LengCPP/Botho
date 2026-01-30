@@ -37,7 +37,7 @@ const UserAvatar = ({ user, size = "40px", fontSize }: UserAvatarProps) => {
       p="2px"
       borderRadius="full"
       border="2px solid"
-      borderColor="ui.hover"
+      borderColor="ui.primary"
     >
       <Avatar.Root boxSize={size}>
         <Avatar.Fallback

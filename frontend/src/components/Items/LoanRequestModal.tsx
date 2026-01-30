@@ -76,7 +76,7 @@ export function LoanRequestModal({
             Cancel
           </Button>
           <Button
-            colorPalette="orange"
+            colorPalette="accent"
             onClick={() =>
               mutation.mutate({
                 item_id: item.id,

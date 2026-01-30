@@ -21,7 +21,7 @@ import {
   namePattern,
   passwordRules,
 } from "@/utils"
-import Logo from "/assets/images/rsc-x-logo.png"
+import Logo from "/assets/images/botho-logo.png"
 
 export const Route = createFileRoute("/signup")({
   component: SignUp,
@@ -80,7 +80,7 @@ function SignUp() {
         >
           <Image
             src={Logo}
-            alt="rsc-xchange logo"
+            alt="botho logo"
             height="auto"
             maxW="2xs"
             alignSelf="center"

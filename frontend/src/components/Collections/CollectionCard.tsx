@@ -20,8 +20,8 @@ interface CollectionCardProps {
 }
 
 const CollectionCard = ({ collection }: CollectionCardProps) => {
-  const bgColor = useColorModeValue("orange.50", "gray.800")
-  const borderColor = useColorModeValue("orange.200", "gray.600")
+  const bgColor = useColorModeValue("accent.50", "gray.800")
+  const borderColor = useColorModeValue("accent.200", "gray.600")
   const textColor = useColorModeValue("gray.800", "gray.100")
 
   // Show up to 3 book covers as preview
@@ -54,7 +54,7 @@ const CollectionCard = ({ collection }: CollectionCardProps) => {
                 {collection.title}
               </Text>
             </Tooltip>
-            <Badge colorPalette="orange" variant="subtle" size="sm">
+            <Badge colorPalette="accent" variant="subtle" size="sm">
               {collection.collection_type === "LIBRARY"
                 ? "Library"
                 : "Collection"}
@@ -168,7 +168,7 @@ const CollectionCard = ({ collection }: CollectionCardProps) => {
         <Button
           asChild
           variant="solid"
-          colorPalette="orange"
+          colorPalette="accent"
           width="full"
           size="sm"
           mt="auto"

@@ -174,7 +174,7 @@ function SortingControls() {
           <Button
             variant="outline"
             size="sm"
-            colorPalette={category || genre ? "orange" : "gray"}
+            colorPalette={category || genre ? "accent" : "gray"}
           >
             <FaFilter /> Filter
           </Button>

@@ -60,7 +60,7 @@ function UserProfilePage() {
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
   const isMobile = useBreakpointValue({ base: true, md: false })
 
-  const borderColor = useColorModeValue("orange.200", "gray.600")
+  const borderColor = useColorModeValue("accent.200", "gray.600")
   const selectBg = useColorModeValue("white", "gray.800")
   const selectColor = useColorModeValue("black", "white")
   const selectBorder = useColorModeValue("#ccc", "gray.600")
@@ -161,10 +161,10 @@ function UserProfilePage() {
             }}
             colorPalette={
               user.friendship_status === "PENDING"
-                ? "orange"
+                ? "accent"
                 : user.friendship_status === "ACCEPTED"
                   ? "green"
-                  : "blue"
+                  : "main"
             }
             variant={user.friendship_status ? "outline" : "solid"}
             disabled={!!user.friendship_status}

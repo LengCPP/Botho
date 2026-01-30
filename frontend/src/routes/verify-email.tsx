@@ -46,7 +46,7 @@ function VerifyEmail() {
   if (mutation.isPending) {
     content = (
       <VStack gap={4}>
-        <Spinner size="xl" color="orange.500" />
+        <Spinner size="xl" color="accent.500" />
         <Text fontSize="lg">Verifying your email...</Text>
       </VStack>
     )

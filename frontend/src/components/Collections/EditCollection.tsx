@@ -192,7 +192,7 @@ const EditCollection = ({
             <Button
               variant="solid"
               type="submit"
-              colorPalette="orange"
+              colorPalette="accent"
               disabled={!isValid}
               loading={isSubmitting}
             >

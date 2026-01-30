@@ -64,7 +64,7 @@ function AddFriendModal() {
   return (
     <DialogRoot open={isOpen} onOpenChange={(e) => setIsOpen(e.open)}>
       <DialogTrigger asChild>
-        <Button variant="solid" colorPalette="orange">
+        <Button variant="solid" colorPalette="accent">
           <FiUserPlus /> Add Friend by ID
         </Button>
       </DialogTrigger>
@@ -93,7 +93,7 @@ function AddFriendModal() {
             Cancel
           </Button>
           <Button
-            colorPalette="orange"
+            colorPalette="accent"
             loading={searchAndRequestMutation.isPending}
             onClick={() => searchAndRequestMutation.mutate(searchId)}
             disabled={!searchId.trim()}
@@ -166,7 +166,7 @@ function Friends() {
           <Box>
             <HStack mb={4}>
               <Text fontWeight="bold">Incoming</Text>
-              <Badge colorPalette="orange" variant="subtle">
+              <Badge colorPalette="accent" variant="subtle">
                 {requestsReceived?.count || 0}
               </Badge>
             </HStack>
@@ -195,7 +195,7 @@ function Friends() {
                     <Flex gap={2}>
                       <Button
                         size="xs"
-                        colorPalette="orange"
+                        colorPalette="accent"
                         onClick={() => acceptMutation.mutate(user.id)}
                         loading={acceptMutation.isPending}
                       >
@@ -222,7 +222,7 @@ function Friends() {
           <Box>
             <HStack mb={4}>
               <Text fontWeight="bold">Sent</Text>
-              <Badge colorPalette="blue" variant="subtle">
+              <Badge colorPalette="main" variant="subtle">
                 {requestsSent?.count || 0}
               </Badge>
             </HStack>

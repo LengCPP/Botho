@@ -143,7 +143,7 @@ export const FriendItemActionsMenu = ({
     return (
       <IconButton
         size="xs"
-        colorPalette="blue"
+        colorPalette="main"
         variant="ghost"
         onClick={(e) => {
           e.stopPropagation()

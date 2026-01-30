@@ -81,9 +81,9 @@ export function LoanCard({ loan, type }: LoanCardProps) {
             loan.status === "ACTIVE"
               ? "green"
               : loan.status === "PENDING"
-                ? "orange"
+                ? "accent"
                 : loan.status === "ACCEPTED"
-                  ? "blue"
+                  ? "main"
                   : loan.status === "REJECTED"
                     ? "red"
                     : "gray"
@@ -144,7 +144,7 @@ export function LoanCard({ loan, type }: LoanCardProps) {
         {type === "outgoing" && isAccepted && (
           <Button
             size="xs"
-            colorPalette="blue"
+            colorPalette="main"
             width="full"
             onClick={() => ratifyMutation.mutate()}
             loading={ratifyMutation.isPending}

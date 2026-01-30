@@ -26,7 +26,7 @@ import { Field } from "@/components/ui/field"
 import { InputGroup } from "@/components/ui/input-group"
 import { PasswordInput } from "@/components/ui/password-input"
 import useAuth, { isLoggedIn } from "@/hooks/useAuth"
-import Logo from "/assets/images/rsc-x-logo.png"
+import Logo from "/assets/images/botho-logo.png"
 import { emailPattern, passwordRules } from "../utils"
 
 const loginSearchSchema = z.object({
@@ -110,7 +110,7 @@ function Login() {
       >
         <Image
           src={Logo}
-          alt="rsc-xchange logo"
+          alt="botho logo"
           height="auto"
           maxW="2xs"
           alignSelf="center"

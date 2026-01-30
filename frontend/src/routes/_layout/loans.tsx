@@ -77,7 +77,7 @@ function LoansPage() {
                   <ItemCard item={loan.item} loan={loan} />
                   {loan.status === "RETURN_PENDING" && (
                     <Badge
-                      colorPalette="blue"
+                      colorPalette="main"
                       variant="subtle"
                       width="full"
                       justifyContent="center"
@@ -103,7 +103,7 @@ function LoansPage() {
               alignItems="center"
               gap={2}
             >
-              <FiArrowDownLeft color="orange" /> Incoming Requests & Returns
+              <FiArrowDownLeft color="accent.500" /> Incoming Requests & Returns
             </Heading>
             {pendingIncoming.length === 0 ? (
               <Text fontSize="sm" color="fg.muted">
@@ -126,7 +126,7 @@ function LoansPage() {
               alignItems="center"
               gap={2}
             >
-              <FiArrowUpRight color="blue" /> My Requests
+              <FiArrowUpRight color="main.500" /> My Requests
             </Heading>
             {pendingOutgoing.length === 0 ? (
               <Text fontSize="sm" color="fg.muted">

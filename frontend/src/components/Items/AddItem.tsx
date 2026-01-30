@@ -471,7 +471,7 @@ const AddItem = ({
                             <Text fontWeight="medium">{item.title}</Text>
                             <Button
                               size="xs"
-                              colorPalette="orange"
+                              colorPalette="accent"
                               onClick={() => poolMutation.mutate(item.id)}
                               loading={poolMutation.isPending}
                             >

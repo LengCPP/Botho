@@ -1,4 +1,4 @@
-# FastAPI Project - Backend
+# Botho - Backend
 
 ## Requirements
 

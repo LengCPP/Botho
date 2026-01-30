@@ -13,7 +13,7 @@ import { FaBars } from "react-icons/fa"
 import { FiSettings } from "react-icons/fi"
 
 import useAuth from "@/hooks/useAuth"
-import Logo from "/assets/images/rsc-x-logo.png"
+import Logo from "/assets/images/botho-logo.png"
 import { ColorModeButton } from "../ui/color-mode"
 import {
   DrawerBackdrop,
@@ -102,7 +102,7 @@ function Navbar() {
         <Link to="/">
           <Image
             src={Logo}
-            alt="rsc-xchange logo"
+            alt="botho logo"
             w={{ base: "100px", md: "180px" }}
             maxW="2xs"
           />

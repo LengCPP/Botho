@@ -50,10 +50,10 @@ const ItemCard = ({
   const availableCount = items.filter((i) => i.is_available).length
 
   // Color Mode Values
-  const bgColor = useColorModeValue("orange.50", "gray.800")
+  const bgColor = useColorModeValue("accent.50", "gray.800")
   const textColor = useColorModeValue("gray.800", "gray.100")
-  const borderColor = useColorModeValue("orange.200", "gray.600")
-  const scrollbarColor = useColorModeValue("orange.200", "gray.600")
+  const borderColor = useColorModeValue("accent.200", "gray.600")
+  const scrollbarColor = useColorModeValue("accent.200", "gray.600")
 
   const handleFlip = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -211,7 +211,7 @@ const ItemCard = ({
               position="absolute"
               bottom={2}
               right={2}
-              colorPalette="orange"
+              colorPalette="accent"
               variant="solid"
               size="sm"
               borderRadius="full"
@@ -228,7 +228,7 @@ const ItemCard = ({
               position="absolute"
               top={2}
               right={2}
-              colorPalette="orange"
+              colorPalette="accent"
               variant="solid"
               onClick={handleGoToCollection}
               zIndex={10}
@@ -263,7 +263,7 @@ const ItemCard = ({
                   <IconButton
                     aria-label="Go to collection"
                     size="xs"
-                    colorPalette="orange"
+                    colorPalette="accent"
                     variant="ghost"
                     onClick={handleGoToCollection}
                   >
@@ -308,7 +308,7 @@ const ItemCard = ({
               {isBook && (extraData.category || extraData.genre) && (
                 <HStack gap={1} mt={1} wrap="wrap">
                   {extraData.category && (
-                    <Badge variant="outline" size="xs" colorPalette="blue">
+                    <Badge variant="outline" size="xs" colorPalette="main">
                       {extraData.category}
                     </Badge>
                   )}
@@ -356,7 +356,7 @@ const ItemCard = ({
                   >
                     Due Date
                   </Text>
-                  <Text fontSize="xs" fontWeight="bold" color="orange.500">
+                  <Text fontSize="xs" fontWeight="bold" color="accent.500">
                     {format(new Date(loan.end_date), "MMM d, yyyy")}
                   </Text>
                 </VStack>
@@ -416,7 +416,7 @@ const ItemCard = ({
                   >
                     <Text
                       fontSize="xs"
-                      color="blue.500"
+                      color="main.500"
                       _hover={{ textDecoration: "underline" }}
                     >
                       {loan.owner
@@ -463,7 +463,7 @@ const ItemCard = ({
                           >
                             <Text
                               fontSize="xs"
-                              color="blue.500"
+                              color="main.500"
                               _hover={{ textDecoration: "underline" }}
                             >
                               {effectiveDisplayOwnerId === user?.id
@@ -493,7 +493,7 @@ const ItemCard = ({
                           >
                             <Text
                               fontSize="xs"
-                              color="blue.500"
+                              color="main.500"
                               _hover={{ textDecoration: "underline" }}
                             >
                               {item.owner.id === user?.id

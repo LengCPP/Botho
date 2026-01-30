@@ -66,7 +66,7 @@ function SignupSuccess() {
         </Text>
 
         <Button
-          colorScheme="orange"
+          colorPalette="accent"
           onClick={handleResend}
           isLoading={mutation.isPending}
           isDisabled={cooldown > 0 || !email}

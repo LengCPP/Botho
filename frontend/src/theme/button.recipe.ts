@@ -17,10 +17,14 @@ export const buttonRecipe = defineRecipe({
         color: "white",
         _hover: {
           bg: "ui.hover",
-          _disabled: { bg: "ui.primary" },
+          _disabled: { bg: "ui.disabled" },
         },
         _active: {
           bg: "ui.hover",
+        },
+        _disabled: {
+          bg: "ui.disabled",
+          cursor: "not-allowed",
         },
       },
       secondary: {

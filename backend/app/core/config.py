@@ -107,7 +107,7 @@ class Settings(BaseSettings):
 
     MINIO_ROOT_USER: str = "admin"
     MINIO_ROOT_PASSWORD: str = "changethis"
-    MINIO_STORAGE_BUCKET: str = "rsc-xchange-images"
+    MINIO_STORAGE_BUCKET: str = "botho-images"
     MINIO_ENDPOINT: str = "minio"
     MINIO_PORT: int = 9000
     MINIO_PUBLIC_URL: str = "http://localhost:9000"

@@ -97,7 +97,7 @@ const NotificationsMenu = () => {
           {unreadCount > 0 && (
             <Text
               fontSize="xs"
-              color="blue.500"
+              color="main.500"
               cursor="pointer"
               _hover={{ textDecoration: "underline" }}
               onClick={(e) => {
@@ -135,7 +135,7 @@ const NotificationsMenu = () => {
                 <Flex gap={3} w="100%" align="start">
                   <Box mt={1.5} w={2}>
                     {!notification.is_read && (
-                      <Icon color="blue.500" fontSize="8px">
+                      <Icon color="main.500" fontSize="8px">
                         <FaCircle />
                       </Icon>
                     )}

@@ -47,9 +47,9 @@ export const CompactItemCard = ({
   const isBook = item.item_type === "book"
   const extraData = (item.extra_data as any) || {}
 
-  const bgColor = useColorModeValue("orange.50", "gray.800")
+  const bgColor = useColorModeValue("accent.50", "gray.800")
   const textColor = useColorModeValue("gray.800", "gray.100")
-  const borderColor = useColorModeValue("orange.200", "gray.600")
+  const borderColor = useColorModeValue("accent.200", "gray.600")
 
   const handleFlip = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -169,7 +169,7 @@ export const CompactItemCard = ({
               position="absolute"
               bottom={1}
               right={1}
-              colorPalette="orange"
+              colorPalette="accent"
               variant="solid"
               size="2xs"
               borderRadius="full"
@@ -268,7 +268,7 @@ export const CompactItemCard = ({
                   {item.description ||
                     "No description provided. Click to see more."}
                 </Text>
-                <Text fontSize="3xs" color="blue.500" mt={1} fontWeight="bold">
+                <Text fontSize="3xs" color="main.500" mt={1} fontWeight="bold">
                   TAP FOR MORE
                 </Text>
               </Box>
