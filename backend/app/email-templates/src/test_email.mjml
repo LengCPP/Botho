@@ -1,10 +1,36 @@
 <mjml>
-  <mj-body background-color="#fafbfc">
-    <mj-section background-color="#fff" padding="40px 20px">
-      <mj-column vertical-align="middle" width="100%">
-        <mj-text align="center" padding="35px" font-size="20px" font-family="Arial, Helvetica, sans-serif" color="#333">{{ project_name }}</mj-text>
-        <mj-text align="center" font-size="16px" padding-left="25px" padding-right="25px" font-family=", sans-serif" color="#555"><span>Test email for: {{ email }}</span></mj-text>
-        <mj-divider border-color="#ccc" border-width="2px"></mj-divider>
+  <mj-head>
+    <mj-attributes>
+      <mj-all font-family="Helvetica, Arial, sans-serif"></mj-all>
+      <mj-text font-size="16px" color="#333333" line-height="24px"></mj-text>
+      <mj-section padding="0px"></mj-section>
+    </mj-attributes>
+  </mj-head>
+  <mj-body background-color="#f4f4f4">
+    <!-- Top Accent Bar -->
+    <mj-section background-color="#5e2b3b" padding="5px 0">
+    </mj-section>
+    
+    <mj-section background-color="#ffffff" padding="40px 20px">
+      <mj-column width="100%">
+        <!-- Logo Section -->
+        <mj-image src="https://staging.rsc-xchange.app/assets/images/botho-logo.png" alt="Botho Logo" width="120px" padding-bottom="30px"></mj-image>
+        
+        <mj-divider border-color="#f4f4f4" border-width="1px" padding-bottom="30px"></mj-divider>
+        
+        <!-- Content Section -->
+        <mj-text align="center" font-size="20px" font-weight="bold" color="#333333" padding-bottom="20px">Test Email</mj-text>
+        <mj-text align="center" padding-bottom="30px">This is a test email for: <strong>{{ email }}</strong></mj-text>
+      </mj-column>
+    </mj-section>
+    
+    <!-- Footer Section -->
+    <mj-section padding="30px 20px">
+      <mj-column width="100%">
+        <mj-text align="center" font-size="12px" color="#999999">
+          &copy; 2026 Botho. All rights reserved.<br/>
+          This is an automated message, please do not reply.
+        </mj-text>
       </mj-column>
     </mj-section>
   </mj-body>

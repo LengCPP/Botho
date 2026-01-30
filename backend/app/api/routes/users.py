@@ -13,7 +13,8 @@ from app.api.deps import (
 from app.api.utils import filter_user_privacy
 from app.core.config import settings
 from app.core.security import get_password_hash, verify_password
-from app.storage import upload_image
+from app.storage import upload_image, delete_image
+from app.search import delete_item_from_search
 from app.models import (
     Friendship,
     FriendshipStatus,
@@ -240,6 +241,13 @@ def delete_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
             detail="You have active or pending loans. Please resolve all loans before deleting your account."
         )
     
+    # Handle items deletion and cleanup
+    for item in list(current_user.items):
+        if item.image_url:
+            delete_image(item.image_url)
+        delete_item_from_search(item.id)
+        session.delete(item)
+    
     session.delete(current_user)
     session.commit()
     return Message(message="User deleted successfully")
@@ -366,14 +374,12 @@ def delete_user(
             detail="User has active or pending loans. These must be resolved before deletion."
         )
     
-    # Handle items ownership before deleting user
+    # Handle items deletion and cleanup
     for item in list(user.items):
-        item.owners.remove(user)
-        item.count = max(0, item.count - 1)
-        if not item.owners:
-            session.delete(item)
-        else:
-            session.add(item)
+        if item.image_url:
+            delete_image(item.image_url)
+        delete_item_from_search(item.id)
+        session.delete(item)
             
     session.delete(user)
     session.commit()
