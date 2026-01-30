@@ -1,8 +1,27 @@
-import { Box, Button, HStack, Text, VStack } from "@chakra-ui/react"
+import {
+  Box,
+  Button,
+  Flex,
+  HStack,
+  Text,
+  VStack,
+} from "@chakra-ui/react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
-import { FiLogOut, FiSettings, FiUser } from "react-icons/fi"
+import { useState } from "react"
+import { FiLogOut, FiSettings, FiUser, FiBell } from "react-icons/fi"
 
+import { NotificationsService } from "@/client"
 import useAuth from "@/hooks/useAuth"
+import { useNotifications } from "@/hooks/useNotifications"
+import {
+  DialogBody,
+  DialogCloseTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogRoot,
+  DialogTitle,
+} from "../ui/dialog"
 import {
   MenuContent,
   MenuItem,
@@ -11,15 +30,28 @@ import {
   MenuTrigger,
 } from "../ui/menu"
 import UserAvatar from "./UserAvatar"
+import NotificationsList from "./NotificationsList"
 
 const UserMenu = () => {
   const { user, logout } = useAuth()
+  const queryClient = useQueryClient()
+  const { data: notifications } = useNotifications()
+  const [showNotifications, setShowNotifications] = useState(false)
 
   const handleLogout = async () => {
     logout()
   }
 
-  const name = user?.full_name || "Main Admin"
+  const markAllAsReadMutation = useMutation({
+    mutationFn: () => NotificationsService.markAllNotificationsAsRead(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] })
+    },
+  })
+
+  const name = user?.full_name || "User"
+  const unreadCount = notifications?.unread_count || 0
+  const hasNotifications = unreadCount > 0
 
   return (
     <Box>
@@ -36,7 +68,11 @@ const UserMenu = () => {
           >
             <HStack gap={2}>
               <Box position="relative" role="group">
-                <UserAvatar user={user as any} size="32px" />
+                <UserAvatar
+                  user={user as any}
+                  size="32px"
+                  hasNotification={hasNotifications}
+                />
                 <Box
                   position="absolute"
                   inset="2px"
@@ -50,7 +86,7 @@ const UserMenu = () => {
           </Button>
         </MenuTrigger>
 
-        <MenuContent boxShadow="lg" borderRadius="xl" py={2} minW="220px">
+        <MenuContent boxShadow="lg" borderRadius="xl" py={2} minW="240px">
           <Box px={4} py={3} mb={1}>
             <VStack align="start" gap={0}>
               <Text fontWeight="600" fontSize="sm" truncate maxW="180px">
@@ -63,6 +99,38 @@ const UserMenu = () => {
           </Box>
 
           <MenuSeparator mx={2} mb={2} />
+
+          {/* Notifications Trigger (Mobile Only) */}
+          <Box display={{ base: "block", md: "none" }}>
+            <MenuItem
+              value="notifications"
+              mx={2}
+              borderRadius="md"
+              gap={3}
+              py={2.5}
+              cursor="pointer"
+              _hover={{ bg: "ui.hover", color: "white" }}
+              onClick={() => setShowNotifications(true)}
+            >
+              <Box position="relative">
+                <FiBell />
+                {hasNotifications && (
+                  <Box 
+                    position="absolute" 
+                    top="-1" 
+                    right="-1" 
+                    bg="red.500" 
+                    w="2" 
+                    h="2" 
+                    rounded="full" 
+                    border="1px solid white"
+                  />
+                )}
+              </Box>
+              <Text fontWeight="500">Notifications ({unreadCount})</Text>
+            </MenuItem>
+            <MenuSeparator mx={2} my={2} />
+          </Box>
 
           <Link
             to="/profile"
@@ -118,6 +186,36 @@ const UserMenu = () => {
           </MenuItem>
         </MenuContent>
       </MenuRoot>
+
+      {/* Notifications Dialog for Mobile */}
+      <DialogRoot 
+        open={showNotifications} 
+        onOpenChange={(e) => setShowNotifications(e.open)}
+        size="full"
+        motionPreset="slide-in-bottom"
+      >
+        <DialogContent>
+          <DialogHeader borderBottomWidth="1px" bg="bg.muted">
+            <Flex justify="space-between" align="center">
+              <DialogTitle>Notifications</DialogTitle>
+              {unreadCount > 0 && (
+                <Button 
+                  size="xs" 
+                  variant="ghost" 
+                  colorPalette="main" 
+                  onClick={() => markAllAsReadMutation.mutate()}
+                >
+                  Mark all as read
+                </Button>
+              )}
+            </Flex>
+            <DialogCloseTrigger />
+          </DialogHeader>
+          <DialogBody p={0}>
+            <NotificationsList onItemClick={() => setShowNotifications(false)} />
+          </DialogBody>
+        </DialogContent>
+      </DialogRoot>
     </Box>
   )
 }

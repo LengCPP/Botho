@@ -32,20 +32,41 @@ function Navbar() {
   const [open, setOpen] = useState(false)
 
   return (
-    <Flex
-      justify="space-between"
-      align="center"
+    <Box
       position="sticky"
       top={0}
       zIndex="sticky"
       bg="bg.muted"
       color="white"
       w="100%"
-      px={4}
-      py={2}
     >
-      {/* Left Side: Hamburger & Logo */}
-      <HStack gap={4}>
+      <Flex
+        justify="space-between"
+        align="center"
+        px={4}
+        py={2}
+      >
+        <Link to="/">
+          <Image
+            src={Logo}
+            alt="botho logo"
+            w={{ base: "80px", md: "140px" }}
+            maxW="150px"
+          />
+        </Link>
+
+        {/* Right Side: Theme Toggle, Notifications, User Avatar */}
+        <HStack gap={2} display="flex" flexShrink={0}>
+          <ColorModeButton />
+          <Box display={{ base: "none", md: "block" }}>
+            <NotificationsMenu />
+          </Box>
+          <UserMenu />
+        </HStack>
+      </Flex>
+
+      {/* Mobile Burger Menu Row */}
+      <Box display={{ base: "block", md: "none" }} px={4} pb={2}>
         <DrawerRoot
           placement="start"
           open={open}
@@ -54,7 +75,6 @@ function Navbar() {
           <DrawerBackdrop />
           <DrawerTrigger asChild>
             <IconButton
-              display={{ base: "flex", md: "none" }}
               variant="ghost"
               color="inherit"
               aria-label="Open Menu"
@@ -98,24 +118,8 @@ function Navbar() {
             </DrawerBody>
           </DrawerContent>
         </DrawerRoot>
-
-        <Link to="/">
-          <Image
-            src={Logo}
-            alt="botho logo"
-            w={{ base: "80px", md: "140px" }}
-            maxW="150px"
-          />
-        </Link>
-      </HStack>
-
-      {/* Right Side: Theme Toggle, Notifications, User Avatar */}
-      <HStack gap={2} display="flex" flexShrink={0}>
-        <ColorModeButton />
-        <NotificationsMenu />
-        <UserMenu />
-      </HStack>
-    </Flex>
+      </Box>
+    </Box>
   )
 }
 
