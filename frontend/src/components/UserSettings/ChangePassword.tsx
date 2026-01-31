@@ -1,4 +1,4 @@
-import { Box, Button, Container, Heading, Text, VStack } from "@chakra-ui/react"
+import { Box, Button, Heading, Text, VStack } from "@chakra-ui/react"
 import { useMutation } from "@tanstack/react-query"
 import { type SubmitHandler, useForm } from "react-hook-form"
 import { FiLock } from "react-icons/fi"
@@ -49,59 +49,57 @@ const ChangePassword = () => {
   }
 
   return (
-    <>
-      <Container maxW="full">
-        <Heading size="sm" py={4}>
-          {hasSetPassword ? "Change Password" : "Set Password"}
-        </Heading>
-        {!hasSetPassword && (
-          <Text fontSize="sm" mb={4} color="fg.muted">
-            You logged in via a social provider. Please set a password to enable
-            email/password login.
-          </Text>
-        )}
-        <Box
-          w={{ sm: "full", md: "300px" }}
-          as="form"
-          onSubmit={handleSubmit(onSubmit)}
+    <Box width="full" px={2}>
+      <Heading size="sm" py={4}>
+        {hasSetPassword ? "Change Password" : "Set Password"}
+      </Heading>
+      {!hasSetPassword && (
+        <Text fontSize="sm" mb={4} color="fg.muted">
+          You logged in via a social provider. Please set a password to enable
+          email/password login.
+        </Text>
+      )}
+      <Box
+        w={{ base: "full", md: "300px" }}
+        as="form"
+        onSubmit={handleSubmit(onSubmit)}
+      >
+        <VStack gap={4}>
+          {hasSetPassword && (
+            <PasswordInput
+              type="current_password"
+              startElement={<FiLock />}
+              {...register("current_password", passwordRules())}
+              placeholder="Current Password"
+              errors={errors}
+            />
+          )}
+          <PasswordInput
+            type="new_password"
+            startElement={<FiLock />}
+            {...register("new_password", passwordRules())}
+            placeholder="New Password"
+            errors={errors}
+          />
+          <PasswordInput
+            type="confirm_password"
+            startElement={<FiLock />}
+            {...register("confirm_password", confirmPasswordRules(getValues))}
+            placeholder="Confirm Password"
+            errors={errors}
+          />
+        </VStack>
+        <Button
+          variant="solid"
+          mt={4}
+          type="submit"
+          loading={isSubmitting}
+          disabled={!isValid}
         >
-          <VStack gap={4}>
-            {hasSetPassword && (
-              <PasswordInput
-                type="current_password"
-                startElement={<FiLock />}
-                {...register("current_password", passwordRules())}
-                placeholder="Current Password"
-                errors={errors}
-              />
-            )}
-            <PasswordInput
-              type="new_password"
-              startElement={<FiLock />}
-              {...register("new_password", passwordRules())}
-              placeholder="New Password"
-              errors={errors}
-            />
-            <PasswordInput
-              type="confirm_password"
-              startElement={<FiLock />}
-              {...register("confirm_password", confirmPasswordRules(getValues))}
-              placeholder="Confirm Password"
-              errors={errors}
-            />
-          </VStack>
-          <Button
-            variant="solid"
-            mt={4}
-            type="submit"
-            loading={isSubmitting}
-            disabled={!isValid}
-          >
-            Save
-          </Button>
-        </Box>
-      </Container>
-    </>
+          Save
+        </Button>
+      </Box>
+    </Box>
   )
 }
 export default ChangePassword

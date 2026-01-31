@@ -1,6 +1,5 @@
 import {
   Box,
-  Container,
   Heading,
   Tabs,
   Text,
@@ -42,8 +41,8 @@ function UserSettings() {
   }
 
   return (
-    <Container maxW="full" py={8}>
-      <Heading size="lg" mb={8}>
+    <Box maxW="100vw" overflowX="hidden" py={8} px={{ base: 2, md: 4 }}>
+      <Heading size="lg" mb={8} px={2}>
         Settings
       </Heading>
 
@@ -60,15 +59,10 @@ function UserSettings() {
           borderBottomWidth={isMobile ? "1px" : 0}
           mr={isMobile ? 0 : 8}
           mb={isMobile ? 8 : 0}
-          overflowX={isMobile ? "auto" : "visible"}
           display="flex"
           flexDirection={isMobile ? "row" : "column"}
           whiteSpace="nowrap"
-          scrollSnapType={isMobile ? "x mandatory" : "none"}
-          css={{
-            "&::-webkit-scrollbar": { display: "none" },
-            scrollbarWidth: "none",
-          }}
+          justifyContent="space-around"
         >
           <Text
             fontWeight="bold"
@@ -84,54 +78,57 @@ function UserSettings() {
           <Tabs.Trigger
             value="preferences"
             justifyContent={isMobile ? "center" : "flex-start"}
-            flexShrink={0}
-            width={isMobile ? "100%" : "full"}
-            scrollSnapAlign="center"
+            flex="1"
+            flexDirection={isMobile ? "column" : "row"}
+            gap={isMobile ? 1 : 2}
+            fontSize={isMobile ? "10px" : "sm"}
+            px={isMobile ? 1 : 4}
+            py={isMobile ? 3 : 2}
           >
-            <Box mr={2}>
-              <FiSettings />
-            </Box>{" "}
-            Preferences
+            <FiSettings size={isMobile ? "18px" : "16px"} />
+            <Text>Preferences</Text>
           </Tabs.Trigger>
           <Tabs.Trigger
             value="password"
             justifyContent={isMobile ? "center" : "flex-start"}
-            flexShrink={0}
-            width={isMobile ? "100%" : "full"}
-            scrollSnapAlign="center"
+            flex="1"
+            flexDirection={isMobile ? "column" : "row"}
+            gap={isMobile ? 1 : 2}
+            fontSize={isMobile ? "10px" : "sm"}
+            px={isMobile ? 1 : 4}
+            py={isMobile ? 3 : 2}
           >
-            <Box mr={2}>
-              <FiLock />
-            </Box>{" "}
-            Security
+            <FiLock size={isMobile ? "18px" : "16px"} />
+            <Text>{isMobile ? "Security" : "Security"}</Text>
           </Tabs.Trigger>
           <Tabs.Trigger
             value="danger-zone"
             justifyContent={isMobile ? "center" : "flex-start"}
             color="red.500"
-            flexShrink={0}
-            width={isMobile ? "100%" : "full"}
-            scrollSnapAlign="center"
+            flex="1"
+            flexDirection={isMobile ? "column" : "row"}
+            gap={isMobile ? 1 : 2}
+            fontSize={isMobile ? "10px" : "sm"}
+            px={isMobile ? 1 : 4}
+            py={isMobile ? 3 : 2}
           >
-            <Box mr={2}>
-              <FiAlertTriangle />
-            </Box>{" "}
-            Danger Zone
+            <FiAlertTriangle size={isMobile ? "18px" : "16px"} />
+            <Text>{isMobile ? "Danger" : "Danger Zone"}</Text>
           </Tabs.Trigger>
         </Tabs.List>
 
-        <Box flex="1" maxW="3xl">
-          <Tabs.Content value="preferences">
+        <Box flex="1" width="full" overflow="hidden">
+          <Tabs.Content value="preferences" p={0}>
             <UserPreferences />
           </Tabs.Content>
-          <Tabs.Content value="password">
+          <Tabs.Content value="password" p={0}>
             <ChangePassword />
           </Tabs.Content>
-          <Tabs.Content value="danger-zone">
+          <Tabs.Content value="danger-zone" p={0}>
             <DeleteAccount />
           </Tabs.Content>
         </Box>
       </Tabs.Root>
-    </Container>
+    </Box>
   )
 }

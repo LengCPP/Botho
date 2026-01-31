@@ -1,4 +1,4 @@
-import { Container, Heading, Stack, VStack } from "@chakra-ui/react"
+import { Box, Heading, Stack, VStack } from "@chakra-ui/react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useTheme } from "next-themes"
 import { useEffect } from "react"
@@ -69,7 +69,7 @@ const UserPreferences = () => {
   }
 
   return (
-    <Container maxW="full">
+    <Box width="full" px={2}>
       <Heading size="sm" py={4}>
         Preferences
       </Heading>
@@ -116,7 +116,7 @@ const UserPreferences = () => {
           </Checkbox>
         </VStack>
       </VStack>
-    </Container>
+    </Box>
   )
 }
 export default UserPreferences
