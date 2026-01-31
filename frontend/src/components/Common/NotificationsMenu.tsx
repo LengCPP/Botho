@@ -1,9 +1,4 @@
-import {
-  Box,
-  Flex,
-  IconButton,
-  Text,
-} from "@chakra-ui/react"
+import { Box, Flex, IconButton, Text } from "@chakra-ui/react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { FaBell } from "react-icons/fa"
 import { NotificationsService } from "../../client"

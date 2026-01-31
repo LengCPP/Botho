@@ -1,11 +1,4 @@
-import {
-  Box,
-  Flex,
-  Icon,
-  Spinner,
-  Text,
-  VStack,
-} from "@chakra-ui/react"
+import { Box, Flex, Icon, Spinner, Text, VStack } from "@chakra-ui/react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
 import { FaCircle } from "react-icons/fa"
@@ -35,7 +28,7 @@ const NotificationsList = ({ onItemClick, limit }: NotificationsListProps) => {
       markAsReadMutation.mutate(notification.id)
     }
     onItemClick?.()
-    
+
     if (notification.link) {
       const communityMatch = notification.link.match(
         /\/communities\/([a-f0-9-]+)/i,
@@ -59,7 +52,9 @@ const NotificationsList = ({ onItemClick, limit }: NotificationsListProps) => {
     )
   }
 
-  const data = limit ? notifications?.data?.slice(0, limit) : notifications?.data
+  const data = limit
+    ? notifications?.data?.slice(0, limit)
+    : notifications?.data
 
   if (!data || data.length === 0) {
     return (

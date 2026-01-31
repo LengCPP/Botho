@@ -15,13 +15,17 @@ from sqlmodel import Field, Relationship, SQLModel
 
 class CommunityMemberRole(str, Enum):
     ADMIN = "ADMIN"
+    MODERATOR = "MODERATOR"
     MEMBER = "MEMBER"
+    APPLICANT = "APPLICANT"
 
 
 class CommunityMemberStatus(str, Enum):
     PENDING = "PENDING"
     ACCEPTED = "ACCEPTED"
     REJECTED = "REJECTED"
+    BANNED = "BANNED"
+    SUSPENDED = "SUSPENDED"
 
 
 class FriendshipStatus(str, Enum):
@@ -54,6 +58,12 @@ class NotificationType(str, Enum):
     SUCCESS = "SUCCESS"
     WARNING = "WARNING"
     ERROR = "ERROR"
+
+
+class ReadingLogStatus(str, Enum):
+    READING = "READING"
+    COMPLETED = "COMPLETED"
+    DROPPED = "DROPPED"
 
 
 # Link Models
@@ -311,7 +321,7 @@ class User(UserBase, table=True):
     communities: list["Community"] = Relationship(
         back_populates="members", link_model=CommunityMember
     )
-    settings: dict = Field(default={}, sa_column=Column(JSON))
+    settings: Optional[dict] = Field(default={}, sa_column=Column(JSON))
     profile: Optional[UserProfile] = Relationship(
         sa_relationship_kwargs={"uselist": False, "cascade": "all, delete-orphan"}
     )
@@ -416,13 +426,46 @@ class Collection(CollectionBase, table=True):
     community: Optional["Community"] = Relationship(back_populates="collections")
 
 
+class WorkMetadata(SQLModel, table=True):
+    author: str = Field(primary_key=True, max_length=255)
+    title: str = Field(primary_key=True, max_length=255)
+    tags: list[str] = Field(default=[], sa_column=Column(JSONB))
+    average_rating: float = Field(default=0.0)
+    review_count: int = Field(default=0)
+
+
+class ItemReview(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    author: str = Field(index=True, max_length=255)
+    title: str = Field(index=True, max_length=255)
+    user_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
+    rating: int = Field(ge=1, le=5)
+    comment: Optional[str] = Field(default=None, max_length=2000)
+    created_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    )
+
+    user: "User" = Relationship()
+    vote_score: int = Field(default=0)
+
+
+class ItemReviewVote(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    review_id: uuid.UUID = Field(foreign_key="itemreview.id", ondelete="CASCADE", index=True)
+    user_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
+    vote: int = Field(default=0) # 1 or -1
+
+
+
 class ItemBase(SQLModel):
     title: str = Field(min_length=0, max_length=255)
     description: Optional[str] = Field(default=None, max_length=1000)
     author: Optional[str] = Field(default=None, max_length=255)
     item_type: ItemType = Field(default=ItemType.general)
     image_url: Optional[str] = Field(default=None, max_length=512)
-    extra_data: dict = Field(default={}, sa_column=Column(JSON))
+    extra_data: Optional[dict] = Field(default={}, sa_column=Column(JSON))
+    info: Optional[dict] = Field(default={}, sa_column=Column(JSON)) # physical_description, grade (1-10)
 
 
 class Item(ItemBase, table=True):
@@ -587,6 +630,7 @@ class ItemUpdate(SQLModel):
     item_type: Optional[ItemType] = None
     image_url: Optional[str] = None
     extra_data: Optional[dict] = None
+    info: Optional[dict] = None
 
 
 class ItemOwnerPublic(SQLModel):
@@ -595,6 +639,18 @@ class ItemOwnerPublic(SQLModel):
     email: str
     is_available: bool = True
     show_contact_details: bool = False
+
+
+class WorkMetadataPublic(SQLModel):
+    author: str
+    title: str
+    tags: list[str] = []
+    average_rating: float
+    review_count: int
+
+
+class WorkMetadataUpdate(SQLModel):
+    tags: Optional[list[str]] = None
 
 
 class ItemPublic(ItemBase):
@@ -609,6 +665,7 @@ class ItemPublic(ItemBase):
     is_available: bool = True
     added_by_id: Optional[uuid.UUID] = None
     is_donation_pending: bool = False
+    work_metadata: Optional[WorkMetadataPublic] = None
 
 
 class BookPublic(ItemPublic):
@@ -622,6 +679,31 @@ class BooksPublic(SQLModel):
 
 class ItemsPublic(SQLModel):
     data: list["ItemPublic"]
+    count: int
+
+
+class ItemReviewCreate(SQLModel):
+    author: str = Field(max_length=255)
+    title: str = Field(max_length=255)
+    rating: int = Field(ge=1, le=5)
+    comment: Optional[str] = Field(default=None, max_length=2000)
+
+
+class ItemReviewPublic(SQLModel):
+    id: uuid.UUID
+    author: str
+    title: str
+    user_id: uuid.UUID
+    rating: int
+    comment: Optional[str]
+    created_at: datetime
+    user: "UserPublic"
+    vote_score: int = 0
+    current_user_vote: Optional[int] = None
+
+
+class ItemReviewsPublic(SQLModel):
+    data: list["ItemReviewPublic"]
     count: int
 
 
@@ -691,3 +773,44 @@ class TokenPayload(SQLModel):
 class NewPassword(SQLModel):
     token: str
     new_password: str = Field(min_length=8, max_length=40)
+
+class ReadingLog(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
+    author: str = Field(index=True, max_length=255)
+    title: str = Field(index=True, max_length=255)
+    status: ReadingLogStatus = Field(default=ReadingLogStatus.READING, index=True)
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    )
+    updated_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    )
+    
+    user: "User" = Relationship()
+
+
+class ReadingLogCreate(SQLModel):
+    author: str = Field(max_length=255)
+    title: str = Field(max_length=255)
+    status: ReadingLogStatus
+
+
+class ReadingLogUpdate(SQLModel):
+    status: ReadingLogStatus
+
+
+class ReadingLogPublic(SQLModel):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    author: str
+    title: str
+    status: ReadingLogStatus
+    created_at: datetime
+    updated_at: datetime
+    work_metadata: Optional["WorkMetadataPublic"] = None
+
+
+class ReadingLogsPublic(SQLModel):
+    data: list["ReadingLogPublic"]
+    count: int

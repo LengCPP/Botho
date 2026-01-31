@@ -206,11 +206,13 @@ def join_community(
 ) -> CommunityMember:
     community = session.get(Community, community_id)
     status = CommunityMemberStatus.ACCEPTED
+    role = CommunityMemberRole.MEMBER
     if community and community.requires_approval:
         status = CommunityMemberStatus.PENDING
+        role = CommunityMemberRole.APPLICANT
 
     membership = CommunityMember(
-        community_id=community_id, user_id=user_id, status=status
+        community_id=community_id, user_id=user_id, status=status, role=role
     )
     session.add(membership)
     session.commit()
@@ -236,6 +238,9 @@ def update_community_member(
             membership.role = role
         if status:
             membership.status = status
+            # Auto-promote Applicant to Member on acceptance
+            if status == CommunityMemberStatus.ACCEPTED and membership.role == CommunityMemberRole.APPLICANT:
+                membership.role = CommunityMemberRole.MEMBER
         session.add(membership)
         session.commit()
         session.refresh(membership)

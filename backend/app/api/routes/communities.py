@@ -217,44 +217,50 @@ async def join_community(
     if not community:
         raise HTTPException(status_code=404, detail="Community not found")
 
-    # Check if user is already a member
+    # Check existing membership
     statement = select(CommunityMember).where(
         CommunityMember.community_id == id,
         CommunityMember.user_id == current_user.id,
     )
-    existing_membership = session.exec(statement).first()
-    if existing_membership:
-        if existing_membership.status == CommunityMemberStatus.PENDING:
+    membership = session.exec(statement).first()
+    
+    if membership:
+        if membership.status == CommunityMemberStatus.PENDING:
             raise HTTPException(status_code=400, detail="Join request already pending")
-        if existing_membership.status == CommunityMemberStatus.ACCEPTED:
+        if membership.status == CommunityMemberStatus.ACCEPTED:
             raise HTTPException(status_code=400, detail="Already a member of this community")
-        if existing_membership.status == CommunityMemberStatus.REJECTED:
+        if membership.status == CommunityMemberStatus.REJECTED:
             raise HTTPException(status_code=400, detail="Join request was rejected")
+        if membership.status == CommunityMemberStatus.BANNED:
+            raise HTTPException(status_code=403, detail="You are banned from this community")
+        if membership.status == CommunityMemberStatus.SUSPENDED:
+            raise HTTPException(status_code=403, detail="Your account is suspended in this community")
 
     crud.join_community(session=session, community_id=id, user_id=current_user.id)
 
-    # If closed, notify admins
+    # If closed, notify admins and moderators
     if community.requires_approval:
         admin_statement = select(CommunityMember).where(
             CommunityMember.community_id == id,
-            CommunityMember.role == CommunityMemberRole.ADMIN
+            CommunityMember.role.in_([CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]),
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED
         )
-        admins = session.exec(admin_statement).all()
-        for admin in admins:
+        staff = session.exec(admin_statement).all()
+        for member in staff:
             crud.create_notification(
                 session=session,
-                recipient_id=admin.user_id,
+                recipient_id=member.user_id,
                 title="New Join Request",
-                message=f"{current_user.full_name or current_user.email} wants to join {community.name}.",
+                message=f"{current_user.full_name or current_user.email} applied to join {community.name}.",
                 type=NotificationType.INFO,
                 link=f"/communities/{id}"
             )
             await notification_manager.send_personal_message(
                 {"type": "new_notification"},
-                admin.user_id
+                member.user_id
             )
 
-    return Message(message="Joined community successfully")
+    return Message(message="Application sent" if community.requires_approval else "Joined successfully")
 
 
 @router.post("/{id}/leave", response_model=Message)
@@ -290,7 +296,13 @@ def leave_community(
 
 @router.get("/{id}/members", response_model=UsersPublic)
 def read_community_members(
-    *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, skip: int = 0, limit: int = 100
+    *, 
+    session: SessionDep, 
+    current_user: CurrentUser, 
+    id: uuid.UUID, 
+    skip: int = 0, 
+    limit: int = 100,
+    status: CommunityMemberStatus | None = None
 ) -> Any:
     """
     Get members of a community.
@@ -299,30 +311,35 @@ def read_community_members(
     if not community:
         raise HTTPException(status_code=404, detail="Community not found")
 
+    # Get current user's membership
+    my_membership_stmt = select(CommunityMember).where(
+        CommunityMember.community_id == id,
+        CommunityMember.user_id == current_user.id
+    )
+    my_membership = session.exec(my_membership_stmt).first()
+    is_staff = my_membership and my_membership.role in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]
+
     # Privacy check for closed communities
     if community.requires_approval and not current_user.is_superuser:
-        statement = select(CommunityMember).where(
-            CommunityMember.community_id == id,
-            CommunityMember.user_id == current_user.id,
-            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
-        )
-        membership = session.exec(statement).first()
-        if not membership:
+        if not my_membership or my_membership.status != CommunityMemberStatus.ACCEPTED:
             raise HTTPException(
                 status_code=403,
                 detail="This community is closed. You must be a member to view the member list."
             )
 
-    count = session.exec(
-        select(func.count()).where(CommunityMember.community_id == id)
-    ).one()
+    # Base statement
+    base_stmt = select(User, CommunityMember).join(CommunityMember, User.id == CommunityMember.user_id).where(CommunityMember.community_id == id)
 
-    statement = (
-        select(User, CommunityMember)
-        .join(CommunityMember, User.id == CommunityMember.user_id)
-        .where(CommunityMember.community_id == id)
-    )
-    results = session.exec(statement.offset(skip).limit(limit)).all()
+    # Filter by status if provided, otherwise default to ACCEPTED for non-admins
+    if status:
+        if status != CommunityMemberStatus.ACCEPTED and not is_staff and not current_user.is_superuser:
+            raise HTTPException(status_code=403, detail="Only staff can filter by non-accepted status")
+        base_stmt = base_stmt.where(CommunityMember.status == status)
+    elif not is_staff and not current_user.is_superuser:
+        base_stmt = base_stmt.where(CommunityMember.status == CommunityMemberStatus.ACCEPTED)
+
+    count = session.exec(select(func.count()).select_from(base_stmt.subquery())).one()
+    results = session.exec(base_stmt.offset(skip).limit(limit)).all()
 
     # Get friendship statuses for members
     member_ids = [u.id for u, m in results]
@@ -336,23 +353,29 @@ def read_community_members(
         ).all()
         friendship_map = {f.friend_id: f.status for f in friendships}
 
+    # Reveal details if Closed community AND current user is an accepted member (or superuser)
+    reveal_details = community.requires_approval and (
+        current_user.is_superuser or 
+        (my_membership and my_membership.status == CommunityMemberStatus.ACCEPTED)
+    )
+
     users_with_meta = []
     for user, membership in results:
-        status = friendship_map.get(user.id)
-        is_friend = status == FriendshipStatus.ACCEPTED
+        f_status = friendship_map.get(user.id)
+        is_friend = f_status == FriendshipStatus.ACCEPTED
         
         user_public = filter_user_privacy(
             user, 
             current_user.id, 
-            is_admin=current_user.is_superuser,
+            is_admin=current_user.is_superuser or reveal_details,
             is_friend=is_friend
         )
         user_public.community_role = membership.role
         user_public.community_status = membership.status
-        user_public.friendship_status = status
+        user_public.friendship_status = f_status
 
-        # Restrict data if not friends
-        if not current_user.is_superuser and user.id != current_user.id and not is_friend:
+        # Restrict data if not friends and not revealed
+        if not current_user.is_superuser and not reveal_details and user.id != current_user.id and not is_friend:
             user_public.communities = []
             user_public.interests = []
 
@@ -377,15 +400,37 @@ async def update_community_member_role(
     if not community:
         raise HTTPException(status_code=404, detail="Community not found")
 
-    # Check if current user is admin
-    statement = select(CommunityMember).where(
+    # Get current user's membership
+    my_membership_stmt = select(CommunityMember).where(
         CommunityMember.community_id == id,
-        CommunityMember.user_id == current_user.id,
-        CommunityMember.role == CommunityMemberRole.ADMIN,
+        CommunityMember.user_id == current_user.id
     )
-    membership = session.exec(statement).first()
-    if not membership and not current_user.is_superuser:
+    my_membership = session.exec(my_membership_stmt).first()
+    
+    # Permission check: ADMIN or MODERATOR (for specific tasks)
+    is_admin = (my_membership and my_membership.role == CommunityMemberRole.ADMIN) or current_user.is_superuser
+    is_moderator = (my_membership and my_membership.role == CommunityMemberRole.MODERATOR)
+    
+    if not is_admin and not is_moderator:
         raise HTTPException(status_code=400, detail="Not enough permissions")
+
+    # Target member
+    target_membership_stmt = select(CommunityMember).where(
+        CommunityMember.community_id == id,
+        CommunityMember.user_id == user_id
+    )
+    target_membership = session.exec(target_membership_stmt).first()
+    if not target_membership:
+         raise HTTPException(status_code=404, detail="Member not found in this community")
+
+    # Moderator restrictions: can only manage non-staff
+    if is_moderator and not is_admin:
+        # Cannot promote to ADMIN or MODERATOR
+        if member_in.role and member_in.role in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]:
+            raise HTTPException(status_code=403, detail="Moderators cannot promote members to staff roles")
+        # Cannot modify existing staff
+        if target_membership.role in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]:
+            raise HTTPException(status_code=403, detail="Moderators cannot modify staff members")
 
     updated_member = crud.update_community_member(
         session=session,
@@ -658,20 +703,20 @@ def initiate_donation(
     # Notify admins
     admin_statement = select(CommunityMember).where(
         CommunityMember.community_id == id,
-        CommunityMember.role == CommunityMemberRole.ADMIN
+        CommunityMember.role.in_([CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR])
     )
-    admins = session.exec(admin_statement).all()
-    for admin in admins:
+    staff = session.exec(admin_statement).all()
+    for member in staff:
         crud.create_notification(
             session=session,
-            recipient_id=admin.user_id,
+            recipient_id=member.user_id,
             title="Item Donation Pending",
             message=f"{current_user.full_name or current_user.email} wants to donate an item to the community.",
             type=NotificationType.INFO,
             link=f"/communities/{id}"
         )
     
-    return Message(message="Donation request sent to admins")
+    return Message(message="Donation request sent to staff")
 
 
 @router.post("/{id}/items/{item_id}/ratify-donation", response_model=Message)
@@ -679,16 +724,16 @@ def ratify_donation(
     *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, item_id: uuid.UUID
 ) -> Any:
     """
-    Ratify a donation (Admin only).
+    Ratify a donation (Admin/Moderator only).
     """
-    # Admin check
+    # Staff check
     statement = select(CommunityMember).where(
         CommunityMember.community_id == id,
         CommunityMember.user_id == current_user.id,
-        CommunityMember.role == CommunityMemberRole.ADMIN
+        CommunityMember.role.in_([CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR])
     )
     if not session.exec(statement).first() and not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="Only admins can ratify donations")
+        raise HTTPException(status_code=403, detail="Only staff can ratify donations")
 
     statement = select(CommunityItem).where(
         CommunityItem.community_id == id,
@@ -718,7 +763,7 @@ def remove_item_from_community(
 ) -> Any:
     """
     Remove an item from a community.
-    Admins can remove any item. Members can only remove items they added.
+    Staff can remove any item. Members can only remove items they added.
     """
     community = session.get(Community, id)
     if not community:
@@ -732,7 +777,7 @@ def remove_item_from_community(
     if not comm_item:
         raise HTTPException(status_code=404, detail="Item not found in community")
     
-    # Admin or added_by check
+    # Staff or added_by check
     statement = select(CommunityMember).where(
         CommunityMember.community_id == id,
         CommunityMember.user_id == current_user.id,
@@ -740,10 +785,10 @@ def remove_item_from_community(
     )
     membership = session.exec(statement).first()
     
-    is_admin = membership and membership.role == CommunityMemberRole.ADMIN
+    is_staff = membership and membership.role in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]
     is_adder = comm_item.added_by == current_user.id
     
-    if not is_admin and not is_adder and not current_user.is_superuser:
+    if not is_staff and not is_adder and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Not enough permissions to remove this item")
     
     # Bucket cleanup
@@ -809,22 +854,22 @@ async def create_community_announcement(
     announcement_in: CommunityAnnouncementCreate,
 ) -> Any:
     """
-    Create an announcement (Admin only).
+    Create an announcement (Staff only).
     """
     community = session.get(Community, id)
     if not community:
         raise HTTPException(status_code=404, detail="Community not found")
 
-    # Admin check
+    # Staff check
     statement = select(CommunityMember).where(
         CommunityMember.community_id == id,
         CommunityMember.user_id == current_user.id,
-        CommunityMember.role == CommunityMemberRole.ADMIN,
+        CommunityMember.role.in_([CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]),
         CommunityMember.status == CommunityMemberStatus.ACCEPTED,
     )
     membership = session.exec(statement).first()
     if not membership and not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="Only admins can create announcements")
+        raise HTTPException(status_code=403, detail="Only staff can create announcements")
 
     announcement = CommunityAnnouncement(
         **announcement_in.model_dump(),
@@ -932,27 +977,61 @@ def create_community_message(
     return message
 
 
+@router.delete("/{id}/messages/{message_id}", response_model=Message)
+def delete_community_message(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    message_id: uuid.UUID,
+) -> Any:
+    """
+    Delete a message from the community board.
+    Author, Admins, and Moderators can delete messages.
+    """
+    message = session.get(CommunityMessage, message_id)
+    if not message or message.community_id != id:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    # Permission check
+    is_author = message.author_id == current_user.id
+    
+    my_membership_stmt = select(CommunityMember).where(
+        CommunityMember.community_id == id,
+        CommunityMember.user_id == current_user.id
+    )
+    my_membership = session.exec(my_membership_stmt).first()
+    is_staff = my_membership and my_membership.role in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]
+
+    if not is_author and not is_staff and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+
+    session.delete(message)
+    session.commit()
+    return Message(message="Message deleted")
+
+
 @router.get("/{id}/loans", response_model=LoansPublic)
 def read_community_loans(
     *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, skip: int = 0, limit: int = 100
 ) -> Any:
     """
-    Get loans for a community (Admin only).
+    Get loans for a community (Staff only).
     """
     community = session.get(Community, id)
     if not community:
         raise HTTPException(status_code=404, detail="Community not found")
 
-    # Admin check
+    # Staff check
     statement = select(CommunityMember).where(
         CommunityMember.community_id == id,
         CommunityMember.user_id == current_user.id,
-        CommunityMember.role == CommunityMemberRole.ADMIN,
+        CommunityMember.role.in_([CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]),
         CommunityMember.status == CommunityMemberStatus.ACCEPTED,
     )
     membership = session.exec(statement).first()
     if not membership and not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="Only admins can view community loans")
+        raise HTTPException(status_code=403, detail="Only staff can view community loans")
 
     count_statement = select(func.count()).select_from(Loan).where(Loan.community_id == id)
     count = session.exec(count_statement).one()

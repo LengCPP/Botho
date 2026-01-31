@@ -3,6 +3,7 @@ import {
   Button,
   ButtonGroup,
   DialogActionTrigger,
+  Flex,
   HStack,
   Image,
   Input,
@@ -13,7 +14,7 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useRef, useState } from "react"
 import { type SubmitHandler, useForm } from "react-hook-form"
-import { FaExchangeAlt } from "react-icons/fa"
+import { FaExchangeAlt, FaPen } from "react-icons/fa"
 
 import {
   type ApiError,
@@ -40,6 +41,7 @@ interface EditItemProps {
   item: ItemPublic
   width?: string
   justifyContent?: string
+  onlyInfo?: boolean
 }
 
 const BOOK_CLASSIFICATION: Record<string, string[]> = {
@@ -90,8 +92,14 @@ const BOOK_CLASSIFICATION: Record<string, string[]> = {
   ],
 }
 
-const EditItem = ({ item, width, justifyContent }: EditItemProps) => {
+const EditItem = ({
+  item,
+  width,
+  justifyContent,
+  onlyInfo = false,
+}: EditItemProps) => {
   const [isOpen, setIsOpen] = useState(false)
+  const [showAdditionalInfo, setShowAdditionalInfo] = useState(false)
   const queryClient = useQueryClient()
   const { showSuccessToast } = useCustomToast()
 
@@ -116,6 +124,7 @@ const EditItem = ({ item, width, justifyContent }: EditItemProps) => {
       ...item,
       description: item.description ?? undefined,
       image_url: item.image_url ?? "",
+      info: item.info || { grade: 10, physical_description: "" },
     },
   })
 
@@ -150,6 +159,7 @@ const EditItem = ({ item, width, justifyContent }: EditItemProps) => {
       description: data.description,
       item_type: data.item_type,
       extra_data: JSON.stringify(data.extra_data || {}),
+      info: JSON.stringify(data.info || {}),
       image: imageFile,
       image_url: data.image_url,
     }
@@ -174,87 +184,111 @@ const EditItem = ({ item, width, justifyContent }: EditItemProps) => {
     >
       <DialogTrigger asChild>
         <Button variant="ghost" width={width} justifyContent={justifyContent}>
-          <FaExchangeAlt fontSize="16px" />
-          Edit Item
+          {onlyInfo ? (
+            <FaPen fontSize="16px" />
+          ) : (
+            <FaExchangeAlt fontSize="16px" />
+          )}
+          {onlyInfo ? "Update Info" : "Edit Item"}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <form onSubmit={handleSubmit(onSubmit)}>
           <DialogHeader>
-            <DialogTitle>Edit Item</DialogTitle>
+            <DialogTitle>
+              {onlyInfo ? "Update Copy Specifics" : "Edit Item"}
+            </DialogTitle>
           </DialogHeader>
           <DialogBody>
-            <Text mb={4}>Update the item details below.</Text>
+            <Text mb={4}>
+              {onlyInfo
+                ? "Update the condition and notes for your copy."
+                : "Update the item details below."}
+            </Text>
             <VStack gap={4}>
-              <Field
-                label="Item Type"
-                required
-                invalid={!!errors.item_type}
-                errorText={errors.item_type?.message}
-              >
-                <select
-                  id="edit_item_type"
-                  {...register("item_type", { required: "Item type is required" })}
-                  style={selectStyle}
-                >
-                  <option value="" style={{ backgroundColor: selectBg }}>
-                    -- select item type --
-                  </option>
-                  <option value="general" style={{ backgroundColor: selectBg }}>
-                    General
-                  </option>
-                  <option value="book" style={{ backgroundColor: selectBg }}>
-                    Book
-                  </option>
-                </select>
-              </Field>
-
-              <Field
-                required
-                invalid={!!errors.title}
-                errorText={errors.title?.message}
-                label="Title"
-              >
-                <Input
-                  id="edit_title"
-                  {...register("title", {
-                    required: "Title is required",
-                  })}
-                  placeholder="Title"
-                  type="text"
-                />
-              </Field>
-
-              <Field
-                invalid={!!errors.description}
-                errorText={errors.description?.message}
-                label="Description"
-                helperText={
-                  <HStack justify="space-between" width="full">
-                    <Text fontSize="xs">Brief summary of the item.</Text>
-                    <Text
-                      fontSize="xs"
-                      color={description.length > 1000 ? "red.500" : "inherit"}
+              {!onlyInfo && (
+                <>
+                  <Field
+                    label="Item Type"
+                    required
+                    invalid={!!errors.item_type}
+                    errorText={errors.item_type?.message}
+                  >
+                    <select
+                      id="edit_item_type"
+                      {...register("item_type", {
+                        required: "Item type is required",
+                      })}
+                      style={selectStyle}
                     >
-                      {description.length}/1000
-                    </Text>
-                  </HStack>
-                }
-              >
-                <Textarea
-                  id="edit_description"
-                  {...register("description", {
-                    maxLength: {
-                      value: 1000,
-                      message: "Maximum 1000 characters",
-                    },
-                  })}
-                  placeholder="Description"
-                  rows={5}
-                />
-              </Field>
+                      <option value="" style={{ backgroundColor: selectBg }}>
+                        -- select item type --
+                      </option>
+                      <option
+                        value="general"
+                        style={{ backgroundColor: selectBg }}
+                      >
+                        General
+                      </option>
+                      <option
+                        value="book"
+                        style={{ backgroundColor: selectBg }}
+                      >
+                        Book
+                      </option>
+                    </select>
+                  </Field>
 
-              {itemType === "book" && (
+                  <Field
+                    required
+                    invalid={!!errors.title}
+                    errorText={errors.title?.message}
+                    label="Title"
+                  >
+                    <Input
+                      id="edit_title"
+                      {...register("title", {
+                        required: "Title is required",
+                      })}
+                      placeholder="Title"
+                      type="text"
+                    />
+                  </Field>
+
+                  <Field
+                    invalid={!!errors.description}
+                    errorText={errors.description?.message}
+                    label="Description"
+                    helperText={
+                      <HStack justify="space-between" width="full">
+                        <Text fontSize="xs">Brief summary of the item.</Text>
+                        <Text
+                          fontSize="xs"
+                          color={
+                            description.length > 1000 ? "red.500" : "inherit"
+                          }
+                        >
+                          {description.length}/1000
+                        </Text>
+                      </HStack>
+                    }
+                  >
+                    <Textarea
+                      id="edit_description"
+                      {...register("description", {
+                        maxLength: {
+                          value: 1000,
+                          message: "Maximum 1000 characters",
+                        },
+                      })}
+                      placeholder="Description"
+                      rows={5}
+                    />
+                  </Field>
+                </>
+              )}
+
+              {itemType === "book" && !onlyInfo && (
                 <>
                   <Field label="Author">
                     <Input
@@ -317,35 +351,125 @@ const EditItem = ({ item, width, justifyContent }: EditItemProps) => {
                 </>
               )}
 
-              <Field label="Upload New Image">
-                {item.image_url && !imageFile && (
-                  <Box mb={2}>
-                    <Image
-                      src={getImageUrl(item.image_url)}
-                      alt="Current"
-                      height="100px"
-                      objectFit="cover"
-                      borderRadius="md"
+              {/* Conditional Rendering for Copy Specifics */}
+              {onlyInfo ? (
+                <VStack align="stretch" gap={4} width="full">
+                  <Field
+                    label="Condition Grade (1-10)"
+                    helperText="10 = Brand New, 1 = Very Poor"
+                  >
+                    <Input
+                      type="number"
+                      min={1}
+                      max={10}
+                      {...register("info.grade" as any)}
                     />
-                  </Box>
-                )}
-                <Input
-                  id="edit_image_file"
-                  name="edit_image_file"
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageChange}
-                  ref={fileInputRef}
-                />
-              </Field>
+                  </Field>
 
-              <Field label="Image URL">
-                <Input
-                  id="edit_image_url"
-                  placeholder="https://example.com/image.jpg"
-                  {...register("image_url")}
-                />
-              </Field>
+                  <Field label="Condition / Physical Description">
+                    <Textarea
+                      placeholder="Explain the physical state of your copy (e.g. 'Signed by author', 'Slightly torn cover')"
+                      {...register("info.physical_description" as any)}
+                      rows={4}
+                    />
+                  </Field>
+                </VStack>
+              ) : (
+                <>
+                  {/* Toggle for Full Mode */}
+                  {!showAdditionalInfo ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowAdditionalInfo(true)}
+                      width="full"
+                      mt={2}
+                    >
+                      Update Additional Info (Condition, Notes)
+                    </Button>
+                  ) : (
+                    <VStack
+                      align="stretch"
+                      gap={4}
+                      animation="fade-in 0.2s"
+                      width="full"
+                      mt={2}
+                      p={2}
+                      borderWidth="1px"
+                      borderRadius="md"
+                      borderColor={selectBorder}
+                    >
+                      <Flex justify="space-between" align="center">
+                        <Text fontWeight="bold" fontSize="sm" color="ui.hover">
+                          Your Copy Specifics
+                        </Text>
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          onClick={() => setShowAdditionalInfo(false)}
+                          color="fg.muted"
+                        >
+                          Hide
+                        </Button>
+                      </Flex>
+
+                      <Field
+                        label="Condition Grade (1-10)"
+                        helperText="10 = Brand New, 1 = Very Poor"
+                      >
+                        <Input
+                          type="number"
+                          min={1}
+                          max={10}
+                          {...register("info.grade" as any)}
+                        />
+                      </Field>
+
+                      <Field label="Condition / Physical Description">
+                        <Textarea
+                          placeholder="Explain the physical state of your copy (e.g. 'Signed by author', 'Slightly torn cover')"
+                          {...register("info.physical_description" as any)}
+                          rows={2}
+                        />
+                      </Field>
+                    </VStack>
+                  )}
+                </>
+              )}
+
+              {!onlyInfo && (
+                <>
+                  <Field label="Upload New Image">
+                    {item.image_url && !imageFile && (
+                      <Box mb={2}>
+                        <Image
+                          src={getImageUrl(item.image_url)}
+                          alt="Current"
+                          height="100px"
+                          objectFit="cover"
+                          borderRadius="md"
+                        />
+                      </Box>
+                    )}
+                    <Input
+                      id="edit_image_file"
+                      name="edit_image_file"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageChange}
+                      ref={fileInputRef}
+                    />
+                  </Field>
+
+                  <Field label="Image URL">
+                    <Input
+                      id="edit_image_url"
+                      placeholder="https://example.com/image.jpg"
+                      {...register("image_url")}
+                    />
+                  </Field>
+                </>
+              )}
             </VStack>
           </DialogBody>
 

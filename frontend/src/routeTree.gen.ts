@@ -20,6 +20,7 @@ import { Route as LoginImport } from './routes/login'
 import { Route as LayoutImport } from './routes/_layout'
 import { Route as LayoutIndexImport } from './routes/_layout/index'
 import { Route as LayoutSettingsImport } from './routes/_layout/settings'
+import { Route as LayoutReadingLogImport } from './routes/_layout/reading-log'
 import { Route as LayoutProfileImport } from './routes/_layout/profile'
 import { Route as LayoutLoansImport } from './routes/_layout/loans'
 import { Route as LayoutItemsImport } from './routes/_layout/items'
@@ -74,6 +75,11 @@ const LayoutIndexRoute = LayoutIndexImport.update({
 
 const LayoutSettingsRoute = LayoutSettingsImport.update({
   path: '/settings',
+  getParentRoute: () => LayoutRoute,
+} as any)
+
+const LayoutReadingLogRoute = LayoutReadingLogImport.update({
+  path: '/reading-log',
   getParentRoute: () => LayoutRoute,
 } as any)
 
@@ -180,6 +186,10 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutProfileImport
       parentRoute: typeof LayoutImport
     }
+    '/_layout/reading-log': {
+      preLoaderRoute: typeof LayoutReadingLogImport
+      parentRoute: typeof LayoutImport
+    }
     '/_layout/settings': {
       preLoaderRoute: typeof LayoutSettingsImport
       parentRoute: typeof LayoutImport
@@ -213,6 +223,7 @@ export const routeTree = rootRoute.addChildren([
     LayoutItemsRoute,
     LayoutLoansRoute,
     LayoutProfileRoute,
+    LayoutReadingLogRoute,
     LayoutSettingsRoute,
     LayoutIndexRoute,
     LayoutCollectionsCollectionIdRoute,

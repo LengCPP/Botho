@@ -14,7 +14,11 @@ import {
 import { useState } from "react"
 import { FaPlus } from "react-icons/fa"
 
-import { type CollectionCreate, CollectionsService, CommunitiesService } from "@/client"
+import {
+  type CollectionCreate,
+  CollectionsService,
+  CommunitiesService,
+} from "@/client"
 import type { ApiError } from "@/client/core/ApiError"
 import useCustomToast from "@/hooks/useCustomToast"
 import { handleError } from "@/utils"
@@ -73,21 +77,21 @@ const AddCollection = ({ communityId }: AddCollectionProps) => {
     enabled: isOpen,
   })
 
-  const acceptedCommunities = myCommunities?.data.filter(
-    (c) => c.current_user_status === "ACCEPTED"
-  ) || []
+  const acceptedCommunities =
+    myCommunities?.data.filter((c) => c.current_user_status === "ACCEPTED") ||
+    []
 
   const canCreateBucket = acceptedCommunities.length > 0 || !!communityId
 
   const mutation = useMutation({
     mutationFn: (data: CollectionCreateExtended) =>
-      CollectionsService.createCollection({ 
+      CollectionsService.createCollection({
         requestBody: {
           title: data.title,
           description: data.description,
           collection_type: data.collection_type,
-        }, 
-        communityId: data.target_community_id 
+        },
+        communityId: data.target_community_id,
       }),
     onSuccess: () => {
       showSuccessToast("Collection created successfully.")
@@ -171,7 +175,10 @@ const AddCollection = ({ communityId }: AddCollectionProps) => {
                     General Collection
                   </option>
                   {canCreateBucket && (
-                    <option value="BUCKET" style={{ backgroundColor: selectBg }}>
+                    <option
+                      value="BUCKET"
+                      style={{ backgroundColor: selectBg }}
+                    >
                       Community Bucket (Pool)
                     </option>
                   )}
@@ -187,7 +194,9 @@ const AddCollection = ({ communityId }: AddCollectionProps) => {
                 >
                   <select
                     {...register("target_community_id", {
-                      required: isBucket ? "Please select a community to share with" : false,
+                      required: isBucket
+                        ? "Please select a community to share with"
+                        : false,
                     })}
                     style={selectStyle}
                   >
@@ -195,7 +204,11 @@ const AddCollection = ({ communityId }: AddCollectionProps) => {
                       -- select community --
                     </option>
                     {acceptedCommunities.map((c) => (
-                      <option key={c.id} value={c.id} style={{ backgroundColor: selectBg }}>
+                      <option
+                        key={c.id}
+                        value={c.id}
+                        style={{ backgroundColor: selectBg }}
+                      >
                         {c.name}
                       </option>
                     ))}
@@ -228,7 +241,11 @@ const AddCollection = ({ communityId }: AddCollectionProps) => {
                 <Input
                   id="description"
                   {...register("description")}
-                  placeholder={isBucket ? "Auto-generated" : "A collection of my favorite books"}
+                  placeholder={
+                    isBucket
+                      ? "Auto-generated"
+                      : "A collection of my favorite books"
+                  }
                   type="text"
                   disabled={isBucket}
                 />

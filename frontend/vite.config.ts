@@ -17,19 +17,28 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       "/api": {
-        target: "http://backend:8000",
+        target: "http://localhost",
         changeOrigin: true,
         secure: false,
+        headers: {
+          Host: "api.staging.rsc-xchange.app",
+        },
       },
       "/docs": {
-        target: "http://backend:8000",
+        target: "http://localhost",
         changeOrigin: true,
         secure: false,
+        headers: {
+          Host: "api.staging.rsc-xchange.app",
+        },
       },
       "/openapi.json": {
-        target: "http://backend:8000",
+        target: "http://localhost",
         changeOrigin: true,
         secure: false,
+        headers: {
+          Host: "api.staging.rsc-xchange.app",
+        },
       },
     },
     headers: {

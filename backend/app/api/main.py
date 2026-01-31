@@ -10,6 +10,7 @@ from app.api.routes import (
     login,
     notifications,
     private,
+    reading_log,
     search,
     storage,
     users,
@@ -34,6 +35,7 @@ api_router.include_router(
     notifications.router, prefix="/notifications", tags=["notifications"]
 )
 api_router.include_router(loans.router)
+api_router.include_router(reading_log.router)
 
 
 if settings.ENVIRONMENT == "local":

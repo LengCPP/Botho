@@ -1,9 +1,4 @@
-import {
-  Box,
-  Flex,
-  HStack,
-  Image,
-} from "@chakra-ui/react"
+import { Box, Flex, HStack, Image } from "@chakra-ui/react"
 import { Link } from "@tanstack/react-router"
 
 import Logo from "/assets/images/botho-logo.png"
@@ -21,12 +16,7 @@ function Navbar() {
       color="white"
       w="100%"
     >
-      <Flex
-        justify="space-between"
-        align="center"
-        px={4}
-        py={2}
-      >
+      <Flex justify="space-between" align="center" px={4} py={2}>
         <Link to="/">
           <Image
             src={Logo}

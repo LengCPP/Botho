@@ -23,22 +23,34 @@ from app.models import (
     CommunityMemberStatus,
     CommunityMemberRole,
     CommunityItem,
+    WorkMetadata,
+    WorkMetadataPublic,
+    WorkMetadataUpdate,
+    ItemReview,
+    ItemReviewCreate,
+    ItemReviewPublic,
+    ItemReviewsPublic,
+    ItemReviewVote,
 )
 
 router = APIRouter(prefix="/items", tags=["items"])
 
 
-def check_item_availability(session: SessionDep, item_id: uuid.UUID) -> bool:
-    """
-    Check if an item is available (not currently loaned out).
-    """
-    active_loan = session.exec(
-        select(Loan).where(
-            Loan.item_id == item_id,
-            Loan.status.in_([LoanStatus.ACTIVE, LoanStatus.PENDING, LoanStatus.ACCEPTED, LoanStatus.RETURN_PENDING])
-        )
-    ).first()
-    return active_loan is None
+def get_work_metadata(session: SessionDep, author: str | None, title: str) -> WorkMetadata | None:
+    if not author:
+        return None
+    return session.get(WorkMetadata, (author, title))
+
+
+def ensure_work_metadata(session: SessionDep, author: str | None, title: str) -> WorkMetadata | None:
+    if not author:
+        return None
+    meta = session.get(WorkMetadata, (author, title))
+    if not meta:
+        meta = WorkMetadata(author=author, title=title)
+        session.add(meta)
+        session.flush()
+    return meta
 
 
 @router.get("/", response_model=ItemsPublic)
@@ -142,11 +154,13 @@ def read_items(
             item_type=item.item_type,
             image_url=item.image_url,
             extra_data=item.extra_data,
+            info=item.info,
             count=item.count,
             created_at=item.created_at,
             owner=owner_pub,
             community_owner=community_pub,
-            is_available=is_avail
+            is_available=is_avail,
+            work_metadata=get_work_metadata(session, item.author, item.title)
         )
         public_items.append(item_pub)
 
@@ -204,11 +218,13 @@ def read_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> 
         item_type=item.item_type,
         image_url=item.image_url,
         extra_data=item.extra_data,
+        info=item.info,
         count=item.count,
         created_at=item.created_at,
         owner=owner_pub,
         community_owner=community_pub,
-        is_available=is_avail
+        is_available=is_avail,
+        work_metadata=get_work_metadata(session, item.author, item.title)
     )
     return item_pub
 
@@ -223,6 +239,7 @@ def create_item(
     author: Annotated[str | None, Form()] = None,
     item_type: Annotated[ItemType, Form()] = ItemType.general,
     extra_data: Annotated[str | None, Form()] = None,
+    info: Annotated[str | None, Form()] = None,
     image: Annotated[UploadFile | None, File()] = None,
     image_url: Annotated[str | None, Form()] = None,
     community_owner_id: Annotated[uuid.UUID | None, Form()] = None,
@@ -237,6 +254,13 @@ def create_item(
                 parsed_extra = json.loads(extra_data)
             except json.JSONDecodeError:
                 raise HTTPException(status_code=400, detail="Invalid JSON in extra_data")
+
+        parsed_info = {}
+        if info:
+            try:
+                parsed_info = json.loads(info)
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="Invalid JSON in info")
 
         # Auto-extract author if not provided but in extra_data (e.g. from Google Books)
         final_author = author
@@ -290,6 +314,7 @@ def create_item(
             author=final_author,
             item_type=item_type,
             extra_data=parsed_extra,
+            info=parsed_info,
             image_url=final_image_url,
             owner_id=target_owner_id,
         )
@@ -309,6 +334,10 @@ def create_item(
                     added_by=current_user.id
                 )
                 session.add(comm_item)
+
+        # Ensure WorkMetadata exists
+        if final_author:
+            ensure_work_metadata(session, final_author, title)
 
         session.commit()
         session.refresh(db_item)
@@ -331,11 +360,13 @@ def create_item(
             item_type=db_item.item_type,
             image_url=db_item.image_url,
             extra_data=db_item.extra_data,
+            info=db_item.info,
             count=db_item.count,
             created_at=db_item.created_at,
             owner=owner_pub,
             community_owner=community_pub,
-            is_available=True
+            is_available=True,
+            work_metadata=get_work_metadata(session, db_item.author, db_item.title)
         )
         return item_pub
     except HTTPException:
@@ -356,6 +387,7 @@ def update_item(
     author: Annotated[str | None, Form()] = None,
     item_type: Annotated[ItemType | None, Form()] = None,
     extra_data: Annotated[str | None, Form()] = None,
+    info: Annotated[str | None, Form()] = None,
     image: Annotated[UploadFile | None, File()] = None,
     image_url: Annotated[str | None, Form()] = None,
 ) -> Any:
@@ -406,6 +438,11 @@ def update_item(
                 db_item.extra_data = json.loads(extra_data)
             except json.JSONDecodeError:
                 raise HTTPException(status_code=400, detail="Invalid JSON in extra_data")
+        if info is not None:
+            try:
+                db_item.info = json.loads(info)
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="Invalid JSON in info")
 
         if image:
             try:
@@ -439,11 +476,13 @@ def update_item(
             item_type=db_item.item_type,
             image_url=db_item.image_url,
             extra_data=db_item.extra_data,
+            info=db_item.info,
             count=db_item.count,
             created_at=db_item.created_at,
             owner=owner_pub,
             community_owner=community_pub,
-            is_available=is_avail
+            is_available=is_avail,
+            work_metadata=get_work_metadata(session, db_item.author, db_item.title)
         )
         return item_pub
     except HTTPException:
@@ -514,6 +553,7 @@ def duplicate_item(
         item_type=source_item.item_type,
         image_url=source_item.image_url,
         extra_data=source_item.extra_data,
+        info=source_item.info,
         owner_id=current_user.id,
     )
     
@@ -534,8 +574,183 @@ def duplicate_item(
         item_type=new_item.item_type,
         image_url=new_item.image_url,
         extra_data=new_item.extra_data,
+        info=new_item.info,
         count=new_item.count,
         created_at=new_item.created_at,
         owner=owner_pub,
-        is_available=True
+        is_available=True,
+        work_metadata=get_work_metadata(session, new_item.author, new_item.title)
     )
+
+
+@router.get("/work-metadata/{author}/{title}", response_model=WorkMetadataPublic)
+def read_work_metadata(
+    *, session: SessionDep, current_user: CurrentUser, author: str, title: str
+) -> Any:
+    """
+    Get metadata for a work.
+    """
+    meta = session.get(WorkMetadata, (author, title))
+    if not meta:
+        # Check if any item exists with this author/title to justify creating meta
+        exists = session.exec(select(Item).where(Item.author == author, Item.title == title)).first()
+        if not exists:
+            raise HTTPException(status_code=404, detail="Work not found")
+        meta = WorkMetadata(author=author, title=title)
+        session.add(meta)
+        session.commit()
+        session.refresh(meta)
+    return meta
+
+
+@router.patch("/work-metadata/{author}/{title}", response_model=WorkMetadataPublic)
+def update_work_metadata(
+    *, session: SessionDep, current_user: CurrentUser, author: str, title: str, meta_in: WorkMetadataUpdate
+) -> Any:
+    """
+    Update metadata for a work (Tags).
+    """
+    meta = session.get(WorkMetadata, (author, title))
+    if not meta:
+        meta = WorkMetadata(author=author, title=title)
+        session.add(meta)
+    
+    update_data = meta_in.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(meta, key, value)
+    
+    session.add(meta)
+    session.commit()
+    session.refresh(meta)
+    return meta
+
+
+@router.post("/reviews", response_model=ItemReviewPublic)
+def create_review(
+    *, session: SessionDep, current_user: CurrentUser, review_in: ItemReviewCreate
+) -> Any:
+    """
+    Add a review for a work.
+    """
+    # Check if user already reviewed this work
+    existing = session.exec(
+        select(ItemReview).where(
+            ItemReview.author == review_in.author,
+            ItemReview.title == review_in.title,
+            ItemReview.user_id == current_user.id
+        )
+    ).first()
+    
+    if existing:
+        # Update existing
+        existing.rating = review_in.rating
+        existing.comment = review_in.comment
+        review = existing
+    else:
+        review = ItemReview(
+            **review_in.model_dump(),
+            user_id=current_user.id
+        )
+        session.add(review)
+    
+    session.flush()
+    
+    # Update WorkMetadata aggregate rating
+    meta = ensure_work_metadata(session, review_in.author, review_in.title)
+    if meta:
+        all_reviews = session.exec(
+            select(ItemReview).where(
+                ItemReview.author == review_in.author,
+                ItemReview.title == review_in.title
+            )
+        ).all()
+        meta.review_count = len(all_reviews)
+        meta.average_rating = sum(r.rating for r in all_reviews) / len(all_reviews)
+        session.add(meta)
+    
+    session.commit()
+    session.refresh(review)
+    return review
+
+
+@router.get("/reviews/{author}/{title}", response_model=ItemReviewsPublic)
+def read_reviews(
+    *, session: SessionDep, current_user: CurrentUser, author: str, title: str, skip: int = 0, limit: int = 100
+) -> Any:
+    """
+    Get reviews for a work.
+    """
+    statement = select(ItemReview).where(
+        ItemReview.author == author,
+        ItemReview.title == title
+    ).order_by(ItemReview.created_at.desc())
+    
+    count = session.exec(select(func.count()).select_from(statement.subquery())).one()
+    reviews = session.exec(statement.offset(skip).limit(limit)).all()
+    
+    public_reviews = []
+    for r in reviews:
+        # Check if user voted
+        vote = session.exec(
+            select(ItemReviewVote).where(
+                ItemReviewVote.review_id == r.id,
+                ItemReviewVote.user_id == current_user.id
+            )
+        ).first()
+        
+        r_public = ItemReviewPublic.model_validate(r)
+        if vote:
+            r_public.current_user_vote = vote.vote
+        
+        public_reviews.append(r_public)
+        
+    return ItemReviewsPublic(data=public_reviews, count=count)
+
+
+@router.post("/reviews/{review_id}/vote", response_model=ItemReviewPublic)
+def vote_review(
+    *, session: SessionDep, current_user: CurrentUser, review_id: uuid.UUID, vote: int
+) -> Any:
+    """
+    Vote on a review. vote must be 1 (up) or -1 (down).
+    """
+    if vote not in [1, -1]:
+        raise HTTPException(status_code=400, detail="Vote must be 1 or -1")
+
+    review = session.get(ItemReview, review_id)
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+
+    # Check existing vote
+    existing_vote = session.exec(
+        select(ItemReviewVote).where(
+            ItemReviewVote.review_id == review_id,
+            ItemReviewVote.user_id == current_user.id
+        )
+    ).first()
+
+    if existing_vote:
+        if existing_vote.vote == vote:
+            # Toggle off (remove vote)
+            session.delete(existing_vote)
+        else:
+            # Change vote
+            existing_vote.vote = vote
+            session.add(existing_vote)
+    else:
+        # New vote
+        new_vote = ItemReviewVote(review_id=review_id, user_id=current_user.id, vote=vote)
+        session.add(new_vote)
+
+    session.flush()
+
+    # Recalculate score
+    score = session.exec(
+        select(func.sum(ItemReviewVote.vote)).where(ItemReviewVote.review_id == review_id)
+    ).one()
+    
+    review.vote_score = score or 0
+    session.add(review)
+    session.commit()
+    session.refresh(review)
+    return review

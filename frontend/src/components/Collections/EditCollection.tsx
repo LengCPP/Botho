@@ -171,7 +171,11 @@ const EditCollection = ({
                 <Input
                   id="description"
                   {...register("description")}
-                  placeholder={isBucket ? "Auto-generated" : "A collection of my favorite books"}
+                  placeholder={
+                    isBucket
+                      ? "Auto-generated"
+                      : "A collection of my favorite books"
+                  }
                   type="text"
                   disabled={isBucket}
                 />

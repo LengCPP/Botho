@@ -6,6 +6,7 @@ export type Body_items_create_item = {
   author?: string | null
   item_type?: ItemType
   extra_data?: string | null
+  info?: string | null
   image?: (Blob | File) | null
   image_url?: string | null
   community_owner_id?: string | null
@@ -17,6 +18,7 @@ export type Body_items_update_item = {
   author?: string | null
   item_type?: ItemType | null
   extra_data?: string | null
+  info?: string | null
   image?: (Blob | File) | null
   image_url?: string | null
 }
@@ -99,9 +101,14 @@ export type CommunityCreate = {
   is_private?: boolean
 }
 
-export type CommunityMemberRole = "ADMIN" | "MEMBER"
+export type CommunityMemberRole = "ADMIN" | "MODERATOR" | "MEMBER" | "APPLICANT"
 
-export type CommunityMemberStatus = "PENDING" | "ACCEPTED" | "REJECTED"
+export type CommunityMemberStatus =
+  | "PENDING"
+  | "ACCEPTED"
+  | "REJECTED"
+  | "BANNED"
+  | "SUSPENDED"
 
 export type CommunityMemberUpdate = {
   role?: CommunityMemberRole | null
@@ -135,6 +142,7 @@ export type CommunityPublic = {
   id: string
   created_by: string
   current_user_role?: CommunityMemberRole | null
+  current_user_status?: CommunityMemberStatus | null
   notifications_enabled?: boolean | null
 }
 
@@ -174,6 +182,9 @@ export type ItemPublic = {
   extra_data?: {
     [key: string]: unknown
   }
+  info?: {
+    [key: string]: unknown
+  }
   id: string
   owner_id: string
   count: number
@@ -185,6 +196,38 @@ export type ItemPublic = {
   is_available?: boolean
   added_by_id?: string | null
   is_donation_pending?: boolean
+  work_metadata?: WorkMetadataPublic | null
+}
+
+export type ItemReviewCreate = {
+  author: string
+  title: string
+  rating: number
+  comment?: string | null
+}
+
+export type ItemReviewPublic = {
+  id: string
+  author: string
+  title: string
+  user_id: string
+  rating: number
+  vote_score?: number
+  comment: string | null
+  created_at: string
+  user: UserPublic
+}
+
+export type ItemsVoteReviewData = {
+  reviewId: string
+  vote: number
+}
+
+export type ItemsVoteReviewResponse = ItemReviewPublic
+
+export type ItemReviewsPublic = {
+  data: Array<ItemReviewPublic>
+  count: number
 }
 
 export type ItemsPublic = {
@@ -349,6 +392,18 @@ export type ValidationError = {
   type: string
 }
 
+export type WorkMetadataPublic = {
+  author: string
+  title: string
+  tags?: Array<string>
+  average_rating: number
+  review_count: number
+}
+
+export type WorkMetadataUpdate = {
+  tags?: Array<string> | null
+}
+
 export type CollectionsReadCollectionsData = {
   communityId?: string | null
   limit?: number
@@ -447,6 +502,7 @@ export type CommunitiesReadCommunityMembersData = {
   id: string
   limit?: number
   skip?: number
+  status?: CommunityMemberStatus | null
 }
 
 export type CommunitiesReadCommunityMembersResponse = UsersPublic
@@ -631,6 +687,42 @@ export type ItemsDeleteItemData = {
 }
 
 export type ItemsDeleteItemResponse = Message
+
+export type ItemsDuplicateItemData = {
+  id: string
+}
+
+export type ItemsDuplicateItemResponse = ItemPublic
+
+export type ItemsReadWorkMetadataData = {
+  author: string
+  title: string
+}
+
+export type ItemsReadWorkMetadataResponse = WorkMetadataPublic
+
+export type ItemsUpdateWorkMetadataData = {
+  author: string
+  requestBody: WorkMetadataUpdate
+  title: string
+}
+
+export type ItemsUpdateWorkMetadataResponse = WorkMetadataPublic
+
+export type ItemsCreateReviewData = {
+  requestBody: ItemReviewCreate
+}
+
+export type ItemsCreateReviewResponse = ItemReviewPublic
+
+export type ItemsReadReviewsData = {
+  author: string
+  limit?: number
+  skip?: number
+  title: string
+}
+
+export type ItemsReadReviewsResponse = ItemReviewsPublic
 
 export type LoansCreateLoanRequestData = {
   requestBody: LoanCreate
@@ -866,3 +958,60 @@ export type UtilsTestEmailData = {
 export type UtilsTestEmailResponse = Message
 
 export type UtilsHealthCheckResponse = boolean
+
+export type ReadingLogStatus = "READING" | "COMPLETED" | "DROPPED"
+
+export type ReadingLogCreate = {
+  author: string
+  title: string
+  status: ReadingLogStatus
+}
+
+export type ReadingLogUpdate = {
+  status: ReadingLogStatus
+}
+
+export type ReadingLogPublic = {
+  id: string
+  user_id: string
+  author: string
+  title: string
+  status: ReadingLogStatus
+  created_at: string
+  updated_at: string
+  work_metadata?: WorkMetadataPublic | null
+}
+
+export type ReadingLogsPublic = {
+  data: Array<ReadingLogPublic>
+  count: number
+}
+
+export type ReadingLogReadReadingLogData = {
+  limit?: number
+  skip?: number
+  status?: ReadingLogStatus | null
+  author?: string | null
+  title?: string | null
+}
+
+export type ReadingLogReadReadingLogResponse = ReadingLogsPublic
+
+export type ReadingLogCreateReadingLogEntryData = {
+  requestBody: ReadingLogCreate
+}
+
+export type ReadingLogCreateReadingLogEntryResponse = ReadingLogPublic
+
+export type ReadingLogUpdateReadingLogEntryData = {
+  id: string
+  requestBody: ReadingLogUpdate
+}
+
+export type ReadingLogUpdateReadingLogEntryResponse = ReadingLogPublic
+
+export type ReadingLogDeleteReadingLogEntryData = {
+  id: string
+}
+
+export type ReadingLogDeleteReadingLogEntryResponse = Message

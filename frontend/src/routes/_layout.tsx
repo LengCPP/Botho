@@ -1,6 +1,11 @@
 import { Box, Flex, IconButton, Text } from "@chakra-ui/react"
-import { Outlet, createFileRoute, redirect, Link as RouterLink } from "@tanstack/react-router"
-import { useState, useEffect } from "react"
+import {
+  Outlet,
+  Link as RouterLink,
+  createFileRoute,
+  redirect,
+} from "@tanstack/react-router"
+import { useEffect, useState } from "react"
 import { FaBars } from "react-icons/fa"
 import { FiSettings } from "react-icons/fi"
 
@@ -35,7 +40,7 @@ function Layout() {
   useInactivityLogout()
   const { user: currentUser } = useAuth()
   const [open, setOpen] = useState(false)
-  
+
   const [isVisible, setIsVisible] = useState(true)
   const [lastScrollY, setLastScrollY] = useState(0)
 
@@ -57,13 +62,13 @@ function Layout() {
   return (
     <Flex direction="column" minH="100dvh">
       <Navbar />
-      
+
       {/* Mobile Burger Menu Trigger */}
-      <Box 
-        display={{ base: "block", md: "none" }} 
-        px={4} 
-        py={2} 
-        bg="bg.subtle" 
+      <Box
+        display={{ base: "block", md: "none" }}
+        px={4}
+        py={2}
+        bg="bg.subtle"
         borderBottomWidth="1px"
         position="sticky"
         top="52px" // Navbar height approx
@@ -80,10 +85,7 @@ function Layout() {
         >
           <DrawerBackdrop />
           <DrawerTrigger asChild>
-            <IconButton
-              variant="ghost"
-              aria-label="Open Menu"
-            >
+            <IconButton variant="ghost" aria-label="Open Menu">
               <FaBars />
             </IconButton>
           </DrawerTrigger>

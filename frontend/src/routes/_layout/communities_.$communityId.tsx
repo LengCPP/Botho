@@ -30,6 +30,7 @@ import {
   FiSend,
   FiSettings,
   FiShield,
+  FiTrash2,
   FiUserCheck,
   FiUserMinus,
   FiUserPlus,
@@ -217,39 +218,60 @@ function CommunityBoard() {
     community?.created_by === currentUser?.id ||
     currentUser?.is_superuser ||
     community?.current_user_role === "ADMIN"
+  const isModerator = community?.current_user_role === "MODERATOR"
+  const isStaff = isAdmin || isModerator
 
   const { data: members, isLoading: isLoadingMembers } = useQuery({
     queryKey: ["communityMembers", communityId],
-    queryFn: () => CommunitiesService.readCommunityMembers({ id: communityId }),
+    queryFn: () =>
+      CommunitiesService.readCommunityMembers({
+        id: communityId,
+        status: "ACCEPTED" as any,
+      }),
+    enabled: !!isMember,
+  })
+
+  const { data: applicants, isLoading: isLoadingApplicants } = useQuery({
+    queryKey: ["communityApplicants", communityId],
+    queryFn: () =>
+      CommunitiesService.readCommunityMembers({
+        id: communityId,
+        status: "PENDING" as any,
+      }),
+    enabled: !!isStaff,
   })
 
   const { data: communityItems, isLoading: isLoadingItems } = useQuery({
     queryKey: ["communityItems", communityId],
     queryFn: () => CommunitiesService.readCommunityItems({ id: communityId }),
+    enabled: !!isMember,
   })
 
   const { data: communityCollections, isLoading: isLoadingCollections } =
     useQuery({
       queryKey: ["communityCollections", communityId],
       queryFn: () => CollectionsService.readCollections({ communityId }),
+      enabled: !!isMember,
     })
 
   const { data: messages, isLoading: isLoadingMessages } = useQuery({
     queryKey: ["communityMessages", communityId],
     queryFn: () =>
       CommunitiesService.readCommunityMessages({ id: communityId }),
+    enabled: !!isMember,
   })
 
   const { data: announcements, isLoading: isLoadingAnnouncements } = useQuery({
     queryKey: ["communityAnnouncements", communityId],
     queryFn: () =>
       CommunitiesService.readCommunityAnnouncements({ id: communityId }),
+    enabled: !!isMember,
   })
 
   const { data: communityLoans, isLoading: isLoadingLoans } = useQuery({
     queryKey: ["communityLoans", communityId],
     queryFn: () => CommunitiesService.readCommunityLoans({ id: communityId }),
-    enabled: !!isAdmin,
+    enabled: !!isStaff,
   })
 
   const postMessageMutation = useMutation({
@@ -265,6 +287,20 @@ function CommunityBoard() {
       })
     },
     onError: () => showErrorToast("Failed to post message"),
+  })
+
+  const deleteMessageMutation = useMutation({
+    mutationFn: (messageId: string) =>
+      CommunitiesService.deleteCommunityMessage({
+        id: communityId,
+        messageId,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["communityMessages", communityId],
+      })
+    },
+    onError: () => showErrorToast("Failed to delete message"),
   })
 
   const toggleNotifMutation = useMutation({
@@ -293,6 +329,9 @@ function CommunityBoard() {
       queryClient.invalidateQueries({
         queryKey: ["communityMembers", communityId],
       })
+      queryClient.invalidateQueries({
+        queryKey: ["communityApplicants", communityId],
+      })
     },
     onError: () => showErrorToast("Failed to update member"),
   })
@@ -304,6 +343,9 @@ function CommunityBoard() {
       showSuccessToast("Member removed")
       queryClient.invalidateQueries({
         queryKey: ["communityMembers", communityId],
+      })
+      queryClient.invalidateQueries({
+        queryKey: ["communityApplicants", communityId],
       })
     },
     onError: () => showErrorToast("Failed to remove member"),
@@ -428,7 +470,7 @@ function CommunityBoard() {
             <Tabs.Trigger value="members" justifyContent="center">
               <FiUsers /> Members ({members?.count || 0})
             </Tabs.Trigger>
-            {isAdmin && (
+            {isStaff && (
               <>
                 <Tabs.Trigger value="loans" justifyContent="center">
                   <FiClock /> Loans
@@ -457,7 +499,7 @@ function CommunityBoard() {
                   <VStack align="stretch" gap={4}>
                     <Flex justify="space-between" align="center">
                       <Heading size="md">Announcement Board</Heading>
-                      {isAdmin && (
+                      {isStaff && (
                         <AddAnnouncementModal communityId={communityId} />
                       )}
                     </Flex>
@@ -524,13 +566,33 @@ function CommunityBoard() {
                                 align="baseline"
                                 mb={1}
                               >
-                                <Text
-                                  fontWeight="bold"
-                                  fontSize="xs"
-                                  color="ui.hover"
-                                >
-                                  {msg.author.full_name || msg.author.email}
-                                </Text>
+                                <HStack gap={2}>
+                                  <Text
+                                    fontWeight="bold"
+                                    fontSize="xs"
+                                    color="ui.hover"
+                                  >
+                                    {msg.author.full_name || msg.author.email}
+                                  </Text>
+                                  {(msg.author_id === currentUser?.id ||
+                                    isStaff) && (
+                                    <Button
+                                      size="2xs"
+                                      variant="ghost"
+                                      colorPalette="red"
+                                      onClick={() => {
+                                        if (
+                                          window.confirm("Delete this message?")
+                                        ) {
+                                          deleteMessageMutation.mutate(msg.id)
+                                        }
+                                      }}
+                                      loading={deleteMessageMutation.isPending}
+                                    >
+                                      <FiTrash2 size="10px" />
+                                    </Button>
+                                  )}
+                                </HStack>
                                 <Text fontSize="2xs" color="fg.subtle">
                                   {new Date(msg.created_at).toLocaleString()}
                                 </Text>
@@ -572,7 +634,7 @@ function CommunityBoard() {
                   <Box>
                     <Flex justify="space-between" align="center" mb={4}>
                       <Heading size="md">Community Collections</Heading>
-                      {isAdmin && <AddCollection communityId={communityId} />}
+                      {isStaff && <AddCollection communityId={communityId} />}
                     </Flex>
                     <SimpleGrid
                       columns={{ base: 1, sm: 2, lg: 3, xl: 4 }}
@@ -593,12 +655,12 @@ function CommunityBoard() {
                 <Flex justify="space-between" align="center" mb={4}>
                   <Heading size="md">All Items</Heading>
                   <HStack gap={2}>
-                    {isAdmin &&
+                    {isStaff &&
                       (!communityCollections?.data ||
                         communityCollections.data.length === 0) && (
                         <AddCollection communityId={communityId} />
                       )}
-                    <AddItem communityId={communityId} isAdmin={isAdmin} />
+                    <AddItem communityId={communityId} isAdmin={isStaff} />
                   </HStack>
                 </Flex>
 
@@ -627,14 +689,14 @@ function CommunityBoard() {
                               <CompactItemCard
                                 item={group}
                                 communityId={communityId}
-                                isAdmin={isAdmin}
+                                isAdmin={isStaff}
                                 onShowDetails={() => setSelectedItem(item)}
                               />
                             ) : (
                               <ItemCard
                                 item={group}
                                 communityId={communityId}
-                                isAdmin={isAdmin}
+                                isAdmin={isStaff}
                               />
                             )}
                             {item.is_donation_pending && (
@@ -692,7 +754,9 @@ function CommunityBoard() {
                             colorPalette={
                               member.community_role === "ADMIN"
                                 ? "purple"
-                                : "gray"
+                                : member.community_role === "MODERATOR"
+                                  ? "main"
+                                  : "gray"
                             }
                           >
                             {member.community_role?.toUpperCase() || "MEMBER"}
@@ -737,7 +801,7 @@ function CommunityBoard() {
             </SimpleGrid>
           </Tabs.Content>
 
-          {isAdmin && (
+          {isStaff && (
             <>
               <Tabs.Content value="loans" pt={6}>
                 <VStack align="stretch" gap={4}>
@@ -767,52 +831,39 @@ function CommunityBoard() {
               </Tabs.Content>
 
               <Tabs.Content value="manage" pt={6}>
-                <VStack align="stretch" gap={4}>
-                  <Heading size="md">Manage Community Members</Heading>
-                  {isLoadingMembers ? (
-                    <Text>Loading members...</Text>
+                <VStack align="stretch" gap={8}>
+                  {/* Applicants Section */}
+                  {isLoadingApplicants ? (
+                    <Text>Loading applicants...</Text>
                   ) : (
-                    <VStack align="stretch" gap={3}>
-                      {members?.data.map((member) => {
-                        const isCreator = member.id === community.created_by
-                        const role =
-                          member.community_role ||
-                          (isCreator ? "admin" : "member")
-                        const status = member.community_status
-
-                        return (
-                          <Flex
-                            key={member.id}
-                            justify="space-between"
-                            align="center"
-                            p={4}
-                            borderWidth="1px"
-                            rounded="md"
-                            bg="bg.panel"
-                          >
-                            <VStack align="start" gap={0}>
-                              <Text fontWeight="bold">
-                                {member.full_name || member.email}
-                              </Text>
-                              <HStack>
-                                <Badge
-                                  size="xs"
-                                  colorPalette={
-                                    role === "ADMIN" ? "purple" : "gray"
-                                  }
-                                >
-                                  {role.toUpperCase()}
+                    applicants?.data &&
+                    applicants.data.length > 0 && (
+                      <Box>
+                        <Heading size="md" mb={4} color="ui.hover">
+                          Pending Applications ({applicants.count})
+                        </Heading>
+                        <VStack align="stretch" gap={3}>
+                          {applicants.data.map((member) => (
+                            <Flex
+                              key={member.id}
+                              justify="space-between"
+                              align="center"
+                              p={4}
+                              borderWidth="1px"
+                              rounded="md"
+                              bg="bg.panel"
+                              borderColor="ui.hover"
+                            >
+                              <VStack align="start" gap={0}>
+                                <Text fontWeight="bold">
+                                  {member.full_name || member.email}
+                                </Text>
+                                <Badge size="xs" colorPalette="yellow">
+                                  APPLICANT
                                 </Badge>
-                                {status === "PENDING" && (
-                                  <Badge size="xs" colorPalette="yellow">
-                                    PENDING APPROVAL
-                                  </Badge>
-                                )}
-                              </HStack>
-                            </VStack>
+                              </VStack>
 
-                            <HStack gap={2}>
-                              {status === "PENDING" && (
+                              <HStack gap={2}>
                                 <Button
                                   size="xs"
                                   colorPalette="green"
@@ -820,76 +871,171 @@ function CommunityBoard() {
                                   onClick={() =>
                                     updateMemberMutation.mutate({
                                       userId: member.id,
-                                      status: "accepted",
+                                      status: "ACCEPTED",
                                     })
                                   }
                                 >
                                   Approve
                                 </Button>
-                              )}
-
-                              {!isCreator && member.id !== currentUser?.id && (
-                                <>
-                                  <MenuRoot>
-                                    <MenuTrigger asChild>
-                                      <Button size="xs" variant="outline">
-                                        <FiSettings /> Role
-                                      </Button>
-                                    </MenuTrigger>
-                                    <MenuContent>
-                                      <MenuItem
-                                        value="admin"
-                                        onClick={() =>
-                                          updateMemberMutation.mutate({
-                                            userId: member.id,
-                                            role: "admin",
-                                          })
-                                        }
-                                        disabled={role === "ADMIN"}
-                                      >
-                                        Promote to Admin
-                                      </MenuItem>
-                                      <MenuItem
-                                        value="member"
-                                        onClick={() =>
-                                          updateMemberMutation.mutate({
-                                            userId: member.id,
-                                            role: "member",
-                                          })
-                                        }
-                                        disabled={role === "MEMBER"}
-                                      >
-                                        Demote to Member
-                                      </MenuItem>
-                                    </MenuContent>
-                                  </MenuRoot>
-
-                                  <Button
-                                    size="xs"
-                                    colorPalette="red"
-                                    variant="outline"
-                                    onClick={() => {
-                                      if (
-                                        window.confirm(
-                                          `Are you sure you want to remove ${
-                                            member.full_name || member.email
-                                          }?`,
-                                        )
-                                      ) {
-                                        removeMemberMutation.mutate(member.id)
-                                      }
-                                    }}
-                                  >
-                                    <FiUserMinus /> Remove
-                                  </Button>
-                                </>
-                              )}
-                            </HStack>
-                          </Flex>
-                        )
-                      })}
-                    </VStack>
+                                <Button
+                                  size="xs"
+                                  colorPalette="red"
+                                  variant="outline"
+                                  onClick={() =>
+                                    updateMemberMutation.mutate({
+                                      userId: member.id,
+                                      status: "REJECTED",
+                                    })
+                                  }
+                                >
+                                  Reject
+                                </Button>
+                              </HStack>
+                            </Flex>
+                          ))}
+                        </VStack>
+                      </Box>
+                    )
                   )}
+
+                  {/* Members Section */}
+                  <Box>
+                    <Heading size="md" mb={4}>
+                      Manage Members
+                    </Heading>
+                    {isLoadingMembers ? (
+                      <Text>Loading members...</Text>
+                    ) : (
+                      <VStack align="stretch" gap={3}>
+                        {members?.data
+                          .filter((m) => m.community_status === "ACCEPTED")
+                          .map((member) => {
+                            const isCreator = member.id === community.created_by
+                            const role =
+                              member.community_role ||
+                              (isCreator ? "ADMIN" : "MEMBER")
+
+                            const isTargetStaff =
+                              role === "ADMIN" || role === "MODERATOR"
+
+                            return (
+                              <Flex
+                                key={member.id}
+                                justify="space-between"
+                                align="center"
+                                p={4}
+                                borderWidth="1px"
+                                rounded="md"
+                                bg="bg.panel"
+                              >
+                                <VStack align="start" gap={0}>
+                                  <Text fontWeight="bold">
+                                    {member.full_name || member.email}
+                                  </Text>
+                                  <Badge
+                                    size="xs"
+                                    colorPalette={
+                                      role === "ADMIN"
+                                        ? "purple"
+                                        : role === "MODERATOR"
+                                          ? "main"
+                                          : "gray"
+                                    }
+                                  >
+                                    {role.toUpperCase()}
+                                  </Badge>
+                                </VStack>
+
+                                <HStack gap={2}>
+                                  {!isCreator &&
+                                    member.id !== currentUser?.id && (
+                                      <>
+                                        {/* Only Admins can change roles or remove staff */}
+                                        {isAdmin && !isCreator && (
+                                          <MenuRoot>
+                                            <MenuTrigger asChild>
+                                              <Button
+                                                size="xs"
+                                                variant="outline"
+                                              >
+                                                <FiSettings /> Role
+                                              </Button>
+                                            </MenuTrigger>
+                                            <MenuContent>
+                                              <MenuItem
+                                                value="ADMIN"
+                                                onClick={() =>
+                                                  updateMemberMutation.mutate({
+                                                    userId: member.id,
+                                                    role: "ADMIN",
+                                                  })
+                                                }
+                                                disabled={role === "ADMIN"}
+                                              >
+                                                Promote to Admin
+                                              </MenuItem>
+                                              <MenuItem
+                                                value="MODERATOR"
+                                                onClick={() =>
+                                                  updateMemberMutation.mutate({
+                                                    userId: member.id,
+                                                    role: "MODERATOR",
+                                                  })
+                                                }
+                                                disabled={role === "MODERATOR"}
+                                              >
+                                                Promote to Moderator
+                                              </MenuItem>
+                                              <MenuItem
+                                                value="MEMBER"
+                                                onClick={() =>
+                                                  updateMemberMutation.mutate({
+                                                    userId: member.id,
+                                                    role: "MEMBER",
+                                                  })
+                                                }
+                                                disabled={role === "MEMBER"}
+                                              >
+                                                Demote to Member
+                                              </MenuItem>
+                                            </MenuContent>
+                                          </MenuRoot>
+                                        )}
+
+                                        {/* Moderators can remove regular members, Admins can remove anyone but creator */}
+                                        {(isAdmin ||
+                                          (isModerator && !isTargetStaff)) && (
+                                          <Button
+                                            size="xs"
+                                            colorPalette="red"
+                                            variant="outline"
+                                            onClick={() => {
+                                              if (
+                                                window.confirm(
+                                                  `Are you sure you want to remove ${
+                                                    member.full_name ||
+                                                    member.email
+                                                  }?`,
+                                                )
+                                              ) {
+                                                removeMemberMutation.mutate(
+                                                  member.id,
+                                                )
+                                              }
+                                            }}
+                                          >
+                                            <FiUserMinus /> Remove
+                                          </Button>
+                                        )}
+                                      </>
+                                    )}
+                                </HStack>
+                              </Flex>
+                            )
+                          })}
+                      </VStack>
+                    )}
+                  </Box>
                 </VStack>
               </Tabs.Content>
             </>

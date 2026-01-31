@@ -5,6 +5,7 @@ import {
   FiBriefcase,
   FiGlobe,
   FiHome,
+  FiList,
   FiUserPlus,
   FiUsers,
 } from "react-icons/fi"
@@ -15,6 +16,7 @@ import useAuth from "@/hooks/useAuth"
 const items = [
   { icon: FiHome, title: "Dashboard", path: "/" },
   { icon: FiBriefcase, title: "Items", path: "/items" },
+  { icon: FiList, title: "Reading Log", path: "/reading-log" },
   { icon: FiGlobe, title: "Communities", path: "/communities" },
   { icon: FiUserPlus, title: "Friends", path: "/friends" },
   { icon: FiBookOpen, title: "Loans", path: "/loans" },

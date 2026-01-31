@@ -1,4 +1,9 @@
-import { Button, IconButton, VStack, useBreakpointValue } from "@chakra-ui/react"
+import {
+  Button,
+  IconButton,
+  VStack,
+  useBreakpointValue,
+} from "@chakra-ui/react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { BsThreeDotsVertical } from "react-icons/bs"
@@ -145,16 +150,8 @@ export const ItemActionsMenu = ({
     <>
       {isMobile ? (
         <>
-          <EditItem
-            item={item}
-            width="full"
-            justifyContent="center"
-          />
-          <DeleteItem
-            id={item.id}
-            width="full"
-            justifyContent="center"
-          />
+          <EditItem item={item} width="full" justifyContent="center" />
+          <DeleteItem id={item.id} width="full" justifyContent="center" />
         </>
       ) : (
         <>
@@ -219,8 +216,9 @@ export const ItemActionsMenu = ({
 
       {communityId && (
         <>
-          {!isCommunityOwned && !item.is_donation_pending && (
-            isMobile ? (
+          {!isCommunityOwned &&
+            !item.is_donation_pending &&
+            (isMobile ? (
               <Button
                 variant="ghost"
                 justifyContent="center"
@@ -244,10 +242,9 @@ export const ItemActionsMenu = ({
                 <FiHeart style={{ marginRight: "8px" }} />
                 Donate to Community
               </MenuItem>
-            )
-          )}
-          {(isAdmin || !isCommunityOwned) && (
-            isMobile ? (
+            ))}
+          {(isAdmin || !isCommunityOwned) &&
+            (isMobile ? (
               <Button
                 variant="ghost"
                 justifyContent="center"
@@ -273,8 +270,7 @@ export const ItemActionsMenu = ({
                 <FiTrash2 style={{ marginRight: "8px" }} />
                 Remove from Community
               </MenuItem>
-            )
-          )}
+            ))}
         </>
       )}
     </>

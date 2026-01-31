@@ -13,6 +13,7 @@ def sync_item_to_search(item: Item):
         "description": item.description,
         "author": item.author,
         "item_type": str(item.item_type.value) if hasattr(item.item_type, 'value') else str(item.item_type),
+        "info": item.info,
     }
     index.add_documents([document])
 

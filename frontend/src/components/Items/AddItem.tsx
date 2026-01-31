@@ -9,6 +9,7 @@ import {
   Flex,
   HStack,
   Input,
+  Separator,
   Tabs,
   Text,
   Textarea,
@@ -54,6 +55,13 @@ interface ItemCreate {
     genre?: string
     [key: string]: any
   }
+  info?: {
+    grade?: number
+    physical_description?: string
+  }
+  work_info?: {
+    tags?: string
+  }
   image_url?: string
 }
 
@@ -63,6 +71,7 @@ const AddItem = ({
   isAdmin,
 }: { communityId?: string; collectionId?: string; isAdmin?: boolean }) => {
   const [isOpen, setIsOpen] = useState(false)
+  const [showAdditionalInfo, setShowAdditionalInfo] = useState(false)
   const [mode, setMode] = useState<"create" | "pool">("pool")
   const [searchQuery, setSearchQuery] = useState("")
   const { user: currentUser } = useAuth()
@@ -93,6 +102,13 @@ const AddItem = ({
       description: "",
       item_type: "",
       extra_data: {},
+      info: {
+        grade: 10,
+        physical_description: "",
+      },
+      work_info: {
+        tags: "",
+      },
       image_url: "",
     },
   })
@@ -152,8 +168,20 @@ const AddItem = ({
   }
 
   const mutation = useMutation({
-    mutationFn: (data: Body_items_create_item) =>
-      ItemsService.createItem({ formData: data }),
+    mutationFn: async (data: any) => {
+      const newItem = await ItemsService.createItem({ formData: data.formData })
+
+      // If work info is provided, update work metadata
+      if (data.workInfo && newItem.author) {
+        await ItemsService.updateWorkMetadata({
+          author: newItem.author,
+          title: newItem.title,
+          requestBody: data.workInfo,
+        })
+      }
+
+      return newItem
+    },
     onSuccess: (newItem) => {
       showSuccessToast(
         communityId
@@ -199,13 +227,27 @@ const AddItem = ({
     const itemData: Body_items_create_item = {
       title: data.title,
       description: data.description,
-      item_type: data.item_type,
+      item_type: data.item_type as any,
       extra_data: JSON.stringify(data.extra_data || {}),
+      info: JSON.stringify(data.info || {}),
       image: imageFile,
       image_url: data.image_url,
       community_owner_id: communityId,
     }
-    mutation.mutate(itemData)
+
+    const formattedWorkInfo = data.work_info?.tags
+      ? {
+          tags: data.work_info.tags
+            .split(",")
+            .map((t) => t.trim())
+            .filter((t) => t),
+        }
+      : null
+
+    mutation.mutate({
+      formData: itemData,
+      workInfo: formattedWorkInfo,
+    })
   }
 
   const filteredItems = myItems?.data.filter((item) =>
@@ -301,7 +343,7 @@ const AddItem = ({
               },
             })}
             placeholder="Description"
-            rows={5}
+            rows={3}
           />
         </Field>
 
@@ -314,6 +356,70 @@ const AddItem = ({
                 {...register("extra_data.author" as any)}
               />
             </Field>
+
+            <Separator />
+            <Text fontWeight="bold" fontSize="sm" color="ui.hover">
+              Universal Work Info
+            </Text>
+            <Field
+              label="Tags (Subjects)"
+              helperText="Comma separated list of subjects this work covers."
+            >
+              <Input
+                placeholder="e.g. History, Jazz, Philosophy"
+                {...register("work_info.tags" as any)}
+              />
+            </Field>
+
+            <Separator />
+
+            {!showAdditionalInfo ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowAdditionalInfo(true)}
+                width="full"
+              >
+                Add Additional Info (Condition, Notes)
+              </Button>
+            ) : (
+              <VStack align="stretch" gap={4} animation="fade-in 0.2s">
+                <Flex justify="space-between" align="center">
+                  <Text fontWeight="bold" fontSize="sm" color="ui.hover">
+                    Your Copy Specifics
+                  </Text>
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => setShowAdditionalInfo(false)}
+                    color="fg.muted"
+                  >
+                    Hide
+                  </Button>
+                </Flex>
+
+                <Field
+                  label="Condition Grade (1-10)"
+                  helperText="10 = Brand New, 1 = Very Poor"
+                >
+                  <Input
+                    type="number"
+                    min={1}
+                    max={10}
+                    {...register("info.grade" as any)}
+                  />
+                </Field>
+
+                <Field label="Condition / Physical Description">
+                  <Textarea
+                    placeholder="Explain the physical state of your copy (e.g. 'Signed by author', 'Slightly torn cover')"
+                    {...register("info.physical_description" as any)}
+                    rows={2}
+                  />
+                </Field>
+              </VStack>
+            )}
+
             <Field label="ISBN">
               <Input
                 id="isbn"
@@ -412,10 +518,13 @@ const AddItem = ({
 
   return (
     <DialogRoot
-      size={communityId ? "lg" : { base: "xs", md: "md" }}
+      size={
+        communityId || itemType === "book" ? "lg" : { base: "xs", md: "md" }
+      }
       placement="center"
       open={isOpen}
       onOpenChange={({ open }) => setIsOpen(open)}
+      scrollBehavior="inside"
     >
       <DialogTrigger asChild>
         <Button value="add-item" my={4}>

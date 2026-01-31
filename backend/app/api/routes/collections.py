@@ -127,19 +127,16 @@ def create_collection(
         collection_in.description = f"Collection of items {visible_name} is sharing with this community."
         
     elif community_id:
-        # Check if admin for non-bucket community collections
+        # Check if staff for non-bucket community collections
         statement = select(CommunityMember).where(
             CommunityMember.community_id == community_id,
             CommunityMember.user_id == current_user.id,
             CommunityMember.status == CommunityMemberStatus.ACCEPTED,
-            CommunityMember.role == CommunityMemberRole.ADMIN,
+            CommunityMember.role.in_([CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]),
         )
         membership = session.exec(statement).first()
         if not membership and not current_user.is_superuser:
-            from app.models import Community
-            comm = session.get(Community, community_id)
-            if not comm or comm.created_by != current_user.id:
-                raise HTTPException(status_code=403, detail="Only community admins can create community collections")
+            raise HTTPException(status_code=403, detail="Only community staff can create community collections")
         owner_id = None # Owned by community
 
     collection = crud.create_collection(
@@ -182,12 +179,12 @@ def update_collection(
     if collection.owner_id == current_user.id or current_user.is_superuser:
         can_edit = True
     elif collection.community_id:
-        # Check if community admin
+        # Check if community staff
         statement = select(CommunityMember).where(
             CommunityMember.community_id == collection.community_id,
             CommunityMember.user_id == current_user.id,
             CommunityMember.status == CommunityMemberStatus.ACCEPTED,
-            CommunityMember.role == CommunityMemberRole.ADMIN,
+            CommunityMember.role.in_([CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]),
         )
         membership = session.exec(statement).first()
         if membership:
@@ -225,12 +222,12 @@ def delete_collection(
     if collection.owner_id == current_user.id or current_user.is_superuser:
         can_delete = True
     elif collection.community_id:
-        # Check if community admin
+        # Check if community staff
         statement = select(CommunityMember).where(
             CommunityMember.community_id == collection.community_id,
             CommunityMember.user_id == current_user.id,
             CommunityMember.status == CommunityMemberStatus.ACCEPTED,
-            CommunityMember.role == CommunityMemberRole.ADMIN,
+            CommunityMember.role.in_([CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]),
         )
         membership = session.exec(statement).first()
         if membership:
@@ -266,7 +263,7 @@ def add_item_to_collection(
             CommunityMember.community_id == collection.community_id,
             CommunityMember.user_id == current_user.id,
             CommunityMember.status == CommunityMemberStatus.ACCEPTED,
-            CommunityMember.role == CommunityMemberRole.ADMIN,
+            CommunityMember.role.in_([CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]),
         )
         membership = session.exec(statement).first()
         if membership:
@@ -319,7 +316,7 @@ def remove_item_from_collection(
             CommunityMember.community_id == collection.community_id,
             CommunityMember.user_id == current_user.id,
             CommunityMember.status == CommunityMemberStatus.ACCEPTED,
-            CommunityMember.role == CommunityMemberRole.ADMIN,
+            CommunityMember.role.in_([CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]),
         )
         membership = session.exec(statement).first()
         if membership:

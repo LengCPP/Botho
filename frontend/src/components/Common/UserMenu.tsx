@@ -10,7 +10,7 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { useState } from "react"
-import { FiLogOut, FiSettings, FiUser, FiBell } from "react-icons/fi"
+import { FiBell, FiLogOut, FiSettings, FiUser } from "react-icons/fi"
 
 import { NotificationsService } from "@/client"
 import useAuth from "@/hooks/useAuth"
@@ -30,8 +30,8 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "../ui/menu"
-import UserAvatar from "./UserAvatar"
 import NotificationsList from "./NotificationsList"
+import UserAvatar from "./UserAvatar"
 
 const UserMenu = () => {
   const { user, logout } = useAuth()
@@ -39,7 +39,7 @@ const UserMenu = () => {
   const { data: notifications } = useNotifications()
   const [showNotifications, setShowNotifications] = useState(false)
 
-  // Only show the notification dot on the avatar if we are on mobile 
+  // Only show the notification dot on the avatar if we are on mobile
   // (where the standalone bell icon is hidden)
   const isMobile = useBreakpointValue({ base: true, md: false })
 
@@ -120,14 +120,14 @@ const UserMenu = () => {
               <Box position="relative">
                 <FiBell />
                 {hasNotifications && (
-                  <Box 
-                    position="absolute" 
-                    top="-1" 
-                    right="-1" 
-                    bg="red.500" 
-                    w="2" 
-                    h="2" 
-                    rounded="full" 
+                  <Box
+                    position="absolute"
+                    top="-1"
+                    right="-1"
+                    bg="red.500"
+                    w="2"
+                    h="2"
+                    rounded="full"
                     border="1px solid white"
                   />
                 )}
@@ -193,8 +193,8 @@ const UserMenu = () => {
       </MenuRoot>
 
       {/* Notifications Dialog for Mobile */}
-      <DialogRoot 
-        open={showNotifications} 
+      <DialogRoot
+        open={showNotifications}
         onOpenChange={(e) => setShowNotifications(e.open)}
         size="full"
         motionPreset="slide-in-bottom"
@@ -204,10 +204,10 @@ const UserMenu = () => {
             <Flex justify="space-between" align="center">
               <DialogTitle>Notifications</DialogTitle>
               {unreadCount > 0 && (
-                <Button 
-                  size="xs" 
-                  variant="ghost" 
-                  colorPalette="main" 
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  colorPalette="main"
                   onClick={() => markAllAsReadMutation.mutate()}
                 >
                   Mark all as read
@@ -217,7 +217,9 @@ const UserMenu = () => {
             <DialogCloseTrigger />
           </DialogHeader>
           <DialogBody p={0}>
-            <NotificationsList onItemClick={() => setShowNotifications(false)} />
+            <NotificationsList
+              onItemClick={() => setShowNotifications(false)}
+            />
           </DialogBody>
         </DialogContent>
       </DialogRoot>
