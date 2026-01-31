@@ -15,6 +15,7 @@ interface BookSearchInputProps {
   placeholder?: string
   id?: string
   name?: string
+  value?: string
 }
 
 export const BookSearchInput = ({
@@ -22,11 +23,17 @@ export const BookSearchInput = ({
   placeholder = "Search for a book title...",
   id,
   name,
+  value = "",
 }: BookSearchInputProps) => {
-  const [searchTerm, setSearchTerm] = useState("")
+  const [searchTerm, setSearchTerm] = useState(value)
   const [debouncedTerm, setDebouncedTerm] = useState("")
   const [showResults, setShowResults] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  // Sync internal state with external value (important for barcode population)
+  useEffect(() => {
+    setSearchTerm(value)
+  }, [value])
 
   // 500ms debounce
   useEffect(() => {

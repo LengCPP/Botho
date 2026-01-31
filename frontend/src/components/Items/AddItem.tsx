@@ -8,6 +8,7 @@ import {
   DialogTitle,
   Flex,
   HStack,
+  IconButton,
   Input,
   Separator,
   Tabs,
@@ -16,8 +17,9 @@ import {
   VStack,
   useBreakpointValue,
 } from "@chakra-ui/react"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { FaPlus } from "react-icons/fa"
+import { FiCamera } from "react-icons/fi"
 
 import {
   type Body_items_create_item,
@@ -27,10 +29,11 @@ import {
 } from "@/client"
 import type { ApiError } from "@/client/core/ApiError"
 import { BookSearchInput } from "@/components/BookSearchInput"
+import BarcodeScanner from "@/components/Common/BarcodeScanner"
 import { useColorModeValue } from "@/components/ui/color-mode"
 import { BOOK_CLASSIFICATION } from "@/constants"
 import useAuth from "@/hooks/useAuth"
-import type { BookResult } from "@/hooks/useBookSearch"
+import { type BookResult, useIsbnSearch } from "@/hooks/useBookSearch"
 import useCustomToast from "@/hooks/useCustomToast"
 import { handleError } from "@/utils"
 import {
@@ -71,11 +74,18 @@ const AddItem = ({
   communityId,
   collectionId,
   isAdmin,
-}: { communityId?: string; collectionId?: string; isAdmin?: boolean }) => {
+}: {
+  communityId?: string
+  collectionId?: string
+  isAdmin?: boolean
+}) => {
   const [isOpen, setIsOpen] = useState(false)
   const [showAdditionalInfo, setShowAdditionalInfo] = useState(false)
   const [mode, setMode] = useState<"create" | "pool">("pool")
   const [searchQuery, setSearchQuery] = useState("")
+  const [isScanning, setIsScanning] = useState(false)
+  const [scannedIsbn, setScannedIsbn] = useState("")
+
   const { user: currentUser } = useAuth()
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
@@ -128,6 +138,20 @@ const AddItem = ({
     enabled: isOpen && !!communityId && mode === "pool" && !!currentUser,
   })
 
+  const { data: isbnResults, isLoading: isSearchingIsbn } =
+    useIsbnSearch(scannedIsbn)
+
+  useEffect(() => {
+    if (isbnResults && isbnResults.length > 0) {
+      handleBookSelect(isbnResults[0])
+      setScannedIsbn("")
+      showSuccessToast("Book details populated from barcode!")
+    } else if (scannedIsbn && !isSearchingIsbn && isbnResults?.length === 0) {
+      showErrorToast(`Could not find book with ISBN: ${scannedIsbn}`)
+      setScannedIsbn("")
+    }
+  }, [isbnResults, isSearchingIsbn])
+
   const poolMutation = useMutation({
     mutationFn: (itemId: string) =>
       CommunitiesService.addItemToCommunity({ id: communityId!, itemId }),
@@ -146,6 +170,7 @@ const AddItem = ({
     setValue("extra_data.author", book.authors.join(", "))
     setValue("extra_data.isbn", book.isbn)
     setValue("image_url", book.thumbnail)
+    setValue("item_type", "book")
 
     if (book.categories && book.categories.length > 0) {
       const gCategory = book.categories[0]
@@ -274,6 +299,15 @@ const AddItem = ({
   const creationFormContent = (
     <form onSubmit={handleSubmit(onSubmit)}>
       <VStack gap={4}>
+        {isScanning && (
+          <BarcodeScanner 
+            onScan={(code) => {
+              setScannedIsbn(code)
+              setIsScanning(false)
+            }}
+            onClose={() => setIsScanning(false)}
+          />
+        )}
         <Text fontSize="sm" color="fg.muted">
           {communityId
             ? "Create an item that is directly owned by the community itself."
@@ -285,21 +319,34 @@ const AddItem = ({
           invalid={!!errors.item_type}
           errorText={errors.item_type?.message}
         >
-          <select
-            id="item_type"
-            {...register("item_type", { required: "Item type is required" })}
-            style={selectStyle}
-          >
-            <option value="" style={{ backgroundColor: selectBg }}>
-              -- select item type --
-            </option>
-            <option value="general" style={{ backgroundColor: selectBg }}>
-              General
-            </option>
-            <option value="book" style={{ backgroundColor: selectBg }}>
-              Book
-            </option>
-          </select>
+          <HStack width="full">
+            <select
+              id="item_type"
+              {...register("item_type", { required: "Item type is required" })}
+              style={selectStyle}
+            >
+              <option value="" style={{ backgroundColor: selectBg }}>
+                -- select item type --
+              </option>
+              <option value="general" style={{ backgroundColor: selectBg }}>
+                General
+              </option>
+              <option value="book" style={{ backgroundColor: selectBg }}>
+                Book
+              </option>
+            </select>
+            {itemType === "book" && (
+              <IconButton
+                aria-label="Scan Barcode"
+                variant="outline"
+                colorPalette="accent"
+                onClick={() => setIsScanning(true)}
+                flexShrink={0}
+              >
+                <FiCamera />
+              </IconButton>
+            )}
+          </HStack>
         </Field>
 
         <Field
@@ -312,6 +359,7 @@ const AddItem = ({
             <BookSearchInput
               id="title"
               name="title"
+              value={watch("title")}
               onSelect={handleBookSelect}
             />
           ) : (
