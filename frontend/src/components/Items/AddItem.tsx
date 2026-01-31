@@ -65,6 +65,8 @@ interface ItemCreate {
   image_url?: string
 }
 
+const MAX_FILE_SIZE = 1 * 1024 * 1024 // 1MB
+
 const AddItem = ({
   communityId,
   collectionId,
@@ -164,7 +166,13 @@ const AddItem = ({
   }
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setImageFile(e.target.files?.[0] || null)
+    const file = e.target.files?.[0] || null
+    if (file && file.size > MAX_FILE_SIZE) {
+      showErrorToast("Image size exceeds the 1MB limit.")
+      if (fileInputRef.current) fileInputRef.current.value = ""
+      return
+    }
+    setImageFile(file)
   }
 
   const mutation = useMutation({
@@ -361,15 +369,15 @@ const AddItem = ({
             <Text fontWeight="bold" fontSize="sm" color="ui.hover">
               Universal Work Info
             </Text>
-            <Field
-              label="Tags (Subjects)"
-              helperText="Comma separated list of subjects this work covers."
-            >
-              <Input
-                placeholder="e.g. History, Jazz, Philosophy"
-                {...register("work_info.tags" as any)}
-              />
-            </Field>
+                  <Field
+                    label="Subjects"
+                    helperText="Comma separated (e.g. fantasy, history, sci-fi)"
+                  >
+                    <Input
+                      placeholder="fantasy, history, sci-fi"
+                      {...register("work_info.tags" as any)}
+                    />
+                  </Field>
 
             <Separator />
 

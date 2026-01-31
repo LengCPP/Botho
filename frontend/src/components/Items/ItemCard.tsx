@@ -86,7 +86,6 @@ const ItemCard = ({
   const bgColor = useColorModeValue("accent.50", "gray.800")
   const textColor = useColorModeValue("gray.800", "gray.100")
   const borderColor = useColorModeValue("accent.200", "gray.600")
-  const scrollbarColor = useColorModeValue("accent.200", "gray.600")
 
   // Reading Log Logic
   const { data: readingLogData } = useQuery({
@@ -216,7 +215,28 @@ const ItemCard = ({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{item.title}</DialogTitle>
+            <Flex justify="space-between" align="center" width="full" pr={8}>
+              <DialogTitle>{item.title}</DialogTitle>
+              <Box onClick={(e) => e.stopPropagation()}>
+                {isOwner ? (
+                  <ItemActionsMenu
+                    item={item}
+                    communityId={communityId}
+                    isAdmin={isAdmin}
+                    onRemoveFromCollection={onRemoveFromCollection}
+                    onlyInfo={true}
+                  />
+                ) : (
+                  <FriendItemActionsMenu
+                    item={item}
+                    isBorrowing={isBorrowing}
+                    loanId={loan?.id}
+                    communityId={communityId}
+                    isAdmin={isAdmin}
+                  />
+                )}
+              </Box>
+            </Flex>
           </DialogHeader>
           <DialogBody>
             <ItemExtendedInfo item={item} isOwner={isOwner} />
@@ -467,6 +487,7 @@ const ItemCard = ({
                       communityId={communityId}
                       isAdmin={isAdmin}
                       onRemoveFromCollection={onRemoveFromCollection}
+                      onlyInfo={showAdditionalInfo}
                     />
                   ) : (
                     <FriendItemActionsMenu
@@ -534,11 +555,8 @@ const ItemCard = ({
                     width="full"
                     pr={1}
                     css={{
-                      "&::-webkit-scrollbar": { width: "4px" },
-                      "&::-webkit-scrollbar-thumb": {
-                        background: scrollbarColor,
-                        borderRadius: "full",
-                      },
+                      "&::-webkit-scrollbar": { display: "none" },
+                      scrollbarWidth: "none",
                     }}
                   >
                     <Text fontSize="xs" color="inherit" opacity={0.9}>
@@ -587,9 +605,16 @@ const ItemCard = ({
                 </Badge>
 
                 <Flex justify="space-between" align="center" mb={1}>
-                  <Text fontSize="xs" fontWeight="semibold">
-                    Owner:
-                  </Text>
+                  <HStack gap={2}>
+                    <Text fontSize="xs" fontWeight="semibold">
+                      Owner:
+                    </Text>
+                    {item.is_donation_pending && (
+                      <Badge colorPalette="yellow" variant="subtle" size="xs">
+                        Donation Pending
+                      </Badge>
+                    )}
+                  </HStack>
                   {isGrouped && (
                     <HStack gap={1}>
                       <Text fontSize="2xs" color="gray.500">
@@ -605,8 +630,7 @@ const ItemCard = ({
                       </IconButton>
                     </HStack>
                   )}
-                </Flex>
-                <HStack gap={1} flexWrap="wrap">
+                </Flex>                <HStack gap={1} flexWrap="wrap">
                   {loan ? (
                     <Link
                       to={

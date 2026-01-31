@@ -1,15 +1,10 @@
-import {
-  Button,
-  Input,
-  VStack,
-} from "@chakra-ui/react"
+import { Button, Input, VStack } from "@chakra-ui/react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { useForm } from "react-hook-form"
-import { FaPen } from "react-icons/fa"
+import { FaPlus } from "react-icons/fa"
 
-import { ItemsService, type ItemPublic } from "@/client"
-import useCustomToast from "@/hooks/useCustomToast"
+import { type ItemPublic, ItemsService } from "@/client"
 import {
   DialogBody,
   DialogCloseTrigger,
@@ -21,6 +16,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Field } from "@/components/ui/field"
+import useCustomToast from "@/hooks/useCustomToast"
 
 interface EditTagsProps {
   item: ItemPublic
@@ -31,7 +27,11 @@ const EditTags = ({ item }: EditTagsProps) => {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
-  const { register, handleSubmit, formState: { isSubmitting } } = useForm<{ tags: string }>({
+  const {
+    register,
+    handleSubmit,
+    formState: { isSubmitting },
+  } = useForm<{ tags: string }>({
     defaultValues: {
       tags: item.work_metadata?.tags?.join(", ") || "",
     },
@@ -45,33 +45,42 @@ const EditTags = ({ item }: EditTagsProps) => {
         requestBody: { tags },
       }),
     onSuccess: () => {
-      showSuccessToast("Tags updated!")
+      showSuccessToast("Subjects updated!")
       setIsOpen(false)
       queryClient.invalidateQueries({ queryKey: ["items"] })
       // Also invalidate wherever work_metadata is used
     },
-    onError: () => showErrorToast("Failed to update tags"),
+    onError: () => showErrorToast("Failed to update subjects"),
   })
 
   const onSubmit = (data: { tags: string }) => {
-    const tagsArray = data.tags.split(",").map(t => t.trim()).filter(Boolean)
+    const tagsArray = data.tags
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean)
     mutation.mutate(tagsArray)
   }
 
   return (
     <DialogRoot open={isOpen} onOpenChange={(e) => setIsOpen(e.open)}>
       <DialogTrigger asChild>
-        <Button size="xs" variant="ghost" colorPalette="gray" aria-label="Edit Tags">
-          <FaPen /> Edit
+        <Button
+          size="xs"
+          variant="ghost"
+          colorPalette="gray"
+          aria-label="Add Subjects"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <FaPlus />
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent onClick={(e) => e.stopPropagation()}>
         <DialogHeader>
-          <DialogTitle>Edit Tags</DialogTitle>
+          <DialogTitle>Edit Subjects</DialogTitle>
         </DialogHeader>
         <DialogBody>
           <form id="edit-tags-form" onSubmit={handleSubmit(onSubmit)}>
-            <Field label="Tags (comma separated)">
+            <Field label="Subjects (comma separated)">
               <Input {...register("tags")} placeholder="fantasy, scifi, epic" />
             </Field>
           </form>

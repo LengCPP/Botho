@@ -23,7 +23,9 @@ import {
   FiBell,
   FiBellOff,
   FiBox,
+  FiCheck,
   FiClock,
+  FiEdit2,
   FiLogOut,
   FiMessageSquare,
   FiPlus,
@@ -35,6 +37,7 @@ import {
   FiUserMinus,
   FiUserPlus,
   FiUsers,
+  FiX,
 } from "react-icons/fi"
 
 import {
@@ -193,6 +196,160 @@ function AnnouncementItem({ ann }: { ann: any }) {
   )
 }
 
+function MessageItem({ msg, communityId, isAdmin, isStaff, currentUser, queryClient }: any) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [editContent, setEditEditing] = useState(msg.content)
+  const { showSuccessToast, showErrorToast } = useCustomToast()
+
+  const deleteMessageMutation = useMutation({
+    mutationFn: () =>
+      CommunitiesService.deleteCommunityMessage({
+        id: communityId,
+        messageId: msg.id,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["communityMessages", communityId],
+      })
+    },
+    onError: () => showErrorToast("Failed to delete message"),
+  })
+
+  const updateMessageMutation = useMutation({
+    mutationFn: (content: string) =>
+      CommunitiesService.updateCommunityMessage({
+        id: communityId,
+        messageId: msg.id,
+        requestBody: { content },
+      }),
+    onSuccess: () => {
+      setIsEditing(false)
+      queryClient.invalidateQueries({
+        queryKey: ["communityMessages", communityId],
+      })
+    },
+    onError: () => showErrorToast("Failed to update message"),
+  })
+
+  const handleUpdate = () => {
+    if (!editContent.trim()) return
+    updateMessageMutation.mutate(editContent)
+  }
+
+  const isAuthor = msg.author_id === currentUser?.id
+
+  return (
+    <Box p={3} bg="bg.muted" rounded="lg">
+      <Flex justify="space-between" align="baseline" mb={1}>
+        <HStack gap={2}>
+          <Text fontWeight="bold" fontSize="xs" color="ui.hover">
+            {msg.author.full_name || msg.author.email}
+          </Text>
+          {(isAuthor || isStaff) && !isEditing && (
+            <HStack gap={1}>
+              {isAuthor && (
+                <Button
+                  size="2xs"
+                  variant="ghost"
+                  onClick={() => setIsEditing(true)}
+                >
+                  <FiEdit2 size="10px" />
+                </Button>
+              )}
+              <Button
+                size="2xs"
+                variant="ghost"
+                colorPalette="red"
+                onClick={() => {
+                  if (window.confirm("Delete this message?")) {
+                    deleteMessageMutation.mutate()
+                  }
+                }}
+                loading={deleteMessageMutation.isPending}
+              >
+                <FiTrash2 size="10px" />
+              </Button>
+            </HStack>
+          )}
+        </HStack>
+        <Text fontSize="2xs" color="fg.subtle">
+          {new Date(msg.created_at).toLocaleString()}
+        </Text>
+      </Flex>
+      
+      {isEditing ? (
+        <VStack align="stretch" mt={2} gap={2}>
+          <Textarea 
+            size="sm" 
+            value={editContent} 
+            onChange={(e) => setEditEditing(e.target.value)}
+            rows={2}
+          />
+          <HStack justify="flex-end" gap={2}>
+            <Button size="xs" variant="ghost" onClick={() => setIsEditing(false)}>
+              <FiX />
+            </Button>
+            <Button 
+              size="xs" 
+              colorPalette="accent" 
+              onClick={handleUpdate}
+              loading={updateMessageMutation.isPending}
+            >
+              <FiCheck />
+            </Button>
+          </HStack>
+        </VStack>
+      ) : (
+        <Text fontSize="sm">{msg.content}</Text>
+      )}
+    </Box>
+  )
+}
+
+function DonationManagement({ items, communityId }: { items: ItemPublic[], communityId: string }) {
+  const queryClient = useQueryClient()
+  const { showSuccessToast, showErrorToast } = useCustomToast()
+  
+  const pending = items.filter(i => i.is_donation_pending)
+  
+  const ratifyMutation = useMutation({
+    mutationFn: (itemId: string) => 
+      CommunitiesService.ratifyDonation({ id: communityId, itemId }),
+    onSuccess: () => {
+      showSuccessToast("Donation accepted and item received!")
+      queryClient.invalidateQueries({ queryKey: ["communityItems", communityId] })
+      queryClient.invalidateQueries({ queryKey: ["items"] })
+    },
+    onError: () => showErrorToast("Failed to accept donation")
+  })
+
+  if (pending.length === 0) return null
+
+  return (
+    <Box mb={8} p={4} borderWidth="1px" rounded="lg" bg="bg.panel" borderColor="orange.500">
+      <Heading size="md" mb={4} color="orange.500">Donation Management</Heading>
+      <VStack align="stretch" gap={3}>
+        {pending.map(item => (
+          <Flex key={item.id} justify="space-between" align="center" p={3} bg="bg.muted" rounded="md">
+            <VStack align="start" gap={0}>
+              <Text fontWeight="bold">{item.title}</Text>
+              <Text fontSize="xs" color="fg.muted">Donated by member</Text>
+            </VStack>
+            <Button 
+              size="sm" 
+              colorPalette="green" 
+              onClick={() => ratifyMutation.mutate(item.id)}
+              loading={ratifyMutation.isPending && ratifyMutation.variables === item.id}
+            >
+              Accept & Confirm Receipt
+            </Button>
+          </Flex>
+        ))}
+      </VStack>
+    </Box>
+  )
+}
+
 function CommunityBoard() {
   const { communityId } = Route.useParams()
   const { user: currentUser } = useAuth()
@@ -271,7 +428,7 @@ function CommunityBoard() {
   const { data: communityLoans, isLoading: isLoadingLoans } = useQuery({
     queryKey: ["communityLoans", communityId],
     queryFn: () => CommunitiesService.readCommunityLoans({ id: communityId }),
-    enabled: !!isStaff,
+    enabled: !!isAdmin,
   })
 
   const postMessageMutation = useMutation({
@@ -287,20 +444,6 @@ function CommunityBoard() {
       })
     },
     onError: () => showErrorToast("Failed to post message"),
-  })
-
-  const deleteMessageMutation = useMutation({
-    mutationFn: (messageId: string) =>
-      CommunitiesService.deleteCommunityMessage({
-        id: communityId,
-        messageId,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["communityMessages", communityId],
-      })
-    },
-    onError: () => showErrorToast("Failed to delete message"),
   })
 
   const toggleNotifMutation = useMutation({
@@ -470,15 +613,15 @@ function CommunityBoard() {
             <Tabs.Trigger value="members" justifyContent="center">
               <FiUsers /> Members ({members?.count || 0})
             </Tabs.Trigger>
+            {isAdmin && (
+              <Tabs.Trigger value="loans" justifyContent="center">
+                <FiClock /> Loans
+              </Tabs.Trigger>
+            )}
             {isStaff && (
-              <>
-                <Tabs.Trigger value="loans" justifyContent="center">
-                  <FiClock /> Loans
-                </Tabs.Trigger>
-                <Tabs.Trigger value="manage" justifyContent="center">
-                  <FiShield /> Manage
-                </Tabs.Trigger>
-              </>
+              <Tabs.Trigger value="manage" justifyContent="center">
+                <FiShield /> Manage
+              </Tabs.Trigger>
             )}
           </Tabs.List>
 
@@ -499,22 +642,18 @@ function CommunityBoard() {
                   <VStack align="stretch" gap={4}>
                     <Flex justify="space-between" align="center">
                       <Heading size="md">Announcement Board</Heading>
-                      {isStaff && (
+                      {isAdmin && (
                         <AddAnnouncementModal communityId={communityId} />
                       )}
                     </Flex>
                     <Box
-                      h="400px"
-                      overflowY="auto"
-                      pr={2}
-                      css={{
-                        "&::-webkit-scrollbar": { width: "4px" },
-                        "&::-webkit-scrollbar-thumb": {
-                          background: "gray.subtle",
-                          borderRadius: "full",
-                        },
-                      }}
-                    >
+              maxH="400px"
+              overflowY="auto"
+              css={{
+                "&::-webkit-scrollbar": { display: "none" },
+                scrollbarWidth: "none",
+              }}
+            >
                       <VStack align="stretch" gap={3}>
                         {isLoadingAnnouncements ? (
                           <Text>Loading...</Text>
@@ -560,45 +699,15 @@ function CommunityBoard() {
                           </Text>
                         ) : (
                           messages?.data.map((msg) => (
-                            <Box key={msg.id} p={3} bg="bg.muted" rounded="lg">
-                              <Flex
-                                justify="space-between"
-                                align="baseline"
-                                mb={1}
-                              >
-                                <HStack gap={2}>
-                                  <Text
-                                    fontWeight="bold"
-                                    fontSize="xs"
-                                    color="ui.hover"
-                                  >
-                                    {msg.author.full_name || msg.author.email}
-                                  </Text>
-                                  {(msg.author_id === currentUser?.id ||
-                                    isStaff) && (
-                                    <Button
-                                      size="2xs"
-                                      variant="ghost"
-                                      colorPalette="red"
-                                      onClick={() => {
-                                        if (
-                                          window.confirm("Delete this message?")
-                                        ) {
-                                          deleteMessageMutation.mutate(msg.id)
-                                        }
-                                      }}
-                                      loading={deleteMessageMutation.isPending}
-                                    >
-                                      <FiTrash2 size="10px" />
-                                    </Button>
-                                  )}
-                                </HStack>
-                                <Text fontSize="2xs" color="fg.subtle">
-                                  {new Date(msg.created_at).toLocaleString()}
-                                </Text>
-                              </Flex>
-                              <Text fontSize="sm">{msg.content}</Text>
-                            </Box>
+                            <MessageItem 
+                              key={msg.id} 
+                              msg={msg} 
+                              communityId={communityId}
+                              isAdmin={isAdmin}
+                              isStaff={isStaff}
+                              currentUser={currentUser}
+                              queryClient={queryClient}
+                            />
                           ))
                         )}
                       </VStack>
@@ -634,7 +743,7 @@ function CommunityBoard() {
                   <Box>
                     <Flex justify="space-between" align="center" mb={4}>
                       <Heading size="md">Community Collections</Heading>
-                      {isStaff && <AddCollection communityId={communityId} />}
+                      {isAdmin && <AddCollection communityId={communityId} />}
                     </Flex>
                     <SimpleGrid
                       columns={{ base: 1, sm: 2, lg: 3, xl: 4 }}
@@ -655,12 +764,12 @@ function CommunityBoard() {
                 <Flex justify="space-between" align="center" mb={4}>
                   <Heading size="md">All Items</Heading>
                   <HStack gap={2}>
-                    {isStaff &&
+                    {isAdmin &&
                       (!communityCollections?.data ||
                         communityCollections.data.length === 0) && (
                         <AddCollection communityId={communityId} />
                       )}
-                    <AddItem communityId={communityId} isAdmin={isStaff} />
+                    <AddItem communityId={communityId} isAdmin={isAdmin} />
                   </HStack>
                 </Flex>
 
@@ -689,28 +798,15 @@ function CommunityBoard() {
                               <CompactItemCard
                                 item={group}
                                 communityId={communityId}
-                                isAdmin={isStaff}
+                                isAdmin={isAdmin}
                                 onShowDetails={() => setSelectedItem(item)}
                               />
                             ) : (
                               <ItemCard
                                 item={group}
                                 communityId={communityId}
-                                isAdmin={isStaff}
+                                isAdmin={isAdmin}
                               />
-                            )}
-                            {item.is_donation_pending && (
-                              <Badge
-                                colorPalette="yellow"
-                                variant="solid"
-                                size="xs"
-                                position="absolute"
-                                top={2}
-                                left={2}
-                                zIndex={1}
-                              >
-                                Donation Pending
-                              </Badge>
                             )}
                           </Box>
                         )
@@ -803,32 +899,34 @@ function CommunityBoard() {
 
           {isStaff && (
             <>
-              <Tabs.Content value="loans" pt={6}>
-                <VStack align="stretch" gap={4}>
-                  <Heading size="md">Manage Loan Requests</Heading>
-                  {isLoadingLoans ? (
-                    <Text>Loading loans...</Text>
-                  ) : communityLoans?.data.length === 0 ? (
-                    <Box
-                      p={8}
-                      textAlign="center"
-                      borderWidth="1px"
-                      borderRadius="lg"
-                      borderStyle="dashed"
-                    >
-                      <Text color="fg.muted" fontStyle="italic">
-                        No loan requests found.
-                      </Text>
-                    </Box>
-                  ) : (
-                    <VStack align="stretch" gap={4}>
-                      {communityLoans?.data.map((loan) => (
-                        <LoanCard key={loan.id} loan={loan} type="incoming" />
-                      ))}
-                    </VStack>
-                  )}
-                </VStack>
-              </Tabs.Content>
+              {isAdmin && (
+                <Tabs.Content value="loans" pt={6}>
+                  <VStack align="stretch" gap={4}>
+                    <Heading size="md">Manage Loan Requests</Heading>
+                    {isLoadingLoans ? (
+                      <Text>Loading loans...</Text>
+                    ) : communityLoans?.data.length === 0 ? (
+                      <Box
+                        p={8}
+                        textAlign="center"
+                        borderWidth="1px"
+                        borderRadius="lg"
+                        borderStyle="dashed"
+                      >
+                        <Text color="fg.muted" fontStyle="italic">
+                          No loan requests found.
+                        </Text>
+                      </Box>
+                    ) : (
+                      <VStack align="stretch" gap={4}>
+                        {communityLoans?.data.map((loan) => (
+                          <LoanCard key={loan.id} loan={loan} type="incoming" />
+                        ))}
+                      </VStack>
+                    )}
+                  </VStack>
+                </Tabs.Content>
+              )}
 
               <Tabs.Content value="manage" pt={6}>
                 <VStack align="stretch" gap={8}>

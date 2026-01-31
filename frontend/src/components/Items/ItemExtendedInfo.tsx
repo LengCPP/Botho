@@ -9,7 +9,6 @@ import {
   Spinner,
   Text,
   VStack,
-  useDisclosure,
 } from "@chakra-ui/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
@@ -19,7 +18,6 @@ import { FiChevronDown } from "react-icons/fi"
 import { type ItemPublic, ItemsService } from "@/client"
 import { Rating } from "@/components/Common/Rating"
 import { useColorModeValue } from "@/components/ui/color-mode"
-import useCustomToast from "@/hooks/useCustomToast"
 import AddReview from "./AddReview"
 import EditItem from "./EditItem"
 import EditTags from "./EditTags"
@@ -27,13 +25,17 @@ import EditTags from "./EditTags"
 interface ItemExtendedInfoProps {
   item: ItemPublic
   isOwner: boolean
+  showAddReview?: boolean
 }
 
-const ItemExtendedInfo = ({ item, isOwner }: ItemExtendedInfoProps) => {
+const ItemExtendedInfo = ({
+  item,
+  isOwner,
+  showAddReview = false,
+}: ItemExtendedInfoProps) => {
   const [limit, setLimit] = useState(5)
   const itemInfo = (item.info as any) || {}
   const queryClient = useQueryClient()
-  const { showSuccessToast } = useCustomToast()
 
   // Color mode values
   const cardBg = useColorModeValue("white", "gray.700")
@@ -45,7 +47,7 @@ const ItemExtendedInfo = ({ item, isOwner }: ItemExtendedInfoProps) => {
       ItemsService.readReviews({
         author: item.author || "",
         title: item.title,
-        limit: 20, // Fetch more to handle client-side sort/limit for now or mock
+        limit: 20,
       }),
     enabled: !!item.author && !!item.title,
   })
@@ -65,13 +67,16 @@ const ItemExtendedInfo = ({ item, isOwner }: ItemExtendedInfoProps) => {
     voteMutation.mutate({ reviewId, vote })
   }
 
-  // Mock sort by "top" since backend doesn't support voting yet
   const sortedReviews =
     reviewsData?.data.sort(
-      (a, b) => (b.vote_score || 0) - (a.vote_score || 0) || b.rating - a.rating,
+      (a, b) =>
+        (b.vote_score || 0) - (a.vote_score || 0) || b.rating - a.rating,
     ) || []
   const visibleReviews = sortedReviews.slice(0, limit)
   const hasMore = sortedReviews.length > limit
+
+  const averageCondition = itemInfo.average_condition_grade || itemInfo.grade || 0
+  const physicalNotes = itemInfo.physical_notes || []
 
   return (
     <VStack
@@ -81,8 +86,12 @@ const ItemExtendedInfo = ({ item, isOwner }: ItemExtendedInfoProps) => {
       height="full"
       overflowY="auto"
       pb={4}
+      css={{
+        "&::-webkit-scrollbar": { display: "none" },
+        scrollbarWidth: "none",
+      }}
     >
-      {/* 1. Tags */}
+      {/* 1. Subject */}
       {(item.work_metadata?.tags?.length || item.author) && (
         <Box>
           <HStack justify="space-between" mb={1}>
@@ -92,7 +101,7 @@ const ItemExtendedInfo = ({ item, isOwner }: ItemExtendedInfoProps) => {
               color="fg.muted"
               textTransform="uppercase"
             >
-              Tags
+              Subject
             </Text>
             {item.author && <EditTags item={item} />}
           </HStack>
@@ -105,7 +114,7 @@ const ItemExtendedInfo = ({ item, isOwner }: ItemExtendedInfoProps) => {
             {(!item.work_metadata?.tags ||
               item.work_metadata.tags.length === 0) && (
               <Text fontSize="xs" color="fg.muted" fontStyle="italic">
-                No tags.
+                No subject tags.
               </Text>
             )}
           </Flex>
@@ -115,50 +124,63 @@ const ItemExtendedInfo = ({ item, isOwner }: ItemExtendedInfoProps) => {
 
       {/* 2. Copy Specifics */}
       <Box>
-        <Text
-          fontSize="xs"
-          fontWeight="bold"
-          color="fg.muted"
-          mb={2}
-          textTransform="uppercase"
-        >
-          Copy Specifics
-        </Text>
-        <VStack align="stretch" gap={2}>
+        <Flex justify="space-between" align="center" mb={2}>
+          <Text
+            fontSize="xs"
+            fontWeight="bold"
+            color="fg.muted"
+            textTransform="uppercase"
+          >
+            Copy Specifics
+          </Text>
+          {isOwner && (
+            <EditItem
+              item={item}
+              onlyInfo={true}
+              variant="ghost"
+              size="xs"
+              iconOnly={true}
+            />
+          )}
+        </Flex>
+        <VStack align="stretch" gap={3}>
           <HStack justify="space-between">
-            <Text fontSize="sm">Condition Grade</Text>
+            <Text fontSize="sm">Averaged Condition Grade</Text>
             <Badge
               size="md"
               colorPalette={
-                itemInfo.grade >= 8
+                averageCondition >= 8
                   ? "green"
-                  : itemInfo.grade >= 5
+                  : averageCondition >= 5
                     ? "yellow"
                     : "red"
               }
             >
-              {itemInfo.grade ? `${itemInfo.grade}/10` : "N/A"}
+              {averageCondition ? `${averageCondition.toFixed(1)}/10` : "N/A"}
             </Badge>
           </HStack>
+          
           <Box>
-            <Text fontSize="sm" fontWeight="medium">
-              Notes:
+            <Text fontSize="sm" fontWeight="medium" mb={1}>
+              Physical Notes:
             </Text>
-            <Text fontSize="sm" fontStyle="italic" color="fg.muted">
-              {itemInfo.physical_description || "No specific notes provided."}
-            </Text>
+            {physicalNotes.length > 0 ? (
+              <VStack align="stretch" gap={2}>
+                {physicalNotes.map((note: any, idx: number) => (
+                  <Box key={idx} p={2} bg={cardBg} borderRadius="sm" borderWidth="1px" borderColor={borderColor}>
+                    <Text fontSize="xs" fontStyle="italic" color="fg.muted">
+                      "{note.note}"
+                    </Text>
+                  </Box>
+                ))}
+              </VStack>
+            ) : (
+              <Text fontSize="sm" fontStyle="italic" color="fg.muted">
+                {itemInfo.physical_description || "No specific notes provided."}
+              </Text>
+            )}
           </Box>
         </VStack>
-        {isOwner && (
-          <Box mt={2}>
-            <EditItem
-              item={item}
-              width="full"
-              justifyContent="flex-start"
-              onlyInfo={true}
-            />
-          </Box>
-        )}
         <Separator mt={3} />
       </Box>
 
@@ -174,7 +196,7 @@ const ItemExtendedInfo = ({ item, isOwner }: ItemExtendedInfoProps) => {
             Community Reviews
           </Text>
           <HStack>
-            {item.author && <AddReview item={item} />}
+            {showAddReview && item.author && <AddReview item={item} />}
             <Text fontSize="xs" color="fg.muted">
               {reviewsData?.count || 0} reviews
             </Text>

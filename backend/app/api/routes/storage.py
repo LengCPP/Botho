@@ -20,6 +20,12 @@ async def upload(
     Upload an image.
     """
     contents = await file.read()
+    if len(contents) > settings.max_image_size_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Image size exceeds the {settings.MAX_IMAGE_SIZE_MB}MB limit."
+        )
+
     url = upload_image(contents, file.filename)
     if not url:
         raise HTTPException(status_code=500, detail="Failed to upload image")

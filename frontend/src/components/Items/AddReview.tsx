@@ -1,16 +1,26 @@
 import {
+  Box,
   Button,
+  Flex,
+  HStack,
+  Input,
+  Separator,
+  Text,
   Textarea,
   VStack,
 } from "@chakra-ui/react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useEffect, useState } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { FaPen } from "react-icons/fa"
 
-import { ItemsService, type ItemReviewCreate, type ItemPublic } from "@/client"
+import {
+  type ItemConditionRatingCreate,
+  type ItemPublic,
+  type ItemReviewCreate,
+  ItemsService,
+} from "@/client"
 import { Rating } from "@/components/Common/Rating"
-import useCustomToast from "@/hooks/useCustomToast"
 import {
   DialogBody,
   DialogCloseTrigger,
@@ -22,15 +32,48 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Field } from "@/components/ui/field"
+import useAuth from "@/hooks/useAuth"
+import useCustomToast from "@/hooks/useCustomToast"
 
 interface AddReviewProps {
   item: ItemPublic
 }
 
+interface CombinedReviewForm extends ItemReviewCreate {
+  condition_grade?: number
+  condition_notes?: string
+}
+
 const AddReview = ({ item }: AddReviewProps) => {
   const [isOpen, setIsOpen] = useState(false)
+  const { user } = useAuth()
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
+
+  // 1. Fetch all reviews to find current user's one
+  const { data: reviewsData } = useQuery({
+    queryKey: ["reviews", item.author, item.title],
+    queryFn: () =>
+      ItemsService.readReviews({
+        author: item.author || "",
+        title: item.title,
+      }),
+    enabled: !!item.author && !!item.title,
+  })
+
+  const existingReview = reviewsData?.data.find((r) => r.user_id === user?.id)
+
+  // 2. Fetch all condition ratings to find current user's one
+  const { data: conditionData } = useQuery({
+    queryKey: ["condition-ratings", item.id],
+    queryFn: () =>
+      ItemsService.readItemConditionRatings({
+        itemId: item.id,
+      }),
+    enabled: !!item.had_possession,
+  })
+
+  const existingCondition = conditionData?.find((r) => r.user_id === user?.id)
 
   const {
     register,
@@ -38,73 +81,168 @@ const AddReview = ({ item }: AddReviewProps) => {
     control,
     reset,
     formState: { isSubmitting },
-  } = useForm<ItemReviewCreate>({
+  } = useForm<CombinedReviewForm>({
     defaultValues: {
       rating: 5,
       comment: "",
       author: item.author || "",
       title: item.title,
+      condition_grade: 10,
+      condition_notes: "",
     },
   })
 
+  // Pre-fill form when existing data is found
+  useEffect(() => {
+    if (isOpen) {
+      reset({
+        rating: existingReview?.rating || 5,
+        comment: existingReview?.comment || "",
+        author: item.author || "",
+        title: item.title,
+        condition_grade: existingCondition?.grade || 10,
+        condition_notes: existingCondition?.notes || "",
+      })
+    }
+  }, [isOpen, existingReview, existingCondition, reset, item])
+
   const mutation = useMutation({
-    mutationFn: (data: ItemReviewCreate) =>
-      ItemsService.createReview({ requestBody: data }),
+    mutationFn: async (data: CombinedReviewForm) => {
+      // Create/Update Review
+      const reviewPromise = ItemsService.createReview({
+        requestBody: {
+          author: data.author,
+          title: data.title,
+          rating: data.rating,
+          comment: data.comment,
+        },
+      })
+
+      // Create/Update Condition Rating if possessed
+      if (item.had_possession && data.condition_grade) {
+        await ItemsService.createConditionRating({
+          requestBody: {
+            item_id: item.id,
+            grade: data.condition_grade,
+            notes: data.condition_notes,
+          },
+        })
+      }
+
+      return reviewPromise
+    },
     onSuccess: () => {
-      showSuccessToast("Review added!")
+      showSuccessToast(existingReview ? "Review updated!" : "Review added!")
       setIsOpen(false)
-      reset()
       queryClient.invalidateQueries({
         queryKey: ["reviews", item.author, item.title],
       })
+      queryClient.invalidateQueries({
+        queryKey: ["condition-ratings", item.id],
+      })
+      queryClient.invalidateQueries({ queryKey: ["items"] })
     },
-    onError: () => showErrorToast("Failed to add review"),
+    onError: () => showErrorToast("Failed to submit review"),
   })
 
-  const onSubmit = (data: ItemReviewCreate) => {
-    mutation.mutate({
-      ...data,
-      author: item.author || "", // Ensure these are set
-      title: item.title,
-    })
+  const onSubmit = (data: CombinedReviewForm) => {
+    mutation.mutate(data)
   }
 
   return (
-    <DialogRoot open={isOpen} onOpenChange={(e) => setIsOpen(e.open)}>
+    <DialogRoot open={isOpen} onOpenChange={(e) => setIsOpen(e.open)} size="md">
       <DialogTrigger asChild>
         <Button size="xs" variant="outline" colorPalette="accent">
-          <FaPen /> Write Review
+          <FaPen /> {existingReview ? "Edit Review" : "Write Review"}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Write a Review</DialogTitle>
+          <DialogTitle>
+            {existingReview ? "Update Your Review" : "Write a Review"}
+          </DialogTitle>
         </DialogHeader>
         <DialogBody>
           <form id="add-review-form" onSubmit={handleSubmit(onSubmit)}>
-            <VStack gap={4} align="stretch">
-              <Field label="Rating" required>
-                <Controller
-                  name="rating"
-                  control={control}
-                  rules={{ required: true, min: 1, max: 5 }}
-                  render={({ field }) => (
-                    <Rating
-                      value={field.value}
-                      onChange={field.onChange}
-                      readOnly={false}
-                      size={24}
+            <VStack gap={6} align="stretch">
+              <Box>
+                <Text fontWeight="bold" fontSize="sm" mb={3} color="ui.hover">
+                  BOOK REVIEW (CONTENT)
+                </Text>
+                <VStack gap={4} align="stretch">
+                  <Field label="How much did you like the story?" required>
+                    <Controller
+                      name="rating"
+                      control={control}
+                      rules={{ required: true, min: 1, max: 5 }}
+                      render={({ field }) => (
+                        <Rating
+                          value={field.value}
+                          onChange={field.onChange}
+                          readOnly={false}
+                          size={24}
+                        />
+                      )}
                     />
-                  )}
-                />
-              </Field>
-              <Field label="Comment">
-                <Textarea
-                  placeholder="Share your thoughts..."
-                  rows={4}
-                  {...register("comment")}
-                />
-              </Field>
+                  </Field>
+                  <Field label="Comment">
+                    <Textarea
+                      placeholder="Share your thoughts on the writing, story, or themes..."
+                      rows={3}
+                      {...register("comment")}
+                    />
+                  </Field>
+                </VStack>
+              </Box>
+
+              {item.had_possession && (
+                <>
+                  <Separator />
+                  <Box>
+                    <Text
+                      fontWeight="bold"
+                      fontSize="sm"
+                      mb={3}
+                      color="ui.hover"
+                    >
+                      PHYSICAL CONDITION (THIS COPY)
+                    </Text>
+                    <Text fontSize="xs" color="fg.muted" mb={4}>
+                      Since you had possession of this item, please rate its
+                      physical state.
+                    </Text>
+                    <VStack gap={4} align="stretch">
+                      <Field
+                        label="Condition Grade (1-10)"
+                        helperText="10 = Brand New, 1 = Heavily Damaged"
+                      >
+                        <Controller
+                          name="condition_grade"
+                          control={control}
+                          render={({ field }) => (
+                            <Input
+                              type="number"
+                              min={1}
+                              max={10}
+                              value={field.value}
+                              onChange={(e) =>
+                                field.onChange(Number(e.target.value))
+                              }
+                            />
+                          )}
+                        />
+                      </Field>
+                      <Field label="Physical Notes">
+                        <Textarea
+                          placeholder="Any specific damage or unique physical features?"
+                          rows={2}
+                          {...register("condition_notes")}
+                        />
+                      </Field>
+                    </VStack>
+                  </Box>
+                </>
+              )}
             </VStack>
           </form>
         </DialogBody>
@@ -118,7 +256,7 @@ const AddReview = ({ item }: AddReviewProps) => {
             loading={isSubmitting}
             colorPalette="accent"
           >
-            Submit
+            {existingReview ? "Update" : "Submit"}
           </Button>
         </DialogFooter>
         <DialogCloseTrigger />

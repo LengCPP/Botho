@@ -21,9 +21,17 @@ interface DeleteItemProps {
   id: string
   width?: string
   justifyContent?: string
+  size?: "xs" | "sm" | "md" | "lg"
+  variant?: string
 }
 
-const DeleteItem = ({ id, width, justifyContent }: DeleteItemProps) => {
+const DeleteItem = ({
+  id,
+  width,
+  justifyContent,
+  size = "sm",
+  variant,
+}: DeleteItemProps) => {
   const [isOpen, setIsOpen] = useState(false)
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
@@ -64,17 +72,18 @@ const DeleteItem = ({ id, width, justifyContent }: DeleteItemProps) => {
     >
       <DialogTrigger asChild>
         <Button
-          variant={"dangerSecondary" as any}
-          size="sm"
+          variant={(variant || "dangerSecondary") as any}
+          size={size}
           width={width}
           justifyContent={justifyContent}
+          onClick={(e) => e.stopPropagation()}
         >
           <FiTrash2 fontSize="16px" />
           Delete Item
         </Button>
       </DialogTrigger>
 
-      <DialogContent>
+      <DialogContent onClick={(e) => e.stopPropagation()}>
         <form onSubmit={handleSubmit(onSubmit)}>
           <DialogCloseTrigger />
           <DialogHeader>

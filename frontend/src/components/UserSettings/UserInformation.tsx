@@ -32,11 +32,8 @@ const UserInformation = ({ user }: UserInformationProps) => {
             whiteSpace="pre-wrap"
             color={!user?.profile?.bio ? "fg.muted" : "inherit"}
             css={{
-              "&::-webkit-scrollbar": { width: "4px" },
-              "&::-webkit-scrollbar-thumb": {
-                background: "gray.300",
-                borderRadius: "full",
-              },
+              "&::-webkit-scrollbar": { display: "none" },
+              scrollbarWidth: "none",
             }}
           >
             {user?.profile?.bio || "No bio set."}

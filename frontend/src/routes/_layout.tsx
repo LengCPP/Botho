@@ -113,13 +113,6 @@ function Layout() {
                       <Text>Settings</Text>
                     </Flex>
                   </RouterLink>
-                  {currentUser?.email && (
-                    <Flex alignItems="center">
-                      <Text fontSize="xs" px={4} py={2} color="gray.500">
-                        Logged in as: {currentUser.email}
-                      </Text>
-                    </Flex>
-                  )}
                 </Box>
               </Flex>
             </DrawerBody>
@@ -129,7 +122,7 @@ function Layout() {
 
       <Flex flex="1">
         <Sidebar />
-        <Box flex="1" p={4}>
+        <Box flex="1" p={4} ml={{ base: 0, md: "280px" }}>
           <Outlet />
         </Box>
       </Flex>

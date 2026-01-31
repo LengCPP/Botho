@@ -30,6 +30,7 @@ interface ItemActionsMenuProps {
   communityId?: string
   isAdmin?: boolean
   onRemoveFromCollection?: () => void
+  onlyInfo?: boolean
 }
 
 export const ItemActionsMenu = ({
@@ -37,6 +38,7 @@ export const ItemActionsMenu = ({
   communityId,
   isAdmin,
   onRemoveFromCollection,
+  onlyInfo = false,
 }: ItemActionsMenuProps) => {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
@@ -148,17 +150,18 @@ export const ItemActionsMenu = ({
 
   const actions = (
     <>
-      {isMobile ? (
-        <>
-          <EditItem item={item} width="full" justifyContent="center" />
-          <DeleteItem id={item.id} width="full" justifyContent="center" />
-        </>
-      ) : (
-        <>
-          <EditItem item={item} />
-          <DeleteItem id={item.id} />
-        </>
-      )}
+      <EditItem
+        item={item}
+        width="full"
+        justifyContent={isMobile ? "center" : "flex-start"}
+        onlyInfo={onlyInfo}
+        variant="ghost"
+      />
+      <DeleteItem
+        id={item.id}
+        width="full"
+        justifyContent={isMobile ? "center" : "flex-start"}
+      />
       {isMobile ? (
         <Button
           variant="ghost"

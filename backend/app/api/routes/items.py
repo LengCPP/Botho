@@ -9,6 +9,7 @@ from app.api.deps import CurrentUser, SessionDep
 from app.api.utils import filter_owner_privacy, check_item_availability
 from app.storage import upload_image, delete_image, upload_image_from_url
 from app.search import sync_item_to_search, delete_item_from_search
+from app.core.config import settings
 from app.models import (
     Item,
     ItemPublic,
@@ -31,6 +32,9 @@ from app.models import (
     ItemReviewPublic,
     ItemReviewsPublic,
     ItemReviewVote,
+    ItemConditionRating,
+    ItemConditionRatingCreate,
+    ItemConditionRatingPublic,
 )
 
 router = APIRouter(prefix="/items", tags=["items"])
@@ -51,6 +55,38 @@ def ensure_work_metadata(session: SessionDep, author: str | None, title: str) ->
         session.add(meta)
         session.flush()
     return meta
+
+
+def check_possession(session: SessionDep, user_id: uuid.UUID, item_id: uuid.UUID) -> bool:
+    item = session.get(Item, item_id)
+    if not item:
+        return False
+    if item.owner_id == user_id:
+        return True
+    
+    # Check loans
+    loan = session.exec(
+        select(Loan).where(
+            Loan.item_id == item_id,
+            Loan.requester_id == user_id,
+            Loan.status.in_([LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING, LoanStatus.RETURNED])
+        )
+    ).first()
+    return bool(loan)
+
+
+def get_item_condition_data(session: SessionDep, item_id: uuid.UUID) -> dict:
+    ratings = session.exec(
+        select(ItemConditionRating).where(ItemConditionRating.item_id == item_id)
+    ).all()
+    
+    if not ratings:
+        return {"average_grade": 0.0, "notes": []}
+    
+    avg_grade = sum(r.grade for r in ratings) / len(ratings)
+    notes = [{"user_id": r.user_id, "note": r.notes, "created_at": r.created_at} for r in ratings if r.notes]
+    
+    return {"average_grade": avg_grade, "notes": notes}
 
 
 @router.get("/", response_model=ItemsPublic)
@@ -145,6 +181,9 @@ def read_items(
         elif item.community_owner:
             community_pub = item.community_owner
         
+        cond_data = get_item_condition_data(session, item.id)
+        had_possession = check_possession(session, current_user.id, item.id)
+        
         item_pub = ItemPublic(
             id=item.id,
             owner_id=item.owner_id,
@@ -154,13 +193,18 @@ def read_items(
             item_type=item.item_type,
             image_url=item.image_url,
             extra_data=item.extra_data,
-            info=item.info,
+            info={
+                **item.info,
+                "average_condition_grade": cond_data["average_grade"],
+                "physical_notes": cond_data["notes"]
+            },
             count=item.count,
             created_at=item.created_at,
             owner=owner_pub,
             community_owner=community_pub,
             is_available=is_avail,
-            work_metadata=get_work_metadata(session, item.author, item.title)
+            work_metadata=get_work_metadata(session, item.author, item.title),
+            had_possession=had_possession
         )
         public_items.append(item_pub)
 
@@ -209,6 +253,9 @@ def read_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> 
     elif item.community_owner:
         community_pub = item.community_owner
     
+    cond_data = get_item_condition_data(session, item.id)
+    had_possession = check_possession(session, current_user.id, item.id)
+    
     item_pub = ItemPublic(
         id=item.id,
         owner_id=item.owner_id,
@@ -218,19 +265,24 @@ def read_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> 
         item_type=item.item_type,
         image_url=item.image_url,
         extra_data=item.extra_data,
-        info=item.info,
+        info={
+            **item.info,
+            "average_condition_grade": cond_data["average_grade"],
+            "physical_notes": cond_data["notes"]
+        },
         count=item.count,
         created_at=item.created_at,
         owner=owner_pub,
         community_owner=community_pub,
         is_available=is_avail,
-        work_metadata=get_work_metadata(session, item.author, item.title)
+        work_metadata=get_work_metadata(session, item.author, item.title),
+        had_possession=had_possession
     )
     return item_pub
 
 
 @router.post("/", response_model=ItemPublic)
-def create_item(
+async def create_item(
     *,
     session: SessionDep,
     current_user: CurrentUser,
@@ -273,7 +325,15 @@ def create_item(
         final_image_url = image_url
         if image:
             try:
-                final_image_url = upload_image(image.file.read(), image.filename, folder="items")
+                contents = await image.read()
+                if len(contents) > settings.max_image_size_bytes:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Image size exceeds the {settings.MAX_IMAGE_SIZE_MB}MB limit."
+                    )
+                final_image_url = upload_image(contents, image.filename, folder="items")
+            except HTTPException:
+                raise
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
         elif image_url and image_url.startswith("http"):
@@ -377,7 +437,7 @@ def create_item(
 
 
 @router.patch("/{id}", response_model=ItemPublic)
-def update_item(
+async def update_item(
     *,
     session: SessionDep,
     current_user: CurrentUser,
@@ -448,7 +508,15 @@ def update_item(
             try:
                 if db_item.image_url:
                     delete_image(db_item.image_url)
-                db_item.image_url = upload_image(image.file.read(), image.filename, folder="items")
+                contents = await image.read()
+                if len(contents) > settings.max_image_size_bytes:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Image size exceeds the {settings.MAX_IMAGE_SIZE_MB}MB limit."
+                    )
+                db_item.image_url = upload_image(contents, image.filename, folder="items")
+            except HTTPException:
+                raise
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
 
@@ -467,6 +535,8 @@ def update_item(
         elif db_item.community_owner:
             community_pub = db_item.community_owner
         
+        cond_data = get_item_condition_data(session, db_item.id)
+        
         item_pub = ItemPublic(
             id=db_item.id,
             owner_id=db_item.owner_id,
@@ -476,7 +546,11 @@ def update_item(
             item_type=db_item.item_type,
             image_url=db_item.image_url,
             extra_data=db_item.extra_data,
-            info=db_item.info,
+            info={
+                **db_item.info,
+                "average_condition_grade": cond_data["average_grade"],
+                "physical_notes": cond_data["notes"]
+            },
             count=db_item.count,
             created_at=db_item.created_at,
             owner=owner_pub,
@@ -754,3 +828,53 @@ def vote_review(
     session.commit()
     session.refresh(review)
     return review
+
+
+@router.post("/condition-ratings", response_model=ItemConditionRatingPublic)
+def create_condition_rating(
+    *, session: SessionDep, current_user: CurrentUser, rating_in: ItemConditionRatingCreate
+) -> Any:
+    """
+    Add or update condition rating for a physical item. 
+    User must have had possession of the item.
+    """
+    if not check_possession(session, current_user.id, rating_in.item_id):
+        raise HTTPException(
+            status_code=403, 
+            detail="You must have had possession of this item to rate its condition."
+        )
+    
+    existing = session.exec(
+        select(ItemConditionRating).where(
+            ItemConditionRating.item_id == rating_in.item_id,
+            ItemConditionRating.user_id == current_user.id
+        )
+    ).first()
+    
+    if existing:
+        existing.grade = rating_in.grade
+        existing.notes = rating_in.notes
+        rating = existing
+    else:
+        rating = ItemConditionRating(
+            **rating_in.model_dump(),
+            user_id=current_user.id
+        )
+        session.add(rating)
+    
+    session.commit()
+    session.refresh(rating)
+    return rating
+
+
+@router.get("/condition-ratings/{item_id}", response_model=list[ItemConditionRatingPublic])
+def read_item_condition_ratings(
+    *, session: SessionDep, current_user: CurrentUser, item_id: uuid.UUID
+) -> Any:
+    """
+    Get all condition ratings for a physical item.
+    """
+    ratings = session.exec(
+        select(ItemConditionRating).where(ItemConditionRating.item_id == item_id)
+    ).all()
+    return ratings

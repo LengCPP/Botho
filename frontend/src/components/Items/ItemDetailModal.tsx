@@ -36,76 +36,14 @@ interface ItemDetailModalProps {
 }
 
 function ReviewSection({ author, title }: { author: string; title: string }) {
-  const [rating, setRating] = useState(5)
-  const [comment, setComment] = useState("")
-  const { user: currentUser } = useAuth()
-  const { showSuccessToast, showErrorToast } = useCustomToast()
-  const queryClient = useQueryClient()
-
   const { data: reviews, isLoading } = useQuery({
     queryKey: ["itemReviews", author, title],
     queryFn: () => ItemsService.readReviews({ author, title }),
   })
 
-  const mutation = useMutation({
-    mutationFn: () =>
-      ItemsService.createReview({
-        requestBody: { author, title, rating, comment },
-      }),
-    onSuccess: () => {
-      showSuccessToast("Review submitted!")
-      setComment("")
-      queryClient.invalidateQueries({
-        queryKey: ["itemReviews", author, title],
-      })
-      queryClient.invalidateQueries({
-        queryKey: ["workMetadata", author, title],
-      })
-    },
-    onError: () => showErrorToast("Failed to submit review"),
-  })
-
   return (
     <VStack align="stretch" gap={4} width="full" mt={6}>
       <Heading size="md">Reviews</Heading>
-
-      {currentUser && (
-        <Box p={4} borderWidth="1px" rounded="md" bg="bg.muted">
-          <Text fontWeight="bold" mb={2}>
-            Write a Review
-          </Text>
-          <VStack align="stretch" gap={3}>
-            <HStack>
-              <Text fontSize="sm">Rating:</Text>
-              {[1, 2, 3, 4, 5].map((num) => (
-                <FaStar
-                  key={num}
-                  cursor="pointer"
-                  color={num <= rating ? "#fb6635" : "gray"}
-                  onClick={() => setRating(num)}
-                />
-              ))}
-            </HStack>
-            <Field label="Comment">
-              <Textarea
-                placeholder="What did you think of the content?"
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                size="sm"
-              />
-            </Field>
-            <Button
-              size="sm"
-              colorPalette="accent"
-              alignSelf="flex-end"
-              onClick={() => mutation.mutate()}
-              loading={mutation.isPending}
-            >
-              Submit Review
-            </Button>
-          </VStack>
-        </Box>
-      )}
 
       <VStack align="stretch" gap={3}>
         {isLoading ? (
@@ -154,6 +92,9 @@ export const ItemDetailModal = ({
   const extraData = (item.extra_data as any) || {}
   const info = (item.info as any) || {}
   const workMeta = item.work_metadata
+
+  const averageCondition = info.average_condition_grade || info.grade || 0
+  const physicalNotes = info.physical_notes || []
 
   return (
     <DialogRoot
@@ -225,7 +166,7 @@ export const ItemDetailModal = ({
                   textTransform="uppercase"
                   mb={1}
                 >
-                  Subjects / Tags
+                  Subjects
                 </Text>
                 <HStack gap={2} wrap="wrap">
                   {workMeta.tags.map((tag: string) => (
@@ -246,39 +187,55 @@ export const ItemDetailModal = ({
 
             <Box width="full">
               <Heading size="sm" mb={3} color="ui.hover">
-                This Copy Details
+                Condition & Copy Details
               </Heading>
-              <VStack align="start" gap={3}>
-                <HStack>
+              <VStack align="start" gap={3} width="full">
+                <HStack justify="space-between" width="full">
                   <Text fontSize="xs" fontWeight="bold" color="fg.subtle">
-                    CONDITION GRADE:
+                    AVERAGED CONDITION GRADE:
                   </Text>
                   <Badge
                     colorPalette={
-                      Number(info.grade) > 7
+                      averageCondition > 7
                         ? "green"
-                        : Number(info.grade) > 4
+                        : averageCondition > 4
                           ? "yellow"
                           : "red"
                     }
                   >
-                    {info.grade || "?"}/10
+                    {averageCondition ? `${averageCondition.toFixed(1)}/10` : "?"}
                   </Badge>
                 </HStack>
 
-                {info.physical_description && (
-                  <Box>
-                    <Text fontSize="xs" fontWeight="bold" color="fg.subtle">
-                      OWNER DESCRIPTION:
+                {physicalNotes.length > 0 ? (
+                  <Box width="full">
+                    <Text fontSize="xs" fontWeight="bold" color="fg.subtle" mb={2}>
+                      PHYSICAL NOTES:
                     </Text>
-                    <Text fontSize="sm">{info.physical_description}</Text>
+                    <VStack align="stretch" gap={2}>
+                      {physicalNotes.map((note: any, idx: number) => (
+                        <Box key={idx} p={2} bg="bg.subtle" rounded="sm" borderLeft="4px solid" borderColor="ui.hover">
+                          <Text fontSize="sm" fontStyle="italic">"{note.note}"</Text>
+                        </Box>
+                      ))}
+                    </VStack>
                   </Box>
-                )}
-
-                {!info.physical_description && (
-                  <Text fontSize="xs" color="fg.muted" fontStyle="italic">
-                    No extra description provided by owner.
-                  </Text>
+                ) : (
+                  <Box>
+                    {info.physical_description && (
+                      <>
+                        <Text fontSize="xs" fontWeight="bold" color="fg.subtle">
+                          OWNER DESCRIPTION:
+                        </Text>
+                        <Text fontSize="sm">{info.physical_description}</Text>
+                      </>
+                    )}
+                    {!info.physical_description && (
+                      <Text fontSize="xs" color="fg.muted" fontStyle="italic">
+                        No extra description provided by owner.
+                      </Text>
+                    )}
+                  </Box>
                 )}
               </VStack>
             </Box>

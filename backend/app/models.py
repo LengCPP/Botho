@@ -458,6 +458,36 @@ class ItemReviewVote(SQLModel, table=True):
 
 
 
+class ItemConditionRating(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    item_id: uuid.UUID = Field(foreign_key="item.id", ondelete="CASCADE", index=True)
+    user_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
+    grade: int = Field(ge=1, le=10)
+    notes: Optional[str] = Field(default=None, max_length=1000)
+    created_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    )
+
+    user: "User" = Relationship()
+
+
+class ItemConditionRatingCreate(SQLModel):
+    item_id: uuid.UUID
+    grade: int = Field(ge=1, le=10)
+    notes: Optional[str] = Field(default=None, max_length=1000)
+
+
+class ItemConditionRatingPublic(SQLModel):
+    id: uuid.UUID
+    item_id: uuid.UUID
+    user_id: uuid.UUID
+    grade: int
+    notes: Optional[str]
+    created_at: datetime
+    user: "UserPublic"
+
+
 class ItemBase(SQLModel):
     title: str = Field(min_length=0, max_length=255)
     description: Optional[str] = Field(default=None, max_length=1000)
@@ -666,6 +696,7 @@ class ItemPublic(ItemBase):
     added_by_id: Optional[uuid.UUID] = None
     is_donation_pending: bool = False
     work_metadata: Optional[WorkMetadataPublic] = None
+    had_possession: bool = False
 
 
 class BookPublic(ItemPublic):

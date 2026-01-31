@@ -42,6 +42,9 @@ interface EditItemProps {
   width?: string
   justifyContent?: string
   onlyInfo?: boolean
+  size?: "xs" | "sm" | "md" | "lg"
+  variant?: "ghost" | "outline" | "solid" | "subtle"
+  iconOnly?: boolean
 }
 
 const BOOK_CLASSIFICATION: Record<string, string[]> = {
@@ -92,16 +95,21 @@ const BOOK_CLASSIFICATION: Record<string, string[]> = {
   ],
 }
 
+const MAX_FILE_SIZE = 1 * 1024 * 1024 // 1MB
+
 const EditItem = ({
   item,
   width,
   justifyContent,
   onlyInfo = false,
+  size = "sm",
+  variant = "ghost",
+  iconOnly = false,
 }: EditItemProps) => {
   const [isOpen, setIsOpen] = useState(false)
   const [showAdditionalInfo, setShowAdditionalInfo] = useState(false)
   const queryClient = useQueryClient()
-  const { showSuccessToast } = useCustomToast()
+  const { showSuccessToast, showErrorToast } = useCustomToast()
 
   const [imageFile, setImageFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -133,7 +141,13 @@ const EditItem = ({
   const selectedCategory = watch("extra_data.category" as any)
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setImageFile(e.target.files?.[0] || null)
+    const file = e.target.files?.[0] || null
+    if (file && file.size > MAX_FILE_SIZE) {
+      showErrorToast("Image size exceeds the 1MB limit.")
+      if (fileInputRef.current) fileInputRef.current.value = ""
+      return
+    }
+    setImageFile(file)
   }
 
   const mutation = useMutation({
@@ -183,16 +197,22 @@ const EditItem = ({
       onOpenChange={({ open }) => setIsOpen(open)}
     >
       <DialogTrigger asChild>
-        <Button variant="ghost" width={width} justifyContent={justifyContent}>
+        <Button
+          variant={variant}
+          size={size}
+          width={width}
+          justifyContent={justifyContent}
+          onClick={(e) => e.stopPropagation()}
+        >
           {onlyInfo ? (
             <FaPen fontSize="16px" />
           ) : (
             <FaExchangeAlt fontSize="16px" />
           )}
-          {onlyInfo ? "Update Info" : "Edit Item"}
+          {!iconOnly && (onlyInfo ? "Update Info" : "Edit Item")}
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent onClick={(e) => e.stopPropagation()}>
         <form onSubmit={handleSubmit(onSubmit)}>
           <DialogHeader>
             <DialogTitle>

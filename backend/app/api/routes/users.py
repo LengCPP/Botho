@@ -179,6 +179,12 @@ async def upload_user_profile_picture(
         current_user.profile = UserProfile(user_id=current_user.id)
         
     contents = await file.read()
+    if len(contents) > settings.max_image_size_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Image size exceeds the {settings.MAX_IMAGE_SIZE_MB}MB limit."
+        )
+
     image_url = upload_image(contents, file.filename, folder="profile-pictures")
     
     if not image_url:

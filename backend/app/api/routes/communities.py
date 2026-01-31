@@ -700,10 +700,11 @@ def initiate_donation(
     session.add(comm_item)
     session.commit()
     
-    # Notify admins
+    # Notify admins only
     admin_statement = select(CommunityMember).where(
         CommunityMember.community_id == id,
-        CommunityMember.role.in_([CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR])
+        CommunityMember.role == CommunityMemberRole.ADMIN,
+        CommunityMember.status == CommunityMemberStatus.ACCEPTED
     )
     staff = session.exec(admin_statement).all()
     for member in staff:
@@ -715,8 +716,12 @@ def initiate_donation(
             type=NotificationType.INFO,
             link=f"/communities/{id}"
         )
+        notification_manager.send_personal_message(
+            {"type": "new_notification"},
+            member.user_id
+        )
     
-    return Message(message="Donation request sent to staff")
+    return Message(message="Donation request sent to admins")
 
 
 @router.post("/{id}/items/{item_id}/ratify-donation", response_model=Message)
@@ -724,16 +729,16 @@ def ratify_donation(
     *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, item_id: uuid.UUID
 ) -> Any:
     """
-    Ratify a donation (Admin/Moderator only).
+    Ratify a donation (Admin only).
     """
-    # Staff check
+    # Admin check
     statement = select(CommunityMember).where(
         CommunityMember.community_id == id,
         CommunityMember.user_id == current_user.id,
-        CommunityMember.role.in_([CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR])
+        CommunityMember.role == CommunityMemberRole.ADMIN
     )
     if not session.exec(statement).first() and not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="Only staff can ratify donations")
+        raise HTTPException(status_code=403, detail="Only admins can ratify donations")
 
     statement = select(CommunityItem).where(
         CommunityItem.community_id == id,
@@ -763,7 +768,7 @@ def remove_item_from_community(
 ) -> Any:
     """
     Remove an item from a community.
-    Staff can remove any item. Members can only remove items they added.
+    Admins can remove any item. Members can only remove items they added.
     """
     community = session.get(Community, id)
     if not community:
@@ -777,7 +782,7 @@ def remove_item_from_community(
     if not comm_item:
         raise HTTPException(status_code=404, detail="Item not found in community")
     
-    # Staff or added_by check
+    # Admin or added_by check
     statement = select(CommunityMember).where(
         CommunityMember.community_id == id,
         CommunityMember.user_id == current_user.id,
@@ -785,10 +790,10 @@ def remove_item_from_community(
     )
     membership = session.exec(statement).first()
     
-    is_staff = membership and membership.role in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]
+    is_admin = membership and membership.role == CommunityMemberRole.ADMIN
     is_adder = comm_item.added_by == current_user.id
     
-    if not is_staff and not is_adder and not current_user.is_superuser:
+    if not is_admin and not is_adder and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Not enough permissions to remove this item")
     
     # Bucket cleanup
@@ -971,6 +976,32 @@ def create_community_message(
         community_id=id,
         author_id=current_user.id
     )
+    session.add(message)
+    session.commit()
+    session.refresh(message)
+    return message
+
+
+@router.patch("/{id}/messages/{message_id}", response_model=CommunityMessagePublic)
+def update_community_message(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    message_id: uuid.UUID,
+    message_in: CommunityMessageCreate,
+) -> Any:
+    """
+    Update a message on the community board.
+    """
+    message = session.get(CommunityMessage, message_id)
+    if not message or message.community_id != id:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    if message.author_id != current_user.id and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Not enough permissions to edit this message")
+
+    message.content = message_in.content
     session.add(message)
     session.commit()
     session.refresh(message)

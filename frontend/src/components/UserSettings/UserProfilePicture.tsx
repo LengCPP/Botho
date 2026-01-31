@@ -4,6 +4,7 @@ import { useRef, useState } from "react"
 import { FiCamera } from "react-icons/fi"
 
 import { UsersService } from "@/client"
+import ImageCropModal from "@/components/Common/ImageCropModal"
 import UserAvatar from "@/components/Common/UserAvatar"
 import type { UserPublicExtended } from "@/customTypes"
 import useCustomToast from "@/hooks/useCustomToast"
@@ -13,6 +14,8 @@ interface UserProfilePictureProps {
   isReadOnly?: boolean
 }
 
+const MAX_FILE_SIZE = 1 * 1024 * 1024 // 1MB
+
 const UserProfilePicture = ({
   user,
   isReadOnly = false,
@@ -21,6 +24,8 @@ const UserProfilePicture = ({
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [isCropModalOpen, setIsCropModalOpen] = useState(false)
 
   const uploadMutation = useMutation({
     mutationFn: (file: File) => {
@@ -36,15 +41,36 @@ const UserProfilePicture = ({
     },
     onSettled: () => {
       setIsUploading(false)
+      setSelectedImage(null)
     },
   })
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      setIsUploading(true)
-      uploadMutation.mutate(file)
+      if (file.size > MAX_FILE_SIZE) {
+        showErrorToast("Image size exceeds the 1MB limit.")
+        return
+      }
+
+      const reader = new FileReader()
+      reader.addEventListener("load", () => {
+        setSelectedImage(reader.result as string)
+        setIsCropModalOpen(true)
+      })
+      reader.readAsDataURL(file)
+      
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
     }
+  }
+
+  const handleCropComplete = (croppedBlob: Blob) => {
+    setIsCropModalOpen(false)
+    setIsUploading(true)
+    const file = new File([croppedBlob], "avatar.jpg", { type: "image/jpeg" })
+    uploadMutation.mutate(file)
   }
 
   const handleButtonClick = () => {
@@ -135,6 +161,18 @@ const UserProfilePicture = ({
           )}
         </VStack>
       </Flex>
+
+      {selectedImage && (
+        <ImageCropModal
+          image={selectedImage}
+          isOpen={isCropModalOpen}
+          onClose={() => {
+            setIsCropModalOpen(false)
+            setSelectedImage(null)
+          }}
+          onCropComplete={handleCropComplete}
+        />
+      )}
     </Box>
   )
 }

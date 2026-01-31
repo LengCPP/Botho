@@ -149,17 +149,8 @@ const CollectionCard = ({ collection }: CollectionCardProps) => {
           height="3em"
           overflowY="auto"
           sx={{
-            "&::-webkit-scrollbar": { width: "4px" },
-            "&::-webkit-scrollbar-track": { bg: "transparent" },
-            "&::-webkit-scrollbar-thumb": {
-              bg: "gray.400",
-              borderRadius: "24px",
-            },
-            _dark: {
-              "&::-webkit-scrollbar-thumb": {
-                bg: "gray.600",
-              },
-            },
+            "&::-webkit-scrollbar": { display: "none" },
+            scrollbarWidth: "none",
           }}
         >
           {collection.description || "No description provided."}

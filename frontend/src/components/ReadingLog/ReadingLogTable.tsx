@@ -19,8 +19,8 @@ import { FiBookOpen, FiCheckCircle, FiXCircle } from "react-icons/fi"
 
 import {
   type ReadingLogPublic,
-  type ReadingLogStatus,
   ReadingLogService,
+  type ReadingLogStatus,
 } from "@/client"
 import { Rating } from "@/components/Common/Rating"
 import ItemExtendedInfo from "@/components/Items/ItemExtendedInfo"
@@ -107,7 +107,7 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
         <Table.Header>
           <Table.Row>
             <Table.ColumnHeader>Title / Author</Table.ColumnHeader>
-            <Table.ColumnHeader>Tags</Table.ColumnHeader>
+            <Table.ColumnHeader>Subject</Table.ColumnHeader>
             <Table.ColumnHeader>Date</Table.ColumnHeader>
             <Table.ColumnHeader>Actions</Table.ColumnHeader>
           </Table.Row>
@@ -250,6 +250,7 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
                   } as any
                 }
                 isOwner={false} // Reading log is not "owning" a physical item
+                showAddReview={true}
               />
             )}
           </DialogBody>

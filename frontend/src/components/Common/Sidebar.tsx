@@ -11,32 +11,20 @@ const Sidebar = () => {
   return (
     <Box
       display={{ base: "none", md: "flex" }}
-      position="sticky"
+      position="fixed"
+      left={0}
+      top="52px" // Navbar height approx
       bg="bg.subtle"
-      top={0}
       minW="280px"
-      h="100vh"
+      w="280px"
+      h="calc(100vh - 52px)"
       p={4}
+      zIndex="sticky"
+      borderRightWidth="1px"
     >
       <Flex w="100%" direction="column" justify="space-between">
         <Box>
           <SidebarItems />
-        </Box>
-        <Box>
-          {currentUser?.full_name && (
-            <Flex alignItems="center">
-              <Text fontSize="sm" fontWeight="bold" px={4} pt={2}>
-                {currentUser.full_name}
-              </Text>
-            </Flex>
-          )}
-          {currentUser?.email && (
-            <Flex alignItems="center">
-              <Text fontSize="xs" px={4} pb={2} color="gray.500">
-                {currentUser.email}
-              </Text>
-            </Flex>
-          )}
         </Box>
       </Flex>
     </Box>

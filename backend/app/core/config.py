@@ -102,6 +102,12 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str | None = None
     GOOGLE_CLIENT_SECRET: str | None = None
 
+    MAX_IMAGE_SIZE_MB: int = 1
+
+    @property
+    def max_image_size_bytes(self) -> int:
+        return self.MAX_IMAGE_SIZE_MB * 1024 * 1024
+
     MEILI_URL: str = "http://meilisearch:7700"
     MEILI_MASTER_KEY: str = "changethis"
 
