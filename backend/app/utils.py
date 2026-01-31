@@ -1,5 +1,6 @@
 import logging
 import secrets
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -133,6 +134,30 @@ def generate_new_account_email(
             "password": password,
             "email": email_to,
             "link": settings.FRONTEND_HOST,
+        },
+    )
+    return EmailData(html_content=html_content, subject=subject)
+
+
+def generate_donation_notification_email(
+    *, 
+    email_to: str, 
+    donor_name: str, 
+    item_title: str, 
+    community_name: str, 
+    community_id: uuid.UUID
+) -> EmailData:
+    project_name = settings.PROJECT_NAME
+    subject = f"{project_name} - New Donation Request in {community_name}"
+    link = f"{settings.FRONTEND_HOST}/communities/{community_id}"
+    html_content = render_email_template(
+        template_name="donation_notification.html",
+        context={
+            "project_name": project_name,
+            "donor_name": donor_name,
+            "item_title": item_title,
+            "community_name": community_name,
+            "link": link,
         },
     )
     return EmailData(html_content=html_content, subject=subject)

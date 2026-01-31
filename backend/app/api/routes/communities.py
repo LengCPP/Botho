@@ -7,6 +7,7 @@ from sqlmodel import func, select, or_
 from app import crud
 from app.api.deps import CurrentUser, SessionDep
 from app.api.websocket_manager import notification_manager
+from app.utils import send_email, generate_donation_notification_email
 from app.models import (
     CommunitiesPublic,
     Community,
@@ -685,6 +686,14 @@ def initiate_donation(
     """
     Initiate a donation of an item to the community.
     """
+    community = session.get(Community, id)
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    item = session.get(Item, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
     statement = select(CommunityItem).where(
         CommunityItem.community_id == id,
         CommunityItem.item_id == item_id
@@ -701,18 +710,25 @@ def initiate_donation(
     session.commit()
     
     # Notify admins only
-    admin_statement = select(CommunityMember).where(
-        CommunityMember.community_id == id,
-        CommunityMember.role == CommunityMemberRole.ADMIN,
-        CommunityMember.status == CommunityMemberStatus.ACCEPTED
+    admin_statement = (
+        select(CommunityMember, User)
+        .join(User, CommunityMember.user_id == User.id)
+        .where(
+            CommunityMember.community_id == id,
+            CommunityMember.role == CommunityMemberRole.ADMIN,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED
+        )
     )
-    staff = session.exec(admin_statement).all()
-    for member in staff:
+    staff_results = session.exec(admin_statement).all()
+    
+    donor_name = current_user.full_name or current_user.email
+    
+    for member, user in staff_results:
         crud.create_notification(
             session=session,
             recipient_id=member.user_id,
             title="Item Donation Pending",
-            message=f"{current_user.full_name or current_user.email} wants to donate an item to the community.",
+            message=f"{donor_name} wants to donate an item to the community.",
             type=NotificationType.INFO,
             link=f"/communities/{id}"
         )
@@ -720,12 +736,26 @@ def initiate_donation(
             {"type": "new_notification"},
             member.user_id
         )
+        
+        # Send email notification
+        email_data = generate_donation_notification_email(
+            email_to=user.email,
+            donor_name=donor_name,
+            item_title=item.title,
+            community_name=community.name,
+            community_id=id
+        )
+        send_email(
+            email_to=user.email,
+            subject=email_data.subject,
+            html_content=email_data.html_content
+        )
     
     return Message(message="Donation request sent to admins")
 
 
 @router.post("/{id}/items/{item_id}/ratify-donation", response_model=Message)
-def ratify_donation(
+async def ratify_donation(
     *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, item_id: uuid.UUID
 ) -> Any:
     """
@@ -737,8 +767,13 @@ def ratify_donation(
         CommunityMember.user_id == current_user.id,
         CommunityMember.role == CommunityMemberRole.ADMIN
     )
-    if not session.exec(statement).first() and not current_user.is_superuser:
+    community_admin = session.exec(statement).first()
+    if not community_admin and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Only admins can ratify donations")
+
+    community = session.get(Community, id)
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
 
     statement = select(CommunityItem).where(
         CommunityItem.community_id == id,
@@ -749,15 +784,55 @@ def ratify_donation(
         raise HTTPException(status_code=400, detail="No pending donation found")
 
     item = session.get(Item, item_id)
-    # Change ownership
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    donor_id = comm_item.added_by
+
+    # Change ownership to the community
     item.owner_id = id
     
     # Update comm_item status
     comm_item.is_donation_pending = False
     
+    # Remove from donor's bucket in this community
+    bucket_stmt = select(Collection).where(
+        Collection.owner_id == donor_id,
+        Collection.community_id == id,
+        Collection.collection_type == CollectionType.BUCKET
+    )
+    bucket = session.exec(bucket_stmt).first()
+    if bucket:
+        crud.remove_item_from_collection(session=session, collection_id=bucket.id, item_id=item_id)
+
+    # Update active/pending loans to reflect new ownership (Community is now the lender)
+    loans_stmt = select(Loan).where(
+        Loan.item_id == item_id,
+        Loan.status.in_([LoanStatus.PENDING, LoanStatus.ACCEPTED, LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING])
+    )
+    loans = session.exec(loans_stmt).all()
+    for loan in loans:
+        loan.owner_id = None
+        loan.community_id = id
+        session.add(loan)
+
     session.add(item)
     session.add(comm_item)
     session.commit()
+
+    # Notify donor
+    crud.create_notification(
+        session=session,
+        recipient_id=donor_id,
+        title="Donation Ratified",
+        message=f"Your donation of '{item.title}' to {community.name} has been ratified. Thank you!",
+        type=NotificationType.SUCCESS,
+        link=f"/communities/{id}"
+    )
+    await notification_manager.send_personal_message(
+        {"type": "new_notification"},
+        donor_id
+    )
     
     return Message(message="Donation ratified! The community now owns this item.")
 
