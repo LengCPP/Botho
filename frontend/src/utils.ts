@@ -90,7 +90,7 @@ export const getImageUrl = (
 }
 
 /**
- * Group items by title and author.
+ * Group items by title, author, and owner.
  * @param items - The list of items to group
  * @returns An array of item groups, where each group is an array of items
  */
@@ -101,7 +101,8 @@ export const groupItems = (items: any[]): any[][] => {
     const author = (item.author || item.extra_data?.author || "")
       .toLowerCase()
       .trim()
-    const key = `${title}|${author}`
+    const owner = item.owner_id || ""
+    const key = `${title}|${author}|${owner}`
     if (!groups[key]) {
       groups[key] = []
     }

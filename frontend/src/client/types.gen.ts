@@ -61,7 +61,7 @@ export type CollectionsPublic = {
   count: number
 }
 
-export type CollectionType = "GENERAL" | "LIBRARY" | "BUCKET"
+export type CollectionType = "GENERAL" | "LIBRARY"
 
 export type CollectionUpdate = {
   title?: string | null

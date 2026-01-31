@@ -20,6 +20,7 @@ import {
   FiCheck,
   FiCopy,
   FiCornerUpLeft,
+  FiEye,
   FiHeart,
   FiTrash2,
 } from "react-icons/fi"
@@ -41,6 +42,7 @@ interface FriendItemActionsMenuProps {
   loanId?: string
   communityId?: string
   isAdmin?: boolean
+  onShowDetails?: () => void
 }
 
 export const FriendItemActionsMenu = ({
@@ -49,6 +51,7 @@ export const FriendItemActionsMenu = ({
   loanId,
   communityId,
   isAdmin = false,
+  onShowDetails,
 }: FriendItemActionsMenuProps) => {
   const [isLoanModalOpen, setIsLoanModalOpen] = useState(false)
   const [isActionsModalOpen, setIsActionsModalOpen] = useState(false)
@@ -164,6 +167,32 @@ export const FriendItemActionsMenu = ({
 
   const actions = (
     <>
+      {onShowDetails && (
+        isMobile ? (
+          <Button
+            variant="ghost"
+            justifyContent="center"
+            width="full"
+            onClick={(e) => {
+              e.stopPropagation()
+              onShowDetails()
+              setIsActionsModalOpen(false)
+            }}
+          >
+            <FiEye style={{ marginRight: "8px" }} /> View Details
+          </Button>
+        ) : (
+          <MenuItem
+            value="view-details"
+            onClick={(e) => {
+              e.stopPropagation()
+              onShowDetails()
+            }}
+          >
+            <FiEye style={{ marginRight: "8px" }} /> View Details
+          </MenuItem>
+        )
+      )}
       {isMobile ? (
         <Button
           variant="ghost"

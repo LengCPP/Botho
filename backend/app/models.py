@@ -41,7 +41,6 @@ class ItemType(str, Enum):
 class CollectionType(str, Enum):
     GENERAL = "GENERAL"
     LIBRARY = "LIBRARY"
-    BUCKET = "BUCKET"
 
 
 class LoanStatus(str, Enum):

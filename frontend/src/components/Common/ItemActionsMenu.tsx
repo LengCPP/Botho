@@ -7,7 +7,7 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { BsThreeDotsVertical } from "react-icons/bs"
-import { FiCopy, FiHeart, FiMinusCircle, FiTrash2 } from "react-icons/fi"
+import { FiCopy, FiEye, FiHeart, FiMinusCircle, FiTrash2 } from "react-icons/fi"
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from "../ui/menu"
 
 import { CommunitiesService, type ItemPublic, ItemsService } from "@/client"
@@ -31,6 +31,7 @@ interface ItemActionsMenuProps {
   isAdmin?: boolean
   onRemoveFromCollection?: () => void
   onlyInfo?: boolean
+  onShowDetails?: () => void
 }
 
 export const ItemActionsMenu = ({
@@ -39,6 +40,7 @@ export const ItemActionsMenu = ({
   isAdmin,
   onRemoveFromCollection,
   onlyInfo = false,
+  onShowDetails,
 }: ItemActionsMenuProps) => {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
@@ -150,6 +152,32 @@ export const ItemActionsMenu = ({
 
   const actions = (
     <>
+      {onShowDetails && (
+        isMobile ? (
+          <Button
+            variant="ghost"
+            justifyContent="center"
+            width="full"
+            onClick={(e) => {
+              e.stopPropagation()
+              onShowDetails()
+              setIsActionsModalOpen(false)
+            }}
+          >
+            <FiEye style={{ marginRight: "8px" }} /> View Details
+          </Button>
+        ) : (
+          <MenuItem
+            value="view-details"
+            onClick={(e) => {
+              e.stopPropagation()
+              onShowDetails()
+            }}
+          >
+            <FiEye style={{ marginRight: "8px" }} /> View Details
+          </MenuItem>
+        )
+      )}
       <EditItem
         item={item}
         width="full"

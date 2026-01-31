@@ -7,10 +7,8 @@ import {
   DialogActionTrigger,
   DialogTitle,
   Input,
-  Text,
   VStack,
 } from "@chakra-ui/react"
-import { useState } from "react"
 
 import {
   type CollectionPublic,
@@ -51,7 +49,6 @@ const EditCollection = ({
   const {
     register,
     handleSubmit,
-    reset,
     watch,
     formState: { errors, isValid, isSubmitting },
   } = useForm<CollectionUpdate>({
@@ -63,9 +60,6 @@ const EditCollection = ({
       collection_type: collection.collection_type,
     },
   })
-
-  const collectionType = watch("collection_type")
-  const isBucket = collectionType === "BUCKET"
 
   const mutation = useMutation({
     mutationFn: (data: CollectionUpdate) =>
@@ -129,7 +123,6 @@ const EditCollection = ({
                     backgroundColor: selectBg,
                     color: selectColor,
                   }}
-                  disabled={isBucket}
                 >
                   <option value="" style={{ backgroundColor: selectBg }}>
                     -- select collection type --
@@ -140,14 +133,11 @@ const EditCollection = ({
                   <option value="GENERAL" style={{ backgroundColor: selectBg }}>
                     General Collection
                   </option>
-                  <option value="BUCKET" style={{ backgroundColor: selectBg }}>
-                    Community Bucket (Pool)
-                  </option>
                 </select>
               </Field>
 
               <Field
-                required={!isBucket}
+                required
                 invalid={!!errors.title}
                 errorText={errors.title?.message}
                 label="Title"
@@ -155,11 +145,10 @@ const EditCollection = ({
                 <Input
                   id="title"
                   {...register("title", {
-                    required: isBucket ? false : "Title is required.",
+                    required: "Title is required.",
                   })}
-                  placeholder={isBucket ? "Auto-generated" : "My Book Library"}
+                  placeholder="My Book Library"
                   type="text"
-                  disabled={isBucket}
                 />
               </Field>
 
@@ -171,13 +160,8 @@ const EditCollection = ({
                 <Input
                   id="description"
                   {...register("description")}
-                  placeholder={
-                    isBucket
-                      ? "Auto-generated"
-                      : "A collection of my favorite books"
-                  }
+                  placeholder="A collection of my favorite books"
                   type="text"
-                  disabled={isBucket}
                 />
               </Field>
             </VStack>

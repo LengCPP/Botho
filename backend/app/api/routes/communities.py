@@ -649,32 +649,6 @@ def add_item_to_community(
     )
     session.add(comm_item)
 
-    # Ensure one bucket per user per community for books
-    if item.item_type == ItemType.book:
-        # Check if user already has a bucket in this community
-        bucket_stmt = select(Collection).where(
-            Collection.owner_id == current_user.id,
-            Collection.community_id == id,
-            Collection.collection_type == CollectionType.BUCKET
-        )
-        bucket = session.exec(bucket_stmt).first()
-        
-        if not bucket:
-            visible_name = current_user.full_name or (current_user.profile.alias if current_user.profile else None) or current_user.email
-            collection_in = CollectionCreate(
-                title=f"{visible_name}'s Bucket",
-                description=f"Collection of items {visible_name} is sharing with this community.",
-                collection_type=CollectionType.BUCKET
-            )
-            bucket = crud.create_collection(
-                session=session, 
-                collection_in=collection_in, 
-                owner_id=current_user.id,
-                community_id=id
-            )
-        
-        crud.add_item_to_collection(session=session, collection_id=bucket.id, item_id=item_id)
-
     session.commit()
     return Message(message="Item added to community pool")
 
@@ -795,16 +769,6 @@ async def ratify_donation(
     # Update comm_item status
     comm_item.is_donation_pending = False
     
-    # Remove from donor's bucket in this community
-    bucket_stmt = select(Collection).where(
-        Collection.owner_id == donor_id,
-        Collection.community_id == id,
-        Collection.collection_type == CollectionType.BUCKET
-    )
-    bucket = session.exec(bucket_stmt).first()
-    if bucket:
-        crud.remove_item_from_collection(session=session, collection_id=bucket.id, item_id=item_id)
-
     # Update active/pending loans to reflect new ownership (Community is now the lender)
     loans_stmt = select(Loan).where(
         Loan.item_id == item_id,
@@ -871,20 +835,6 @@ def remove_item_from_community(
     if not is_admin and not is_adder and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Not enough permissions to remove this item")
     
-    # Bucket cleanup
-    statement = (
-        select(Collection)
-        .join(CollectionItem, Collection.id == CollectionItem.collection_id)
-        .where(
-            Collection.community_id == id,
-            Collection.collection_type == CollectionType.BUCKET,
-            CollectionItem.item_id == item_id
-        )
-    )
-    buckets = session.exec(statement).all()
-    for bucket in buckets:
-        crud.remove_item_from_collection(session=session, collection_id=bucket.id, item_id=item_id)
-            
     session.delete(comm_item)
     session.commit()
     return Message(message="Item removed from community")

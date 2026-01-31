@@ -21,7 +21,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useMemo, useState } from "react"
-import { FaFilter } from "react-icons/fa"
+import { FaFilter, FaThLarge, FaList } from "react-icons/fa"
 import { FiEdit, FiMoreVertical, FiPlus, FiTrash2 } from "react-icons/fi"
 
 import {
@@ -63,6 +63,7 @@ function CollectionDetail() {
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
+  const [viewMode, setViewMode] = useState<"card" | "list">("card")
   const isMobile = useBreakpointValue({ base: true, md: false })
 
   const bgColor = useColorModeValue("accent.50", "gray.800")
@@ -297,7 +298,24 @@ function CollectionDetail() {
           wrap="wrap"
           gap={4}
         >
-          <HStack gap={2}>
+          <HStack gap={4}>
+            <Flex border="1px solid" borderColor="border.subtle" p={1} rounded="md" gap={0}>
+              <Button 
+                size="xs" 
+                variant={viewMode === "card" ? "solid" : "ghost"}
+                onClick={() => setViewMode("card")}
+              >
+                <FaThLarge />
+              </Button>
+              <Button 
+                size="xs" 
+                variant={viewMode === "list" ? "solid" : "ghost"}
+                onClick={() => setViewMode("list")}
+              >
+                <FaList />
+              </Button>
+            </Flex>
+
             {/* Filter Button */}
             <Popover.Root>
               <Popover.Trigger asChild>
@@ -483,10 +501,13 @@ function CollectionDetail() {
             </Flex>
           ) : (
             <>
-              <SimpleGrid columns={{ base: 2, md: 3, xl: 4 }} gap={6}>
+              <SimpleGrid 
+                columns={viewMode === "list" || isMobile ? 1 : { base: 2, md: 3, xl: 4 }} 
+                gap={viewMode === "list" || isMobile ? 2 : 6}
+              >
                 {groupedFilteredItems.map((group) => {
                   const item = group[0]
-                  return isMobile ? (
+                  return viewMode === "list" || isMobile ? (
                     <CompactItemCard
                       key={item.id}
                       item={group as any}
@@ -501,6 +522,7 @@ function CollectionDetail() {
                     <ItemCard
                       key={item.id}
                       item={group as any}
+                      onShowDetails={() => setSelectedItem(item as any)}
                       onRemoveFromCollection={
                         canManage
                           ? () => removeMutation.mutate(item.id)

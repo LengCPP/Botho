@@ -57,6 +57,7 @@ interface ItemCardProps {
   isAdmin?: boolean
   displayOwnerId?: string
   onRemoveFromCollection?: () => void
+  onShowDetails?: () => void
 }
 
 const ItemCard = ({
@@ -66,6 +67,7 @@ const ItemCard = ({
   isAdmin,
   displayOwnerId,
   onRemoveFromCollection,
+  onShowDetails,
 }: ItemCardProps) => {
   const [isFlipped, setIsFlipped] = useState(false)
   const [showAdditionalInfo, setShowAdditionalInfo] = useState(false)

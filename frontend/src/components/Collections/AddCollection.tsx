@@ -1,5 +1,5 @@
 import { useColorModeValue } from "@/components/ui/color-mode"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { type SubmitHandler, useForm } from "react-hook-form"
 
 import {
@@ -17,7 +17,6 @@ import { FaPlus } from "react-icons/fa"
 import {
   type CollectionCreate,
   CollectionsService,
-  CommunitiesService,
 } from "@/client"
 import type { ApiError } from "@/client/core/ApiError"
 import useCustomToast from "@/hooks/useCustomToast"
@@ -68,21 +67,6 @@ const AddCollection = ({ communityId }: AddCollectionProps) => {
     },
   })
 
-  const collectionType = watch("collection_type")
-  const isBucket = collectionType === "BUCKET"
-
-  const { data: myCommunities } = useQuery({
-    queryKey: ["my-communities-for-collection"],
-    queryFn: () => CommunitiesService.readCommunities({}),
-    enabled: isOpen,
-  })
-
-  const acceptedCommunities =
-    myCommunities?.data.filter((c) => c.current_user_status === "ACCEPTED") ||
-    []
-
-  const canCreateBucket = acceptedCommunities.length > 0 || !!communityId
-
   const mutation = useMutation({
     mutationFn: (data: CollectionCreateExtended) =>
       CollectionsService.createCollection({
@@ -114,11 +98,7 @@ const AddCollection = ({ communityId }: AddCollectionProps) => {
   })
 
   const onSubmit: SubmitHandler<CollectionCreateExtended> = async (data) => {
-    const finalData = { ...data }
-    if (isBucket) {
-      finalData.title = "Bucket" // Placeholder, backend overwrites
-    }
-    mutation.mutate(finalData)
+    mutation.mutate(data)
   }
 
   const selectStyle = {
@@ -174,50 +154,11 @@ const AddCollection = ({ communityId }: AddCollectionProps) => {
                   <option value="GENERAL" style={{ backgroundColor: selectBg }}>
                     General Collection
                   </option>
-                  {canCreateBucket && (
-                    <option
-                      value="BUCKET"
-                      style={{ backgroundColor: selectBg }}
-                    >
-                      Community Bucket (Pool)
-                    </option>
-                  )}
                 </select>
               </Field>
 
-              {isBucket && !communityId && (
-                <Field
-                  label="Share with Community"
-                  required
-                  invalid={!!errors.target_community_id}
-                  errorText={errors.target_community_id?.message}
-                >
-                  <select
-                    {...register("target_community_id", {
-                      required: isBucket
-                        ? "Please select a community to share with"
-                        : false,
-                    })}
-                    style={selectStyle}
-                  >
-                    <option value="" style={{ backgroundColor: selectBg }}>
-                      -- select community --
-                    </option>
-                    {acceptedCommunities.map((c) => (
-                      <option
-                        key={c.id}
-                        value={c.id}
-                        style={{ backgroundColor: selectBg }}
-                      >
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              )}
-
               <Field
-                required={!isBucket}
+                required
                 invalid={!!errors.title}
                 errorText={errors.title?.message}
                 label="Title"
@@ -225,11 +166,10 @@ const AddCollection = ({ communityId }: AddCollectionProps) => {
                 <Input
                   id="title"
                   {...register("title", {
-                    required: isBucket ? false : "Title is required.",
+                    required: "Title is required.",
                   })}
-                  placeholder={isBucket ? "Auto-generated" : "My Book Library"}
+                  placeholder="My Book Library"
                   type="text"
-                  disabled={isBucket}
                 />
               </Field>
 
@@ -241,13 +181,8 @@ const AddCollection = ({ communityId }: AddCollectionProps) => {
                 <Input
                   id="description"
                   {...register("description")}
-                  placeholder={
-                    isBucket
-                      ? "Auto-generated"
-                      : "A collection of my favorite books"
-                  }
+                  placeholder="A collection of my favorite books"
                   type="text"
-                  disabled={isBucket}
                 />
               </Field>
             </VStack>
