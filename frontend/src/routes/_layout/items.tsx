@@ -163,7 +163,14 @@ function GroupCard({
             </Badge>
           </VStack>
           <Badge variant="solid" colorPalette="teal">
-            {groups.length} Sets
+            {groups.length}{" "}
+            {groups[0][0].item_type === "book"
+              ? groups.length === 1
+                ? "Book"
+                : "Books"
+              : groups.length === 1
+                ? "Item"
+                : "Items"}
           </Badge>
         </Flex>
 
@@ -704,7 +711,7 @@ function ItemsTable() {
             textTransform="uppercase"
             letterSpacing="wider"
           >
-            Books{" "}
+            {activeGroups[0]?.[0]?.item_type === "book" ? "Books" : "Items"}{" "}
             {organize_by === "author"
               ? "by"
               : organize_by === "genre"

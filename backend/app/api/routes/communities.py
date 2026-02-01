@@ -812,30 +812,58 @@ def remove_item_from_community(
     community = session.get(Community, id)
     if not community:
         raise HTTPException(status_code=404, detail="Community not found")
-    
-    statement = select(CommunityItem).where(
-        CommunityItem.community_id == id,
-        CommunityItem.item_id == item_id
-    )
-    comm_item = session.exec(statement).first()
-    if not comm_item:
-        raise HTTPException(status_code=404, detail="Item not found in community")
-    
-    # Admin or added_by check
+
+    # Access check: member or admin
     statement = select(CommunityMember).where(
         CommunityMember.community_id == id,
         CommunityMember.user_id == current_user.id,
         CommunityMember.status == CommunityMemberStatus.ACCEPTED,
     )
     membership = session.exec(statement).first()
-    
-    is_admin = membership and membership.role == CommunityMemberRole.ADMIN
-    is_adder = comm_item.added_by == current_user.id
-    
-    if not is_admin and not is_adder and not current_user.is_superuser:
+    if not membership and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Must be a member to manage community items")
+
+    is_admin = (membership and membership.role == CommunityMemberRole.ADMIN) or current_user.is_superuser
+
+    # Try to find pooling meta
+    statement = select(CommunityItem).where(
+        CommunityItem.community_id == id,
+        CommunityItem.item_id == item_id
+    )
+    comm_item = session.exec(statement).first()
+
+    # Check for item ownership
+    item = session.get(Item, item_id)
+    is_owned = item and item.owner_id == id
+
+    if not comm_item and not is_owned:
+        raise HTTPException(status_code=404, detail="Item not found in community")
+
+    # Permissions: Admin can remove anything. Members can only remove items they added.
+    is_adder = comm_item and comm_item.added_by == current_user.id
+    if not is_admin and not is_adder:
         raise HTTPException(status_code=403, detail="Not enough permissions to remove this item")
-    
-    session.delete(comm_item)
+
+    if is_owned:
+        # If community owns it, delete the item itself (cascades to CommunityItem)
+        session.delete(item)
+    else:
+        # Just remove pooling metadata
+        session.delete(comm_item)
+        
+        # Also remove from any collections belonging to this community
+        coll_stmt = select(Collection).where(Collection.community_id == id)
+        collections = session.exec(coll_stmt).all()
+        if collections:
+            coll_ids = [c.id for c in collections]
+            coll_item_stmt = select(CollectionItem).where(
+                CollectionItem.item_id == item_id,
+                CollectionItem.collection_id.in_(coll_ids)
+            )
+            coll_items = session.exec(coll_item_stmt).all()
+            for ci in coll_items:
+                session.delete(ci)
+
     session.commit()
     return Message(message="Item removed from community")
 

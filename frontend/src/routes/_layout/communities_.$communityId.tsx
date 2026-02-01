@@ -135,7 +135,14 @@ function GroupCard({
             </Badge>
           </VStack>
           <Badge variant="solid" colorPalette="teal">
-            {groups.length} Sets
+            {groups.length}{" "}
+            {groups[0][0].item_type === "book"
+              ? groups.length === 1
+                ? "Book"
+                : "Books"
+              : groups.length === 1
+                ? "Item"
+                : "Items"}
           </Badge>
         </Flex>
 
@@ -1164,7 +1171,10 @@ function CommunityBoard() {
                               textTransform="uppercase"
                               letterSpacing="widest"
                             >
-                              Books{" "}
+                              {[...data.pooled, ...data.owned][0]?.[0]
+                                ?.item_type === "book"
+                                ? "Books"
+                                : "Items"}{" "}
                               {organizeBy === "author"
                                 ? "by"
                                 : organizeBy === "genre"

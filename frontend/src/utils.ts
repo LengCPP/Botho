@@ -102,7 +102,8 @@ export const groupItems = (items: any[]): any[][] => {
       .toLowerCase()
       .trim()
     const owner = item.owner_id || ""
-    const key = `${title}|${author}|${owner}`
+    const type = item.item_type || "general"
+    const key = `${title}|${author}|${owner}|${type}`
     if (!groups[key]) {
       groups[key] = []
     }
