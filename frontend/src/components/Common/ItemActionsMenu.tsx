@@ -152,16 +152,18 @@ export const ItemActionsMenu = ({
 
   const actions = (
     <>
-      {onShowDetails && (
-        isMobile ? (
+      {onShowDetails &&
+        (isMobile ? (
           <Button
             variant="ghost"
             justifyContent="center"
             width="full"
             onClick={(e) => {
               e.stopPropagation()
-              onShowDetails()
               setIsActionsModalOpen(false)
+              setTimeout(() => {
+                onShowDetails()
+              }, 100)
             }}
           >
             <FiEye style={{ marginRight: "8px" }} /> View Details
@@ -171,13 +173,14 @@ export const ItemActionsMenu = ({
             value="view-details"
             onClick={(e) => {
               e.stopPropagation()
-              onShowDetails()
+              setTimeout(() => {
+                onShowDetails()
+              }, 100)
             }}
           >
             <FiEye style={{ marginRight: "8px" }} /> View Details
           </MenuItem>
-        )
-      )}
+        ))}
       <EditItem
         item={item}
         width="full"

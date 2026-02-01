@@ -22,7 +22,14 @@ import {
 } from "@chakra-ui/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
-import { useState, useMemo } from "react"
+import { useMemo, useState } from "react"
+import {
+  FaChevronLeft,
+  FaFilter,
+  FaFolder,
+  FaList,
+  FaThLarge,
+} from "react-icons/fa"
 import {
   FiArrowLeft,
   FiBell,
@@ -36,6 +43,7 @@ import {
   FiPlus,
   FiSend,
   FiSettings,
+  FiShare2,
   FiShield,
   FiTrash2,
   FiUserCheck,
@@ -43,9 +51,7 @@ import {
   FiUserPlus,
   FiUsers,
   FiX,
-  FiShare2,
 } from "react-icons/fi"
-import { FaThLarge, FaList, FaFolder, FaFilter, FaChevronLeft } from "react-icons/fa"
 
 import {
   CollectionsService,
@@ -62,6 +68,7 @@ import { CompactItemCard } from "@/components/Items/CompactItemCard"
 import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { LoanCard } from "@/components/Items/LoanCard"
+import { useColorModeValue } from "@/components/ui/color-mode"
 import {
   DialogBody,
   DialogCloseTrigger,
@@ -79,16 +86,20 @@ import {
   MenuRoot,
   MenuTrigger,
 } from "@/components/ui/menu"
-import { useColorModeValue } from "@/components/ui/color-mode"
 import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
-import { groupItems, getImageUrl } from "@/utils"
+import { getImageUrl, groupItems } from "@/utils"
 
 export const Route = createFileRoute("/_layout/communities/$communityId")({
   component: CommunityBoard,
 })
 
-function GroupCard({ name, type, groups, onOpen }: { name: string, type: string, groups: ItemPublic[][], onOpen: () => void }) {
+function GroupCard({
+  name,
+  type,
+  groups,
+  onOpen,
+}: { name: string; type: string; groups: ItemPublic[][]; onOpen: () => void }) {
   const bgColor = useColorModeValue("accent.50", "gray.800")
   const borderColor = useColorModeValue("accent.200", "gray.600")
   const textColor = useColorModeValue("gray.800", "gray.100")
@@ -111,7 +122,12 @@ function GroupCard({ name, type, groups, onOpen }: { name: string, type: string,
       <Card.Body p={4} as={Flex} direction="column" h="100%">
         <Flex justify="space-between" align="start" mb={4}>
           <VStack align="start" gap={0} flex={1}>
-            <Text fontSize="xl" fontWeight="bold" color={textColor} lineClamp={1}>
+            <Text
+              fontSize="xl"
+              fontWeight="bold"
+              color={textColor}
+              lineClamp={1}
+            >
               {name}
             </Text>
             <Badge colorPalette="accent" variant="subtle" size="sm">
@@ -123,14 +139,23 @@ function GroupCard({ name, type, groups, onOpen }: { name: string, type: string,
           </Badge>
         </Flex>
 
-        <Box height="120px" position="relative" mb={4} bg="blackAlpha.100" borderRadius="md" p={2}>
+        <Box
+          height="120px"
+          position="relative"
+          mb={4}
+          bg="blackAlpha.100"
+          borderRadius="md"
+          p={2}
+        >
           {previewItems.length > 0 ? (
             <HStack gap={-4} justify="center" height="100%">
               {previewItems.map((item, index) => (
                 <Box
                   key={item.id}
                   zIndex={3 - index}
-                  transform={`translateX(${index * 10}px) rotate(${index * 5}deg)`}
+                  transform={`translateX(${index * 10}px) rotate(${
+                    index * 5
+                  }deg)`}
                 >
                   {item.image_url ? (
                     <Image
@@ -144,8 +169,26 @@ function GroupCard({ name, type, groups, onOpen }: { name: string, type: string,
                       border="1px solid white"
                     />
                   ) : (
-                    <Box height="100px" width="70px" bg="gray.400" borderRadius="sm" display="flex" alignItems="center" justifyContent="center" border="1px solid white" p={1}>
-                      <Text fontSize="8px" fontWeight="bold" textAlign="center" color="white" lineClamp={3}>{item.title}</Text>
+                    <Box
+                      height="100px"
+                      width="70px"
+                      bg="gray.400"
+                      borderRadius="sm"
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="center"
+                      border="1px solid white"
+                      p={1}
+                    >
+                      <Text
+                        fontSize="8px"
+                        fontWeight="bold"
+                        textAlign="center"
+                        color="white"
+                        lineClamp={3}
+                      >
+                        {item.title}
+                      </Text>
                     </Box>
                   )}
                 </Box>
@@ -153,12 +196,20 @@ function GroupCard({ name, type, groups, onOpen }: { name: string, type: string,
             </HStack>
           ) : (
             <Flex height="100%" align="center" justify="center">
-              <Text fontSize="sm" color="gray.500" fontStyle="italic">Empty collection</Text>
+              <Text fontSize="sm" color="gray.500" fontStyle="italic">
+                Empty collection
+              </Text>
             </Flex>
           )}
         </Box>
 
-        <Button variant="solid" colorPalette="accent" width="full" size="sm" mt="auto">
+        <Button
+          variant="solid"
+          colorPalette="accent"
+          width="full"
+          size="sm"
+          mt="auto"
+        >
           View Details
         </Button>
       </Card.Body>
@@ -282,7 +333,14 @@ function AnnouncementItem({ ann }: { ann: any }) {
   )
 }
 
-function MessageItem({ msg, communityId, isAdmin, isStaff, currentUser, queryClient }: any) {
+function MessageItem({
+  msg,
+  communityId,
+  isAdmin,
+  isStaff,
+  currentUser,
+  queryClient,
+}: any) {
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditEditing] = useState(msg.content)
   const { showSuccessToast, showErrorToast } = useCustomToast()
@@ -362,22 +420,26 @@ function MessageItem({ msg, communityId, isAdmin, isStaff, currentUser, queryCli
           {new Date(msg.created_at).toLocaleString()}
         </Text>
       </Flex>
-      
+
       {isEditing ? (
         <VStack align="stretch" mt={2} gap={2}>
-          <Textarea 
-            size="sm" 
-            value={editContent} 
+          <Textarea
+            size="sm"
+            value={editContent}
             onChange={(e) => setEditEditing(e.target.value)}
             rows={2}
           />
           <HStack justify="flex-end" gap={2}>
-            <Button size="xs" variant="ghost" onClick={() => setIsEditing(false)}>
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={() => setIsEditing(false)}
+            >
               <FiX />
             </Button>
-            <Button 
-              size="xs" 
-              colorPalette="accent" 
+            <Button
+              size="xs"
+              colorPalette="accent"
               onClick={handleUpdate}
               loading={updateMessageMutation.isPending}
             >
@@ -392,40 +454,65 @@ function MessageItem({ msg, communityId, isAdmin, isStaff, currentUser, queryCli
   )
 }
 
-function DonationManagement({ items, communityId }: { items: ItemPublic[], communityId: string }) {
+function DonationManagement({
+  items,
+  communityId,
+}: { items: ItemPublic[]; communityId: string }) {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
-  
-  const pending = items.filter(i => i.is_donation_pending)
-  
+
+  const pending = items.filter((i) => i.is_donation_pending)
+
   const ratifyMutation = useMutation({
-    mutationFn: (itemId: string) => 
+    mutationFn: (itemId: string) =>
       CommunitiesService.ratifyDonation({ id: communityId, itemId }),
     onSuccess: () => {
       showSuccessToast("Donation accepted and item received!")
-      queryClient.invalidateQueries({ queryKey: ["communityItems", communityId] })
+      queryClient.invalidateQueries({
+        queryKey: ["communityItems", communityId],
+      })
       queryClient.invalidateQueries({ queryKey: ["items"] })
     },
-    onError: () => showErrorToast("Failed to accept donation")
+    onError: () => showErrorToast("Failed to accept donation"),
   })
 
   if (pending.length === 0) return null
 
   return (
-    <Box mb={8} p={4} borderWidth="1px" rounded="lg" bg="bg.panel" borderColor="orange.500">
-      <Heading size="md" mb={4} color="orange.500">Donation Management</Heading>
+    <Box
+      mb={8}
+      p={4}
+      borderWidth="1px"
+      rounded="lg"
+      bg="bg.panel"
+      borderColor="orange.500"
+    >
+      <Heading size="md" mb={4} color="orange.500">
+        Donation Management
+      </Heading>
       <VStack align="stretch" gap={3}>
-        {pending.map(item => (
-          <Flex key={item.id} justify="space-between" align="center" p={3} bg="bg.muted" rounded="md">
+        {pending.map((item) => (
+          <Flex
+            key={item.id}
+            justify="space-between"
+            align="center"
+            p={3}
+            bg="bg.muted"
+            rounded="md"
+          >
             <VStack align="start" gap={0}>
               <Text fontWeight="bold">{item.title}</Text>
-              <Text fontSize="xs" color="fg.muted">Donated by member</Text>
+              <Text fontSize="xs" color="fg.muted">
+                Donated by member
+              </Text>
             </VStack>
-            <Button 
-              size="sm" 
-              colorPalette="green" 
+            <Button
+              size="sm"
+              colorPalette="green"
               onClick={() => ratifyMutation.mutate(item.id)}
-              loading={ratifyMutation.isPending && ratifyMutation.variables === item.id}
+              loading={
+                ratifyMutation.isPending && ratifyMutation.variables === item.id
+              }
             >
               Accept & Confirm Receipt
             </Button>
@@ -446,8 +533,12 @@ function CommunityBoard() {
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false)
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
   const [viewMode, setViewMode] = useState<"card" | "list">("card")
-  const [displayType, setDisplayType] = useState<"items" | "collections">("collections")
-  const [organizeBy, setOrganizeBy] = useState<"subject" | "genre" | "category" | "author" | "ownership">("subject")
+  const [displayType, setDisplayType] = useState<"items" | "collections">(
+    "collections",
+  )
+  const [organizeBy, setOrganizeBy] = useState<
+    "subject" | "genre" | "category" | "author" | "ownership"
+  >("subject")
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
   const isMobile = useBreakpointValue({ base: true, md: false })
 
@@ -600,21 +691,26 @@ function CommunityBoard() {
       FriendsService.createFriendRequest({ friendId: userId }),
     onSuccess: () => {
       showSuccessToast("Friend request sent!")
-      queryClient.invalidateQueries({ queryKey: ["communityMembers", communityId] })
+      queryClient.invalidateQueries({
+        queryKey: ["communityMembers", communityId],
+      })
     },
     onError: () => showErrorToast("Failed to send friend request"),
   })
 
   const items = communityItems?.data || []
-  
+
   const organizedItems = useMemo(() => {
     const groupedPhysical = groupItems(items)
-    const sections: Record<string, { pooled: ItemPublic[][]; owned: ItemPublic[][] }> = {}
-    
+    const sections: Record<
+      string,
+      { pooled: ItemPublic[][]; owned: ItemPublic[][] }
+    > = {}
+
     for (const group of groupedPhysical) {
       const first = group[0]
       const isOwned = first.owner_id === communityId
-      
+
       let keys: string[] = []
       if (organizeBy === "subject") {
         keys = first.work_metadata?.tags || []
@@ -629,9 +725,9 @@ function CommunityBoard() {
       } else if (organizeBy === "ownership") {
         keys = [isOwned ? "Community Owned" : "Member Shared Pool"]
       }
-      
+
       const targetKeys = keys.length === 0 ? ["Others"] : keys
-      
+
       for (const key of targetKeys) {
         if (!sections[key]) sections[key] = { pooled: [], owned: [] }
         if (isOwned) {
@@ -668,12 +764,12 @@ function CommunityBoard() {
 
   const renderGroup = (groups: ItemPublic[][]) => (
     <SimpleGrid
-      columns={viewMode === "list" || isMobile ? 1 : { base: 2, md: 3, lg: 4, xl: 5 }}
-      gap={viewMode === "list" || isMobile ? 2 : 6}
+      columns={viewMode === "list" ? 1 : { base: 2, md: 3, lg: 4, xl: 5 }}
+      gap={viewMode === "list" ? 2 : { base: 3, md: 6 }}
     >
       {groups.map((group) => {
         const item = group[0]
-        return viewMode === "list" || isMobile ? (
+        return viewMode === "list" ? (
           <CompactItemCard
             key={item.id}
             item={group}
@@ -715,20 +811,29 @@ function CommunityBoard() {
               )}
             </HStack>
           </VStack>
-          
+
           {isMember && (
             <HStack gap={2}>
-              <HStack border="1px solid" borderColor="border.subtle" p={1} rounded="md" gap={0}>
-                <Button 
-                  size="xs" 
+              <HStack
+                border="1px solid"
+                borderColor="border.subtle"
+                p={1}
+                rounded="md"
+                gap={0}
+              >
+                <Button
+                  size="xs"
                   variant={displayType === "items" ? "solid" : "ghost"}
-                  onClick={() => { setDisplayType("items"); setSelectedGroup(null); }}
+                  onClick={() => {
+                    setDisplayType("items")
+                    setSelectedGroup(null)
+                  }}
                   title="Item View"
                 >
                   <FiBox />
                 </Button>
-                <Button 
-                  size="xs" 
+                <Button
+                  size="xs"
                   variant={displayType === "collections" ? "solid" : "ghost"}
                   onClick={() => setDisplayType("collections")}
                   title="Collection View"
@@ -737,18 +842,24 @@ function CommunityBoard() {
                 </Button>
               </HStack>
 
-              <Separator orientation="vertical" height="20px" mx={1}/>
+              <Separator orientation="vertical" height="20px" mx={1} />
 
-              <Flex border="1px solid" borderColor="border.subtle" p={1} rounded="md" gap={0}>
-                <Button 
-                  size="xs" 
+              <Flex
+                border="1px solid"
+                borderColor="border.subtle"
+                p={1}
+                rounded="md"
+                gap={0}
+              >
+                <Button
+                  size="xs"
                   variant={viewMode === "card" ? "solid" : "ghost"}
                   onClick={() => setViewMode("card")}
                 >
                   <FaThLarge />
                 </Button>
-                <Button 
-                  size="xs" 
+                <Button
+                  size="xs"
                   variant={viewMode === "list" ? "solid" : "ghost"}
                   onClick={() => setViewMode("list")}
                 >
@@ -763,7 +874,11 @@ function CommunityBoard() {
                 }
                 loading={toggleNotifMutation.isPending}
               >
-                {community.notifications_enabled ? <FiBell /> : <FiBellOff color="gray" />}
+                {community.notifications_enabled ? (
+                  <FiBell />
+                ) : (
+                  <FiBellOff color="gray" />
+                )}
               </Button>
               {!isAdmin && (
                 <Button
@@ -815,7 +930,13 @@ function CommunityBoard() {
 
           <Tabs.Content value="board" pt={6}>
             {!isMember ? (
-              <Box p={8} textAlign="center" borderWidth="1px" rounded="md" bg="bg.muted">
+              <Box
+                p={8}
+                textAlign="center"
+                borderWidth="1px"
+                rounded="md"
+                bg="bg.muted"
+              >
                 <Text>You must be a member to see the board and messages.</Text>
               </Box>
             ) : (
@@ -840,7 +961,12 @@ function CommunityBoard() {
                         {isLoadingAnnouncements ? (
                           <Text>Loading...</Text>
                         ) : announcements?.data.length === 0 ? (
-                          <Box p={4} borderWidth="1px" rounded="md" bg="bg.panel">
+                          <Box
+                            p={4}
+                            borderWidth="1px"
+                            rounded="md"
+                            bg="bg.panel"
+                          >
                             <Text color="fg.muted" fontStyle="italic">
                               No announcements yet.
                             </Text>
@@ -876,9 +1002,9 @@ function CommunityBoard() {
                           </Text>
                         ) : (
                           messages?.data.map((msg) => (
-                            <MessageItem 
-                              key={msg.id} 
-                              msg={msg} 
+                            <MessageItem
+                              key={msg.id}
+                              msg={msg}
                               communityId={communityId}
                               isAdmin={isAdmin}
                               isStaff={isStaff}
@@ -920,7 +1046,11 @@ function CommunityBoard() {
                   {displayType === "collections" && !selectedGroup && (
                     <Popover.Root>
                       <Popover.Trigger asChild>
-                        <Button variant="outline" size="sm" colorPalette="accent">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          colorPalette="accent"
+                        >
                           <FaFilter /> Organize
                         </Button>
                       </Popover.Trigger>
@@ -931,17 +1061,32 @@ function CommunityBoard() {
                             <Popover.Body>
                               <VStack gap={4} align="stretch">
                                 <Box>
-                                  <Text fontSize="sm" fontWeight="bold" mb={2}>Organize Collections By</Text>
+                                  <Text fontSize="sm" fontWeight="bold" mb={2}>
+                                    Organize Collections By
+                                  </Text>
                                   <VStack gap={2} align="stretch">
-                                    {(["subject", "genre", "category", "author", ...(isAdmin ? ["ownership"] : [])] as const).map((opt) => (
+                                    {(
+                                      [
+                                        "subject",
+                                        "genre",
+                                        "category",
+                                        "author",
+                                        ...(isAdmin ? ["ownership"] : []),
+                                      ] as const
+                                    ).map((opt) => (
                                       <Button
                                         key={opt}
                                         size="sm"
-                                        variant={organizeBy === opt ? "solid" : "ghost"}
+                                        variant={
+                                          organizeBy === opt ? "solid" : "ghost"
+                                        }
                                         justifyContent="flex-start"
-                                        onClick={() => setOrganizeBy(opt as any)}
+                                        onClick={() =>
+                                          setOrganizeBy(opt as any)
+                                        }
                                       >
-                                        {opt.charAt(0).toUpperCase() + opt.slice(1)}
+                                        {opt.charAt(0).toUpperCase() +
+                                          opt.slice(1)}
                                       </Button>
                                     ))}
                                   </VStack>
@@ -954,12 +1099,13 @@ function CommunityBoard() {
                     </Popover.Root>
                   )}
                   {selectedGroup && (
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => setSelectedGroup(null)}
                     >
-                      <FaChevronLeft style={{ marginRight: "8px" }} /> Collections
+                      <FaChevronLeft style={{ marginRight: "8px" }} />{" "}
+                      Collections
                     </Button>
                   )}
                 </HStack>
@@ -969,8 +1115,16 @@ function CommunityBoard() {
               {isLoadingItems ? (
                 <Text>Loading items...</Text>
               ) : items.length === 0 ? (
-                <Box p={10} textAlign="center" borderWidth="1px" borderStyle="dashed" rounded="md">
-                  <Text color="fg.muted">No items in this community pool yet.</Text>
+                <Box
+                  p={10}
+                  textAlign="center"
+                  borderWidth="1px"
+                  borderStyle="dashed"
+                  rounded="md"
+                >
+                  <Text color="fg.muted">
+                    No items in this community pool yet.
+                  </Text>
                 </Box>
               ) : (
                 <VStack align="stretch" gap={12}>
@@ -981,16 +1135,16 @@ function CommunityBoard() {
                         sm: "repeat(2, 1fr)",
                         md: "repeat(3, 1fr)",
                         lg: "repeat(4, 1fr)",
-                        xl: "repeat(5, 1fr)"
+                        xl: "repeat(5, 1fr)",
                       }}
                       gap={6}
                     >
                       {Object.entries(organizedItems).map(([name, data]) => (
-                        <GroupCard 
-                          key={name} 
+                        <GroupCard
+                          key={name}
                           name={name}
                           type={organizeBy}
-                          groups={[...data.pooled, ...data.owned]} 
+                          groups={[...data.pooled, ...data.owned]}
                           onOpen={() => setSelectedGroup(name)}
                         />
                       ))}
@@ -1002,31 +1156,54 @@ function CommunityBoard() {
                       {Object.entries(organizedItems)
                         .filter(([name]) => name === selectedGroup)
                         .map(([name, data]) => (
-                        <Box key={name}>
-                          <Heading size="md" mb={6} color="ui.hover" textTransform="uppercase" letterSpacing="widest">
-                            Books {organizeBy === "author" ? "by" : organizeBy === "genre" ? "in" : "on"} {name} 
-                            {(data.pooled.length + data.owned.length) > 1 && ` (${data.pooled.length + data.owned.length})`}
-                          </Heading>
-                          
-                          {renderGroup([...data.pooled, ...data.owned])}
-                        </Box>
-                      ))}
+                          <Box key={name}>
+                            <Heading
+                              size="md"
+                              mb={6}
+                              color="ui.hover"
+                              textTransform="uppercase"
+                              letterSpacing="widest"
+                            >
+                              Books{" "}
+                              {organizeBy === "author"
+                                ? "by"
+                                : organizeBy === "genre"
+                                  ? "in"
+                                  : "on"}{" "}
+                              {name}
+                              {data.pooled.length + data.owned.length > 1 &&
+                                ` (${data.pooled.length + data.owned.length})`}
+                            </Heading>
+
+                            {renderGroup([...data.pooled, ...data.owned])}
+                          </Box>
+                        ))}
                     </>
                   )}
                 </VStack>
               )}
 
               {/* Community Collections Section (Libraries) */}
-              {!selectedGroup && communityCollections?.data && communityCollections.data.length > 0 && (
-                <Box mt={8}>
-                  <Heading size="md" mb={4}>Community Collections</Heading>
-                  <SimpleGrid columns={{ base: 1, sm: 2, lg: 3, xl: 4 }} gap={6}>
-                    {communityCollections.data.map((collection) => (
-                      <CollectionCard key={collection.id} collection={collection} />
-                    ))}
-                  </SimpleGrid>
-                </Box>
-              )}
+              {!selectedGroup &&
+                communityCollections?.data &&
+                communityCollections.data.length > 0 && (
+                  <Box mt={8}>
+                    <Heading size="md" mb={4}>
+                      Community Collections
+                    </Heading>
+                    <SimpleGrid
+                      columns={{ base: 1, sm: 2, lg: 3, xl: 4 }}
+                      gap={6}
+                    >
+                      {communityCollections.data.map((collection) => (
+                        <CollectionCard
+                          key={collection.id}
+                          collection={collection}
+                        />
+                      ))}
+                    </SimpleGrid>
+                  </Box>
+                )}
 
               <ItemDetailModal
                 item={selectedItem}
@@ -1054,12 +1231,17 @@ function CommunityBoard() {
                     >
                       <Flex justify="space-between" align="center">
                         <VStack align="start" gap={0}>
-                          <Text fontWeight="bold">{member.full_name || member.email}</Text>
+                          <Text fontWeight="bold">
+                            {member.full_name || member.email}
+                          </Text>
                           <Badge
                             size="xs"
                             colorPalette={
-                              member.community_role === "ADMIN" ? "purple" : 
-                              member.community_role === "MODERATOR" ? "main" : "gray"
+                              member.community_role === "ADMIN"
+                                ? "purple"
+                                : member.community_role === "MODERATOR"
+                                  ? "main"
+                                  : "gray"
                             }
                           >
                             {member.community_role?.toUpperCase() || "MEMBER"}
@@ -1070,23 +1252,38 @@ function CommunityBoard() {
                             <Button
                               size="xs"
                               variant="ghost"
-                              aria-label={member.friendship_status === "ACCEPTED" ? "Already Friends" : member.friendship_status === "PENDING" ? "Friend Request Pending" : "Add Friend"}
+                              aria-label={
+                                member.friendship_status === "ACCEPTED"
+                                  ? "Already Friends"
+                                  : member.friendship_status === "PENDING"
+                                    ? "Friend Request Pending"
+                                    : "Add Friend"
+                              }
                               onClick={() => {
                                 if (!member.friendship_status) {
                                   friendMutation.mutate(member.id)
                                 }
                               }}
                               colorPalette={
-                                member.friendship_status === "PENDING" ? "accent" : 
-                                member.friendship_status === "ACCEPTED" ? "green" : "gray"
+                                member.friendship_status === "PENDING"
+                                  ? "accent"
+                                  : member.friendship_status === "ACCEPTED"
+                                    ? "green"
+                                    : "gray"
                               }
                               disabled={!!member.friendship_status}
                             >
-                              {member.friendship_status === "ACCEPTED" ? <FiUserCheck /> : <FiUserPlus />}
+                              {member.friendship_status === "ACCEPTED" ? (
+                                <FiUserCheck />
+                              ) : (
+                                <FiUserPlus />
+                              )}
                             </Button>
                           )}
                           <Link to={`/users/${member.id}`}>
-                            <Button size="xs" variant="outline">Profile</Button>
+                            <Button size="xs" variant="outline">
+                              Profile
+                            </Button>
                           </Link>
                         </Flex>
                       </Flex>
@@ -1105,8 +1302,16 @@ function CommunityBoard() {
                     {isLoadingLoans ? (
                       <Text>Loading loans...</Text>
                     ) : communityLoans?.data.length === 0 ? (
-                      <Box p={8} textAlign="center" borderWidth="1px" borderRadius="lg" borderStyle="dashed">
-                        <Text color="fg.muted" fontStyle="italic">No loan requests found.</Text>
+                      <Box
+                        p={8}
+                        textAlign="center"
+                        borderWidth="1px"
+                        borderRadius="lg"
+                        borderStyle="dashed"
+                      >
+                        <Text color="fg.muted" fontStyle="italic">
+                          No loan requests found.
+                        </Text>
                       </Box>
                     ) : (
                       <VStack align="stretch" gap={4}>
@@ -1128,7 +1333,9 @@ function CommunityBoard() {
                     applicants?.data &&
                     applicants.data.length > 0 && (
                       <Box>
-                        <Heading size="md" mb={4} color="ui.hover">Pending Applications ({applicants.count})</Heading>
+                        <Heading size="md" mb={4} color="ui.hover">
+                          Pending Applications ({applicants.count})
+                        </Heading>
                         <VStack align="stretch" gap={3}>
                           {applicants.data.map((member) => (
                             <Flex
@@ -1142,8 +1349,12 @@ function CommunityBoard() {
                               borderColor="ui.hover"
                             >
                               <VStack align="start" gap={0}>
-                                <Text fontWeight="bold">{member.full_name || member.email}</Text>
-                                <Badge size="xs" colorPalette="yellow">APPLICANT</Badge>
+                                <Text fontWeight="bold">
+                                  {member.full_name || member.email}
+                                </Text>
+                                <Badge size="xs" colorPalette="yellow">
+                                  APPLICANT
+                                </Badge>
                               </VStack>
 
                               <HStack gap={2}>
@@ -1151,7 +1362,12 @@ function CommunityBoard() {
                                   size="xs"
                                   colorPalette="green"
                                   variant="solid"
-                                  onClick={() => updateMemberMutation.mutate({ userId: member.id, status: "ACCEPTED" })}
+                                  onClick={() =>
+                                    updateMemberMutation.mutate({
+                                      userId: member.id,
+                                      status: "ACCEPTED",
+                                    })
+                                  }
                                 >
                                   Approve
                                 </Button>
@@ -1159,7 +1375,12 @@ function CommunityBoard() {
                                   size="xs"
                                   colorPalette="red"
                                   variant="outline"
-                                  onClick={() => updateMemberMutation.mutate({ userId: member.id, status: "REJECTED" })}
+                                  onClick={() =>
+                                    updateMemberMutation.mutate({
+                                      userId: member.id,
+                                      status: "REJECTED",
+                                    })
+                                  }
                                 >
                                   Reject
                                 </Button>
@@ -1173,7 +1394,9 @@ function CommunityBoard() {
 
                   {/* Members Section */}
                   <Box>
-                    <Heading size="md" mb={4}>Manage Members</Heading>
+                    <Heading size="md" mb={4}>
+                      Manage Members
+                    </Heading>
                     {isLoadingMembers ? (
                       <Text>Loading members...</Text>
                     ) : (
@@ -1182,18 +1405,34 @@ function CommunityBoard() {
                           .filter((m) => m.community_status === "ACCEPTED")
                           .map((member) => {
                             const isCreator = member.id === community.created_by
-                            const role = member.community_role || (isCreator ? "ADMIN" : "MEMBER")
-                            const isTargetStaff = role === "ADMIN" || role === "MODERATOR"
+                            const role =
+                              member.community_role ||
+                              (isCreator ? "ADMIN" : "MEMBER")
+                            const isTargetStaff =
+                              role === "ADMIN" || role === "MODERATOR"
 
                             return (
-                              <Flex key={member.id} justify="space-between" align="center" p={4} borderWidth="1px" rounded="md" bg="bg.panel">
+                              <Flex
+                                key={member.id}
+                                justify="space-between"
+                                align="center"
+                                p={4}
+                                borderWidth="1px"
+                                rounded="md"
+                                bg="bg.panel"
+                              >
                                 <VStack align="start" gap={0}>
-                                  <Text fontWeight="bold">{member.full_name || member.email}</Text>
+                                  <Text fontWeight="bold">
+                                    {member.full_name || member.email}
+                                  </Text>
                                   <Badge
                                     size="xs"
                                     colorPalette={
-                                      role === "ADMIN" ? "purple" : 
-                                      role === "MODERATOR" ? "main" : "gray"
+                                      role === "ADMIN"
+                                        ? "purple"
+                                        : role === "MODERATOR"
+                                          ? "main"
+                                          : "gray"
                                     }
                                   >
                                     {role.toUpperCase()}
@@ -1201,55 +1440,86 @@ function CommunityBoard() {
                                 </VStack>
 
                                 <HStack gap={2}>
-                                  {!isCreator && member.id !== currentUser?.id && (
-                                    <>
-                                      {isAdmin && !isCreator && (
-                                        <MenuRoot>
-                                          <MenuTrigger asChild>
-                                            <Button size="xs" variant="outline"><FiSettings /> Role</Button>
-                                          </MenuTrigger>
-                                          <MenuContent>
-                                            <MenuItem
-                                              value="ADMIN"
-                                              onClick={() => updateMemberMutation.mutate({ userId: member.id, role: "ADMIN" })}
-                                              disabled={role === "ADMIN"}
-                                            >
-                                              Promote to Admin
-                                            </MenuItem>
-                                            <MenuItem
-                                              value="MODERATOR"
-                                              onClick={() => updateMemberMutation.mutate({ userId: member.id, role: "MODERATOR" })}
-                                              disabled={role === "MODERATOR"}
-                                            >
-                                              Promote to Moderator
-                                            </MenuItem>
-                                            <MenuItem
-                                              value="MEMBER"
-                                              onClick={() => updateMemberMutation.mutate({ userId: member.id, role: "MEMBER" })}
-                                              disabled={role === "MEMBER"}
-                                            >
-                                              Demote to Member
-                                            </MenuItem>
-                                          </MenuContent>
-                                        </MenuRoot>
-                                      )}
+                                  {!isCreator &&
+                                    member.id !== currentUser?.id && (
+                                      <>
+                                        {isAdmin && !isCreator && (
+                                          <MenuRoot>
+                                            <MenuTrigger asChild>
+                                              <Button
+                                                size="xs"
+                                                variant="outline"
+                                              >
+                                                <FiSettings /> Role
+                                              </Button>
+                                            </MenuTrigger>
+                                            <MenuContent>
+                                              <MenuItem
+                                                value="ADMIN"
+                                                onClick={() =>
+                                                  updateMemberMutation.mutate({
+                                                    userId: member.id,
+                                                    role: "ADMIN",
+                                                  })
+                                                }
+                                                disabled={role === "ADMIN"}
+                                              >
+                                                Promote to Admin
+                                              </MenuItem>
+                                              <MenuItem
+                                                value="MODERATOR"
+                                                onClick={() =>
+                                                  updateMemberMutation.mutate({
+                                                    userId: member.id,
+                                                    role: "MODERATOR",
+                                                  })
+                                                }
+                                                disabled={role === "MODERATOR"}
+                                              >
+                                                Promote to Moderator
+                                              </MenuItem>
+                                              <MenuItem
+                                                value="MEMBER"
+                                                onClick={() =>
+                                                  updateMemberMutation.mutate({
+                                                    userId: member.id,
+                                                    role: "MEMBER",
+                                                  })
+                                                }
+                                                disabled={role === "MEMBER"}
+                                              >
+                                                Demote to Member
+                                              </MenuItem>
+                                            </MenuContent>
+                                          </MenuRoot>
+                                        )}
 
-                                      {(isAdmin || (isModerator && !isTargetStaff)) && (
-                                        <Button
-                                          size="xs"
-                                          colorPalette="red"
-                                          variant="outline"
-                                          onClick={() => {
-                                            if (window.confirm(`Are you sure you want to remove ${member.full_name || member.email}?`)) {
-                                              removeMemberMutation.mutate(member.id)
-                                            }
-                                          }}
-                                        >
-                                          <FiUserMinus /> Remove
-                                        </Button>
-                                      )}
-                                    </>
-                                  )}
+                                        {(isAdmin ||
+                                          (isModerator && !isTargetStaff)) && (
+                                          <Button
+                                            size="xs"
+                                            colorPalette="red"
+                                            variant="outline"
+                                            onClick={() => {
+                                              if (
+                                                window.confirm(
+                                                  `Are you sure you want to remove ${
+                                                    member.full_name ||
+                                                    member.email
+                                                  }?`,
+                                                )
+                                              ) {
+                                                removeMemberMutation.mutate(
+                                                  member.id,
+                                                )
+                                              }
+                                            }}
+                                          >
+                                            <FiUserMinus /> Remove
+                                          </Button>
+                                        )}
+                                      </>
+                                    )}
                                 </HStack>
                               </Flex>
                             )
@@ -1276,4 +1546,3 @@ function CommunityBoard() {
 }
 
 export default CommunityBoard
-

@@ -280,20 +280,18 @@ function UserProfilePage() {
         <Text color="gray.500">No other items found.</Text>
       ) : (
         <>
-          <SimpleGrid columns={{ base: 2, md: 3, xl: 4 }} gap={6}>
+          <SimpleGrid
+            columns={{ base: 2, md: 3, xl: 4 }}
+            gap={{ base: 3, md: 6 }}
+          >
             {groupedItems.map((group) => {
               const firstItem = group[0]
-              return isMobile ? (
-                <CompactItemCard
-                  key={firstItem.id}
-                  item={group}
-                  onShowDetails={() => setSelectedItem(firstItem)}
-                />
-              ) : (
+              return (
                 <ItemCard
                   key={firstItem.id}
                   item={group}
                   displayOwnerId={userId}
+                  onShowDetails={() => setSelectedItem(firstItem)}
                 />
               )
             })}

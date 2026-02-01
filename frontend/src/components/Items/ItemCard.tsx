@@ -36,6 +36,7 @@ import {
   FiChevronRight,
   FiExternalLink,
   FiInfo,
+  FiMaximize2,
   FiPlus,
 } from "react-icons/fi"
 import {
@@ -181,6 +182,13 @@ const ItemCard = ({
     }
   }
 
+  const handleShowDetails = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (onShowDetails) {
+      onShowDetails()
+    }
+  }
+
   // Simplified ownership detection
   const isOwner = item.owner_id === user?.id
   const isBorrowing =
@@ -227,6 +235,7 @@ const ItemCard = ({
                     isAdmin={isAdmin}
                     onRemoveFromCollection={onRemoveFromCollection}
                     onlyInfo={true}
+                    onShowDetails={onShowDetails}
                   />
                 ) : (
                   <FriendItemActionsMenu
@@ -235,6 +244,7 @@ const ItemCard = ({
                     loanId={loan?.id}
                     communityId={communityId}
                     isAdmin={isAdmin}
+                    onShowDetails={onShowDetails}
                   />
                 )}
               </Box>
@@ -340,9 +350,9 @@ const ItemCard = ({
                 >
                   {item.title}
                 </Text>
-                {isBook && extraData.author && (
+                {isBook && (item.author || extraData.author) && (
                   <Text fontSize="md" fontStyle="italic">
-                    {String(extraData.author)}
+                    {String(item.author || extraData.author)}
                   </Text>
                 )}
               </Flex>
@@ -447,6 +457,17 @@ const ItemCard = ({
                 )}
 
                 <HStack gap={1} onClick={(e) => e.stopPropagation()}>
+                  {!showAdditionalInfo && onShowDetails && (
+                    <IconButton
+                      aria-label="Full Details"
+                      size="xs"
+                      variant="ghost"
+                      onClick={handleShowDetails}
+                    >
+                      <FiMaximize2 />
+                    </IconButton>
+                  )}
+
                   {!showAdditionalInfo && (
                     <IconButton
                       aria-label="Additional Info"
@@ -490,6 +511,7 @@ const ItemCard = ({
                       isAdmin={isAdmin}
                       onRemoveFromCollection={onRemoveFromCollection}
                       onlyInfo={showAdditionalInfo}
+                      onShowDetails={onShowDetails}
                     />
                   ) : (
                     <FriendItemActionsMenu
@@ -498,6 +520,7 @@ const ItemCard = ({
                       loanId={loan?.id}
                       communityId={communityId}
                       isAdmin={isAdmin}
+                      onShowDetails={onShowDetails}
                     />
                   )}
                 </HStack>
@@ -520,14 +543,14 @@ const ItemCard = ({
                     {item.title}
                   </Text>
 
-                  {isBook && extraData.author && (
+                  {isBook && (item.author || extraData.author) && (
                     <Text
                       fontSize="sm"
                       fontStyle="italic"
                       color="gray.500"
                       lineClamp={1}
                     >
-                      By {String(extraData.author)}
+                      By {String(item.author || extraData.author)}
                     </Text>
                   )}
 

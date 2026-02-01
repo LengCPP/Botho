@@ -93,7 +93,9 @@ export const ItemDetailModal = ({
   const info = (item.info as any) || {}
   const workMeta = item.work_metadata
 
-  const averageCondition = info.average_condition_grade || info.grade || 0
+  const averageCondition = Number(
+    info.average_condition_grade || info.grade || 0,
+  )
   const physicalNotes = info.physical_notes || []
 
   return (
@@ -203,19 +205,35 @@ export const ItemDetailModal = ({
                           : "red"
                     }
                   >
-                    {averageCondition ? `${averageCondition.toFixed(1)}/10` : "?"}
+                    {averageCondition > 0
+                      ? `${averageCondition.toFixed(1)}/10`
+                      : "?"}
                   </Badge>
                 </HStack>
 
                 {physicalNotes.length > 0 ? (
                   <Box width="full">
-                    <Text fontSize="xs" fontWeight="bold" color="fg.subtle" mb={2}>
+                    <Text
+                      fontSize="xs"
+                      fontWeight="bold"
+                      color="fg.subtle"
+                      mb={2}
+                    >
                       PHYSICAL NOTES:
                     </Text>
                     <VStack align="stretch" gap={2}>
                       {physicalNotes.map((note: any, idx: number) => (
-                        <Box key={idx} p={2} bg="bg.subtle" rounded="sm" borderLeft="4px solid" borderColor="ui.hover">
-                          <Text fontSize="sm" fontStyle="italic">"{note.note}"</Text>
+                        <Box
+                          key={idx}
+                          p={2}
+                          bg="bg.subtle"
+                          rounded="sm"
+                          borderLeft="4px solid"
+                          borderColor="ui.hover"
+                        >
+                          <Text fontSize="sm" fontStyle="italic">
+                            "{note.note}"
+                          </Text>
                         </Box>
                       ))}
                     </VStack>

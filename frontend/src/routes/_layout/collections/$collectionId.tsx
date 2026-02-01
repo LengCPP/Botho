@@ -21,7 +21,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useMemo, useState } from "react"
-import { FaFilter, FaThLarge, FaList } from "react-icons/fa"
+import { FaFilter, FaList, FaThLarge } from "react-icons/fa"
 import { FiEdit, FiMoreVertical, FiPlus, FiTrash2 } from "react-icons/fi"
 
 import {
@@ -299,16 +299,22 @@ function CollectionDetail() {
           gap={4}
         >
           <HStack gap={4}>
-            <Flex border="1px solid" borderColor="border.subtle" p={1} rounded="md" gap={0}>
-              <Button 
-                size="xs" 
+            <Flex
+              border="1px solid"
+              borderColor="border.subtle"
+              p={1}
+              rounded="md"
+              gap={0}
+            >
+              <Button
+                size="xs"
                 variant={viewMode === "card" ? "solid" : "ghost"}
                 onClick={() => setViewMode("card")}
               >
                 <FaThLarge />
               </Button>
-              <Button 
-                size="xs" 
+              <Button
+                size="xs"
                 variant={viewMode === "list" ? "solid" : "ghost"}
                 onClick={() => setViewMode("list")}
               >
@@ -501,13 +507,13 @@ function CollectionDetail() {
             </Flex>
           ) : (
             <>
-              <SimpleGrid 
-                columns={viewMode === "list" || isMobile ? 1 : { base: 2, md: 3, xl: 4 }} 
-                gap={viewMode === "list" || isMobile ? 2 : 6}
+              <SimpleGrid
+                columns={viewMode === "list" ? 1 : { base: 2, md: 3, xl: 4 }}
+                gap={viewMode === "list" ? 2 : { base: 3, md: 6 }}
               >
                 {groupedFilteredItems.map((group) => {
                   const item = group[0]
-                  return viewMode === "list" || isMobile ? (
+                  return viewMode === "list" ? (
                     <CompactItemCard
                       key={item.id}
                       item={group as any}

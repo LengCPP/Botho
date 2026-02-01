@@ -104,8 +104,8 @@ function Dashboard() {
                         Items
                       </Heading>
                       <Grid
-                        templateColumns="repeat(auto-fill, minmax(250px, 1fr))"
-                        gap={6}
+                        templateColumns="repeat(auto-fill, minmax(160px, 1fr))"
+                        gap={{ base: 4, md: 6 }}
                       >
                         {groupItems(searchResults?.items || []).map(
                           (group: any) => (

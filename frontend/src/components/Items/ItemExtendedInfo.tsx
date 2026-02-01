@@ -75,7 +75,9 @@ const ItemExtendedInfo = ({
   const visibleReviews = sortedReviews.slice(0, limit)
   const hasMore = sortedReviews.length > limit
 
-  const averageCondition = itemInfo.average_condition_grade || itemInfo.grade || 0
+  const averageCondition = Number(
+    itemInfo.average_condition_grade || itemInfo.grade || 0,
+  )
   const physicalNotes = itemInfo.physical_notes || []
 
   return (
@@ -156,10 +158,12 @@ const ItemExtendedInfo = ({
                     : "red"
               }
             >
-              {averageCondition ? `${averageCondition.toFixed(1)}/10` : "N/A"}
+              {averageCondition > 0
+                ? `${averageCondition.toFixed(1)}/10`
+                : "N/A"}
             </Badge>
           </HStack>
-          
+
           <Box>
             <Text fontSize="sm" fontWeight="medium" mb={1}>
               Physical Notes:
@@ -167,7 +171,14 @@ const ItemExtendedInfo = ({
             {physicalNotes.length > 0 ? (
               <VStack align="stretch" gap={2}>
                 {physicalNotes.map((note: any, idx: number) => (
-                  <Box key={idx} p={2} bg={cardBg} borderRadius="sm" borderWidth="1px" borderColor={borderColor}>
+                  <Box
+                    key={idx}
+                    p={2}
+                    bg={cardBg}
+                    borderRadius="sm"
+                    borderWidth="1px"
+                    borderColor={borderColor}
+                  >
                     <Text fontSize="xs" fontStyle="italic" color="fg.muted">
                       "{note.note}"
                     </Text>
