@@ -1,7 +1,7 @@
 import uuid
 import meilisearch
 from app.core.config import settings
-from app.models import Item, Community
+from app.models import Item, Community, WorkMetadata
 
 client = meilisearch.Client(settings.MEILI_URL, settings.MEILI_MASTER_KEY)
 
@@ -36,6 +36,20 @@ def sync_community_to_search(community: Community):
 def delete_community_from_search(community_id: uuid.UUID):
     index = client.index("communities")
     index.delete_document(str(community_id))
+
+def sync_work_metadata_to_search(meta: WorkMetadata):
+    index = client.index("works")
+    document = {
+        "id": f"{meta.author}|{meta.title}", # Composite key for indexing
+        "author": meta.author,
+        "title": meta.title,
+        "isbn": meta.isbn,
+        "description": meta.description,
+        "category": meta.category,
+        "image_url": meta.image_url,
+        "tags": meta.tags,
+    }
+    index.add_documents([document])
 
 # Aliases for compatibility if needed
 def sync_book_to_search(book: Item):

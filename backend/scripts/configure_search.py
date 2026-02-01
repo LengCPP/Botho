@@ -47,6 +47,25 @@ def configure_meilisearch():
             }
         }
     })
+
+    # Configure Works index (Registry)
+    print("Configuring 'works' index...")
+    works_index = client.index("works")
+    works_index.update_settings({
+        "searchableAttributes": [
+            "title",
+            "author",
+            "isbn",
+            "description"
+        ],
+        "typoTolerance": {
+            "enabled": True,
+            "minWordSizeForTypos": {
+                "oneTypo": 4,
+                "twoTypos": 8
+            }
+        }
+    })
     
     print("Meilisearch configuration complete.")
 

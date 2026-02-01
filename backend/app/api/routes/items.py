@@ -8,7 +8,7 @@ from sqlmodel import func, select, col, or_
 from app.api.deps import CurrentUser, SessionDep
 from app.api.utils import filter_owner_privacy, check_item_availability
 from app.storage import upload_image, delete_image, upload_image_from_url
-from app.search import sync_item_to_search, delete_item_from_search
+from app.search import sync_item_to_search, delete_item_from_search, sync_work_metadata_to_search
 from app.core.config import settings
 from app.models import (
     Item,
@@ -80,7 +80,33 @@ def ensure_work_metadata(
             meta.image_url = image_url
         session.add(meta)
     session.flush()
+    sync_work_metadata_to_search(meta)
     return meta
+
+
+@router.get("/book-registry/search", response_model=list[WorkMetadataPublic])
+def search_book_registry(session: SessionDep, current_user: CurrentUser, q: str, limit: int = 5) -> Any:
+    """
+    Search the global book registry by title or author using Meilisearch.
+    """
+    from app.search import client
+    index = client.index("works")
+    search_results = index.search(q, {"limit": limit})
+    
+    works = []
+    for hit in search_results["hits"]:
+        works.append(WorkMetadataPublic(
+            author=hit["author"],
+            title=hit["title"],
+            isbn=hit.get("isbn"),
+            description=hit.get("description"),
+            category=hit.get("category"),
+            image_url=hit.get("image_url"),
+            tags=hit.get("tags", []),
+            average_rating=0.0, # Not indexed for now
+            review_count=0      # Not indexed for now
+        ))
+    return works
 
 
 @router.get("/book-registry/{isbn}", response_model=WorkMetadataPublic)

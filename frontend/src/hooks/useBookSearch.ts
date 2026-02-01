@@ -8,6 +8,7 @@ export interface BookResult {
   isbn: string
   thumbnail: string
   categories: string[]
+  source?: "local" | "google"
 }
 
 const FALLBACK_BOOK_COVER =
@@ -19,27 +20,47 @@ const fetchBooks = async (
 ) => {
   if (!query || query.length < 3) return []
 
-  // Local Registry Check first for ISBN
-  if (searchType === "isbn") {
-    try {
+  const localResults: BookResult[] = []
+
+  // Local Registry Check first
+  try {
+    if (searchType === "isbn") {
       const localBook = await ItemsService.lookupBookRegistry({ isbn: query })
       if (localBook) {
-        return [
-          {
-            title: localBook.title,
-            authors: [localBook.author],
-            description: localBook.description || "",
-            isbn: localBook.isbn || query,
-            thumbnail: localBook.image_url || FALLBACK_BOOK_COVER,
-            categories: localBook.category ? [localBook.category] : [],
-          },
-        ]
+        localResults.push({
+          title: localBook.title,
+          authors: [localBook.author],
+          description: localBook.description || "",
+          isbn: localBook.isbn || query,
+          thumbnail: localBook.image_url || FALLBACK_BOOK_COVER,
+          categories: localBook.category ? [localBook.category] : [],
+          source: "local",
+        })
       }
-    } catch (e) {
-      // Not in local registry, continue to Google API
+    } else {
+      const results = await ItemsService.searchBookRegistry({ q: query, limit: 5 })
+      for (const b of results) {
+        localResults.push({
+          title: b.title,
+          authors: [b.author],
+          description: b.description || "",
+          isbn: b.isbn || "",
+          thumbnail: b.image_url || FALLBACK_BOOK_COVER,
+          categories: b.category ? [b.category] : [],
+          source: "local",
+        })
+      }
     }
+  } catch (e) {
+    console.error("Local search failed", e)
   }
 
+  // If we have local results for ISBN, return them immediately to avoid Google hit
+  if (searchType === "isbn" && localResults.length > 0) {
+    return localResults
+  }
+
+  // Google API Call
   const apiKey = import.meta.env.VITE_GOOGLE_BOOKS_API_KEY
   const searchPrefix = searchType === "isbn" ? "isbn:" : "intitle:"
   const url = `https://www.googleapis.com/books/v1/volumes?q=${searchPrefix}${encodeURIComponent(
@@ -50,7 +71,7 @@ const fetchBooks = async (
   if (!response.ok) throw new Error("Failed to fetch books")
   const data = await response.json()
 
-  return (data.items || []).map((item: any) => {
+  const googleResults = (data.items || []).map((item: any) => {
     const volumeInfo = item.volumeInfo
     const isbns = volumeInfo.industryIdentifiers || []
     const isbn13 = isbns.find((id: any) => id.type === "ISBN_13")?.identifier
@@ -77,8 +98,21 @@ const fetchBooks = async (
       isbn: isbn13 || isbn10 || "",
       thumbnail: thumbnail,
       categories: volumeInfo.categories || [],
+      source: "google",
     }
   }) as BookResult[]
+
+  // De-duplicate: Prefer local over Google if ISBN matches
+  const combined = [...localResults]
+  const localIsbns = new Set(localResults.map(r => r.isbn).filter(i => i))
+  
+  for (const g of googleResults) {
+    if (!g.isbn || !localIsbns.has(g.isbn)) {
+      combined.push(g)
+    }
+  }
+
+  return combined
 }
 
 export const useBookSearch = (query: string) => {

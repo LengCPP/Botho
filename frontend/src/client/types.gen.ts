@@ -695,6 +695,13 @@ export type InterestsReadInterestsData = {
 
 export type InterestsReadInterestsResponse = (Array<InterestPublic>);
 
+export type ItemsSearchBookRegistryData = {
+    limit?: number;
+    q: string;
+};
+
+export type ItemsSearchBookRegistryResponse = (Array<WorkMetadataPublic>);
+
 export type ItemsLookupBookRegistryData = {
     isbn: string;
 };
