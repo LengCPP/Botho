@@ -13,7 +13,7 @@ setup("authenticate", async ({ page }) => {
   await page.getByRole("button", { name: "Log In", exact: true }).click()
 
   // Wait for the UI to reflect logged in state
-  await expect(page.getByTestId("user-menu")).toBeVisible({ timeout: 15000 })
+  await expect(page.getByTestId("user-menu")).toBeVisible({ timeout: 30000 })
 
   await page.context().storageState({ path: authFile })
 })

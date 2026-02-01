@@ -496,7 +496,7 @@ function CommunityBoard() {
 
   const { data: communityCollections, isLoading: isLoadingCollections } =
     useQuery({
-      queryKey: ["communityCollections", communityId],
+      queryKey: ["collections", { communityId }],
       queryFn: () => CollectionsService.readCollections({ communityId }),
       enabled: !!isMember,
     })
@@ -598,7 +598,10 @@ function CommunityBoard() {
   const friendMutation = useMutation({
     mutationFn: (userId: string) =>
       FriendsService.createFriendRequest({ friendId: userId }),
-    onSuccess: () => showSuccessToast("Friend request sent!"),
+    onSuccess: () => {
+      showSuccessToast("Friend request sent!")
+      queryClient.invalidateQueries({ queryKey: ["communityMembers", communityId] })
+    },
     onError: () => showErrorToast("Failed to send friend request"),
   })
 
@@ -691,7 +694,7 @@ function CommunityBoard() {
     </SimpleGrid>
   )
 
-  const groupCardType = organizeBy === "author" ? "author" : organizeBy === "genre" ? "genre" : organizeBy === "category" ? "category" : "subject"
+  const groupCardType = organizeBy
 
   return (
     <Container maxW="full">
@@ -1067,6 +1070,7 @@ function CommunityBoard() {
                             <Button
                               size="xs"
                               variant="ghost"
+                              aria-label={member.friendship_status === "ACCEPTED" ? "Already Friends" : member.friendship_status === "PENDING" ? "Friend Request Pending" : "Add Friend"}
                               onClick={() => {
                                 if (!member.friendship_status) {
                                   friendMutation.mutate(member.id)
