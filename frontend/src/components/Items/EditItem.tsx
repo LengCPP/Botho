@@ -285,10 +285,10 @@ const EditItem = ({
                         <Text
                           fontSize="xs"
                           color={
-                            description.length > 1000 ? "red.500" : "inherit"
+                            description.length > 1600 ? "red.500" : "inherit"
                           }
                         >
-                          {description.length}/1000
+                          {description.length}/1600
                         </Text>
                       </HStack>
                     }
@@ -297,8 +297,8 @@ const EditItem = ({
                       id="edit_description"
                       {...register("description", {
                         maxLength: {
-                          value: 1000,
-                          message: "Maximum 1000 characters",
+                          value: 1600,
+                          message: "Maximum 1600 characters",
                         },
                       })}
                       placeholder="Description"
@@ -508,7 +508,7 @@ const EditItem = ({
                 variant="solid"
                 type="submit"
                 loading={isSubmitting}
-                disabled={description.length > 1000}
+                disabled={description.length > 1600}
               >
                 Save
               </Button>

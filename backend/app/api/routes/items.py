@@ -46,14 +46,52 @@ def get_work_metadata(session: SessionDep, author: str | None, title: str) -> Wo
     return session.get(WorkMetadata, (author, title))
 
 
-def ensure_work_metadata(session: SessionDep, author: str | None, title: str) -> WorkMetadata | None:
+def ensure_work_metadata(
+    session: SessionDep, 
+    author: str | None, 
+    title: str,
+    isbn: str | None = None,
+    description: str | None = None,
+    category: str | None = None,
+    image_url: str | None = None
+) -> WorkMetadata | None:
     if not author:
         return None
     meta = session.get(WorkMetadata, (author, title))
     if not meta:
-        meta = WorkMetadata(author=author, title=title)
+        meta = WorkMetadata(
+            author=author, 
+            title=title,
+            isbn=isbn,
+            description=description,
+            category=category,
+            image_url=image_url
+        )
         session.add(meta)
-        session.flush()
+    else:
+        # Update missing info if found
+        if isbn and not meta.isbn:
+            meta.isbn = isbn
+        if description and not meta.description:
+            meta.description = description
+        if category and not meta.category:
+            meta.category = category
+        if image_url and not meta.image_url:
+            meta.image_url = image_url
+        session.add(meta)
+    session.flush()
+    return meta
+
+
+@router.get("/book-registry/{isbn}", response_model=WorkMetadataPublic)
+def lookup_book_registry(session: SessionDep, current_user: CurrentUser, isbn: str) -> Any:
+    """
+    Lookup a book in the global registry by ISBN.
+    """
+    statement = select(WorkMetadata).where(WorkMetadata.isbn == isbn)
+    meta = session.exec(statement).first()
+    if not meta:
+        raise HTTPException(status_code=404, detail="Book not found in registry")
     return meta
 
 
@@ -397,7 +435,15 @@ async def create_item(
 
         # Ensure WorkMetadata exists
         if final_author:
-            ensure_work_metadata(session, final_author, title)
+            ensure_work_metadata(
+                session, 
+                final_author, 
+                title,
+                isbn=parsed_extra.get("isbn"),
+                description=description,
+                category=parsed_extra.get("category") or (", ".join(parsed_extra.get("categories")) if isinstance(parsed_extra.get("categories"), list) else parsed_extra.get("categories")),
+                image_url=final_image_url
+            )
 
         session.commit()
         session.refresh(db_item)

@@ -1,3 +1,4 @@
+import { ItemsService } from "@/client"
 import { useQuery } from "@tanstack/react-query"
 
 export interface BookResult {
@@ -12,14 +13,39 @@ export interface BookResult {
 const FALLBACK_BOOK_COVER =
   "https://via.placeholder.com/400x600?text=No+Cover+Available"
 
-const fetchBooks = async (query: string, searchType: "intitle" | "isbn" = "intitle") => {
+const fetchBooks = async (
+  query: string,
+  searchType: "intitle" | "isbn" = "intitle",
+) => {
   if (!query || query.length < 3) return []
+
+  // Local Registry Check first for ISBN
+  if (searchType === "isbn") {
+    try {
+      const localBook = await ItemsService.lookupBookRegistry({ isbn: query })
+      if (localBook) {
+        return [
+          {
+            title: localBook.title,
+            authors: [localBook.author],
+            description: localBook.description || "",
+            isbn: localBook.isbn || query,
+            thumbnail: localBook.image_url || FALLBACK_BOOK_COVER,
+            categories: localBook.category ? [localBook.category] : [],
+          },
+        ]
+      }
+    } catch (e) {
+      // Not in local registry, continue to Google API
+    }
+  }
+
   const apiKey = import.meta.env.VITE_GOOGLE_BOOKS_API_KEY
   const searchPrefix = searchType === "isbn" ? "isbn:" : "intitle:"
   const url = `https://www.googleapis.com/books/v1/volumes?q=${searchPrefix}${encodeURIComponent(
     query,
   )}&maxResults=5&printType=books${apiKey ? `&key=${apiKey}` : ""}`
-  
+
   const response = await fetch(url)
   if (!response.ok) throw new Error("Failed to fetch books")
   const data = await response.json()
@@ -27,12 +53,8 @@ const fetchBooks = async (query: string, searchType: "intitle" | "isbn" = "intit
   return (data.items || []).map((item: any) => {
     const volumeInfo = item.volumeInfo
     const isbns = volumeInfo.industryIdentifiers || []
-    const isbn13 = isbns.find(
-      (id: any) => id.type === "ISBN_13",
-    )?.identifier
-    const isbn10 = isbns.find(
-      (id: any) => id.type === "ISBN_10",
-    )?.identifier
+    const isbn13 = isbns.find((id: any) => id.type === "ISBN_13")?.identifier
+    const isbn10 = isbns.find((id: any) => id.type === "ISBN_10")?.identifier
 
     const imageLinks = volumeInfo.imageLinks
     let thumbnail =

@@ -166,7 +166,7 @@ const AddItem = ({
 
   const handleBookSelect = (book: BookResult) => {
     setValue("title", book.title, { shouldValidate: true })
-    setValue("description", book.description.substring(0, 1000))
+    setValue("description", book.description.substring(0, 1600))
     setValue("extra_data.author", book.authors.join(", "))
     setValue("extra_data.isbn", book.isbn)
     setValue("image_url", book.thumbnail)
@@ -383,9 +383,9 @@ const AddItem = ({
               <Text fontSize="xs">Brief summary of the item.</Text>
               <Text
                 fontSize="xs"
-                color={description.length > 1000 ? "red.500" : "inherit"}
+                color={description.length > 1600 ? "red.500" : "inherit"}
               >
-                {description.length}/1000
+                {description.length}/1600
               </Text>
             </HStack>
           }
@@ -394,8 +394,8 @@ const AddItem = ({
             id="description"
             {...register("description", {
               maxLength: {
-                value: 1000,
-                message: "Maximum 1000 characters",
+                value: 1600,
+                message: "Maximum 1600 characters",
               },
             })}
             placeholder="Description"
@@ -562,7 +562,7 @@ const AddItem = ({
           <Button
             variant="solid"
             type="submit"
-            disabled={!isValid || description.length > 1000}
+            disabled={!isValid || description.length > 1600}
             loading={isSubmitting}
           >
             Save

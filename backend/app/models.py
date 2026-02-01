@@ -428,6 +428,10 @@ class Collection(CollectionBase, table=True):
 class WorkMetadata(SQLModel, table=True):
     author: str = Field(primary_key=True, max_length=255)
     title: str = Field(primary_key=True, max_length=255)
+    isbn: Optional[str] = Field(default=None, index=True)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    category: Optional[str] = Field(default=None, max_length=255)
+    image_url: Optional[str] = Field(default=None, max_length=512)
     tags: list[str] = Field(default=[], sa_column=Column(JSONB))
     average_rating: float = Field(default=0.0)
     review_count: int = Field(default=0)
@@ -489,7 +493,7 @@ class ItemConditionRatingPublic(SQLModel):
 
 class ItemBase(SQLModel):
     title: str = Field(min_length=0, max_length=255)
-    description: Optional[str] = Field(default=None, max_length=1000)
+    description: Optional[str] = Field(default=None, max_length=1600)
     author: Optional[str] = Field(default=None, max_length=255)
     item_type: ItemType = Field(default=ItemType.general)
     image_url: Optional[str] = Field(default=None, max_length=512)
@@ -654,7 +658,7 @@ class BookCreate(ItemCreate):
 
 class ItemUpdate(SQLModel):
     title: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    description: Optional[str] = Field(default=None, max_length=1000)
+    description: Optional[str] = Field(default=None, max_length=1600)
     author: Optional[str] = Field(default=None, max_length=255)
     item_type: Optional[ItemType] = None
     image_url: Optional[str] = None
@@ -673,6 +677,10 @@ class ItemOwnerPublic(SQLModel):
 class WorkMetadataPublic(SQLModel):
     author: str
     title: str
+    isbn: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    image_url: Optional[str] = None
     tags: list[str] = []
     average_rating: float
     review_count: int
