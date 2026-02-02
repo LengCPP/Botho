@@ -1,10 +1,4 @@
-import {
-  Box,
-  Heading,
-  Tabs,
-  Text,
-  useBreakpointValue,
-} from "@chakra-ui/react"
+import { Box, Heading, Tabs, Text, useBreakpointValue } from "@chakra-ui/react"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { FiAlertTriangle, FiLock, FiSettings } from "react-icons/fi"
 import { z } from "zod"

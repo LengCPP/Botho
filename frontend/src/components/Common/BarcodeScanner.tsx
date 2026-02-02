@@ -1,7 +1,15 @@
-import { Box, Button, Flex, HStack, Spinner, Text, VStack } from "@chakra-ui/react"
+import {
+  Box,
+  Button,
+  Flex,
+  HStack,
+  Spinner,
+  Text,
+  VStack,
+} from "@chakra-ui/react"
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode"
 import { useEffect, useRef, useState } from "react"
-import { FiX, FiAlertCircle } from "react-icons/fi"
+import { FiAlertCircle, FiX } from "react-icons/fi"
 
 interface BarcodeScannerProps {
   onScan: (decodedText: string) => void
@@ -47,7 +55,7 @@ const BarcodeScanner = ({ onScan, onClose }: BarcodeScannerProps) => {
       if (!scannerRef.current) {
         scannerRef.current = new Html5Qrcode(containerRef.current.id)
       }
-      
+
       setError(null)
 
       await scannerRef.current.start(
@@ -81,7 +89,10 @@ const BarcodeScanner = ({ onScan, onClose }: BarcodeScannerProps) => {
       const message = err?.message || String(err)
       if (message.includes("Permission denied")) {
         setError("Camera permission denied. Please allow camera access.")
-      } else if (message.includes("NotFoundErr") || message.includes("no device")) {
+      } else if (
+        message.includes("NotFoundErr") ||
+        message.includes("no device")
+      ) {
         setError("No camera found on this device.")
       } else {
         setError(message)
@@ -94,12 +105,15 @@ const BarcodeScanner = ({ onScan, onClose }: BarcodeScannerProps) => {
     const timer = setTimeout(() => {
       startScanner()
     }, 200)
-    
+
     return () => {
       clearTimeout(timer)
       // Cleanup on unmount
       if (scannerRef.current?.isScanning) {
-        scannerRef.current.stop().then(() => scannerRef.current?.clear()).catch(console.error)
+        scannerRef.current
+          .stop()
+          .then(() => scannerRef.current?.clear())
+          .catch(console.error)
       }
     }
   }, [])
@@ -118,10 +132,10 @@ const BarcodeScanner = ({ onScan, onClose }: BarcodeScannerProps) => {
         borderColor={error ? "red.500" : "border.subtle"}
       >
         {/* html5-qrcode targets this ID. We keep it stable. */}
-        <div 
-          id="barcode-scanner-viewport" 
-          ref={containerRef} 
-          style={{ width: '100%', height: '100%' }}
+        <div
+          id="barcode-scanner-viewport"
+          ref={containerRef}
+          style={{ width: "100%", height: "100%" }}
         />
 
         {/* Overlays */}
@@ -168,7 +182,12 @@ const BarcodeScanner = ({ onScan, onClose }: BarcodeScannerProps) => {
         )}
       </Box>
       <HStack>
-        <Button size="sm" colorPalette="red" variant="outline" onClick={stopScanner}>
+        <Button
+          size="sm"
+          colorPalette="red"
+          variant="outline"
+          onClick={stopScanner}
+        >
           <FiX /> Close Scanner
         </Button>
       </HStack>

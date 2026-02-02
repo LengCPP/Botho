@@ -59,7 +59,7 @@ const UserProfilePicture = ({
         setIsCropModalOpen(true)
       })
       reader.readAsDataURL(file)
-      
+
       if (fileInputRef.current) {
         fileInputRef.current.value = ""
       }

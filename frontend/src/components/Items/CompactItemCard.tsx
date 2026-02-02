@@ -75,12 +75,12 @@ export const CompactItemCard = ({
     >
       <Flex align="center" gap={3}>
         {/* Small Image on Left */}
-        <Box 
-          width="40px" 
-          height="60px" 
-          bg="gray.100" 
-          borderRadius="sm" 
-          overflow="hidden" 
+        <Box
+          width="40px"
+          height="60px"
+          bg="gray.100"
+          borderRadius="sm"
+          overflow="hidden"
           flexShrink={0}
           position="relative"
         >
@@ -94,10 +94,12 @@ export const CompactItemCard = ({
             />
           ) : (
             <Flex align="center" justify="center" h="100%" bg="gray.400">
-              <Text fontSize="2xs" color="white" fontWeight="bold">?</Text>
+              <Text fontSize="2xs" color="white" fontWeight="bold">
+                ?
+              </Text>
             </Flex>
           )}
-          
+
           {isGrouped && (
             <Badge
               position="absolute"
@@ -139,7 +141,7 @@ export const CompactItemCard = ({
                 h="14px"
                 minW="14px"
               >
-                <FiChevronRight size="10px"/>
+                <FiChevronRight size="10px" />
               </IconButton>
             )}
           </HStack>

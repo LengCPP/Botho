@@ -612,7 +612,6 @@ const ItemCard = ({
                     </Text>
                   </VStack>
                 )}
-
                 <Badge
                   colorPalette={availableCount > 0 ? "green" : "red"}
                   variant="solid"
@@ -628,7 +627,6 @@ const ItemCard = ({
                       ? "Available"
                       : "On Loan"}
                 </Badge>
-
                 <Flex justify="space-between" align="center" mb={1}>
                   <HStack gap={2}>
                     <Text fontSize="xs" fontWeight="semibold">
@@ -655,7 +653,8 @@ const ItemCard = ({
                       </IconButton>
                     </HStack>
                   )}
-                </Flex>                <HStack gap={1} flexWrap="wrap">
+                </Flex>{" "}
+                <HStack gap={1} flexWrap="wrap">
                   {loan ? (
                     <Link
                       to={
@@ -767,7 +766,6 @@ const ItemCard = ({
                     </>
                   )}
                 </HStack>
-
                 {isBook && extraData.isbn && !showAdditionalInfo && (
                   <Text
                     fontSize="2xs"

@@ -14,10 +14,7 @@ import {
 import { useState } from "react"
 import { FaPlus } from "react-icons/fa"
 
-import {
-  type CollectionCreate,
-  CollectionsService,
-} from "@/client"
+import { type CollectionCreate, CollectionsService } from "@/client"
 import type { ApiError } from "@/client/core/ApiError"
 import useCustomToast from "@/hooks/useCustomToast"
 import { handleError } from "@/utils"

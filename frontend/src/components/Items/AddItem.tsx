@@ -300,7 +300,7 @@ const AddItem = ({
     <form onSubmit={handleSubmit(onSubmit)}>
       <VStack gap={4}>
         {isScanning && (
-          <BarcodeScanner 
+          <BarcodeScanner
             onScan={(code) => {
               setScannedIsbn(code)
               setIsScanning(false)
@@ -417,15 +417,15 @@ const AddItem = ({
             <Text fontWeight="bold" fontSize="sm" color="ui.hover">
               Universal Work Info
             </Text>
-                  <Field
-                    label="Subjects"
-                    helperText="Comma separated (e.g. fantasy, history, sci-fi)"
-                  >
-                    <Input
-                      placeholder="fantasy, history, sci-fi"
-                      {...register("work_info.tags" as any)}
-                    />
-                  </Field>
+            <Field
+              label="Subjects"
+              helperText="Comma separated (e.g. fantasy, history, sci-fi)"
+            >
+              <Input
+                placeholder="fantasy, history, sci-fi"
+                {...register("work_info.tags" as any)}
+              />
+            </Field>
 
             <Separator />
 

@@ -38,7 +38,10 @@ const fetchBooks = async (
         })
       }
     } else {
-      const results = await ItemsService.searchBookRegistry({ q: query, limit: 5 })
+      const results = await ItemsService.searchBookRegistry({
+        q: query,
+        limit: 5,
+      })
       for (const b of results) {
         localResults.push({
           title: b.title,
@@ -104,8 +107,8 @@ const fetchBooks = async (
 
   // De-duplicate: Prefer local over Google if ISBN matches
   const combined = [...localResults]
-  const localIsbns = new Set(localResults.map(r => r.isbn).filter(i => i))
-  
+  const localIsbns = new Set(localResults.map((r) => r.isbn).filter((i) => i))
+
   for (const g of googleResults) {
     if (!g.isbn || !localIsbns.has(g.isbn)) {
       combined.push(g)

@@ -148,7 +148,7 @@ services:
       - traefik-public
       - default
     volumes:
-      - app-minio-data-staging:/data
+      - rsc-xchange_app-minio-data-staging:/data
     env_file:
       - .env
     environment:
@@ -289,6 +289,10 @@ volumes:
   app-db-data-staging:
   app-minio-data-staging:
   app-meilisearch-data-staging:
+  rsc-xchange_app-minio-data-staging:
+    external: true
+  rsc-xchange_app-minio-data:
+    external: true
 
 networks:
   traefik-public:
