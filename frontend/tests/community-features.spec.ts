@@ -7,7 +7,7 @@ test.describe("Community Features", () => {
     await page.goto("/")
   })
 
-  test("Create community, add collection, and verify immediate state update", async ({
+  test("Create community and verify redirect", async ({
     page,
   }) => {
     // 1. Create Community
@@ -23,17 +23,6 @@ test.describe("Community Features", () => {
     await expect(
       page.getByRole("heading", { name: communityName }),
     ).toBeVisible()
-
-    // 2. Add Collection in Community
-    await page.getByRole("tab", { name: /Items/i }).click()
-    await page.getByRole("button", { name: "Add Collection" }).click()
-
-    const collectionTitle = `Comm Collection ${Date.now()}`
-    await page.getByPlaceholder("My Book Library").fill(collectionTitle)
-    await page.getByRole("button", { name: "Save" }).click()
-
-    // 3. Verify collection appears immediately without refresh
-    await expect(page.getByText(collectionTitle)).toBeVisible()
   })
 
   test("Admin Ownership organization option", async ({ page }) => {

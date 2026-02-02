@@ -60,7 +60,6 @@ import {
   FriendsService,
   type ItemPublic,
 } from "@/client"
-import AddCollection from "@/components/Collections/AddCollection"
 import CollectionCard from "@/components/Collections/CollectionCard"
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import AddItem from "@/components/Items/AddItem"

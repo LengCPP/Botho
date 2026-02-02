@@ -230,12 +230,6 @@ function UserProfilePage() {
   const isFriend = user?.friendship_status === "ACCEPTED"
   const canSeeAll = isFriend || currentUser?.is_superuser
 
-  const { data: collections } = useQuery({
-    queryKey: ["user-collections", userId],
-    queryFn: () => CollectionsService.readCollections({ ownerId: userId }),
-    enabled: canSeeAll,
-  })
-
   const { data: items, isLoading: isLoadingItems } = useQuery({
     queryKey: [
       "items",
@@ -406,146 +400,121 @@ function UserProfilePage() {
       </VStack>
 
       {canSeeAll ? (
-        <Tabs.Root defaultValue="items" variant="enclosed" fitted>
-          <Tabs.List mb={6}>
-            <Tabs.Trigger value="items">
-              <FiBook style={{ marginRight: "8px" }} /> Items (
-              {userItems.length})
-            </Tabs.Trigger>
-            <Tabs.Trigger value="collections">
-              <FiLayers style={{ marginRight: "8px" }} /> Collections (
-              {collections?.data?.length || 0})
-            </Tabs.Trigger>
-          </Tabs.List>
+        <Box>
+          <Flex
+            justify="space-between"
+            align="center"
+            mb={6}
+            wrap="wrap"
+            gap={4}
+          >
+            <Heading size="md">
+              {displayType === "collections"
+                ? subject
+                  ? `Items in ${subject}`
+                  : "Item Collections"
+                : `Items (${userItems.length})`}
+            </Heading>
+            
+            <ItemsViewOptions
+              viewMode={viewMode}
+              onChangeViewMode={setViewMode}
+              displayType={displayType}
+              onChangeDisplayType={(type) => {
+                setDisplayType(type)
+                setSubject(undefined)
+              }}
+              organizeBy={organizeBy}
+              onChangeOrganizeBy={(val) => {
+                setOrganizeBy(val)
+                setSubject(undefined)
+              }}
+              sortBy={sortBy}
+              onChangeSortBy={setSortBy}
+              sortOrder={sortOrder}
+              onChangeSortOrder={setSortOrder}
+              category={category}
+              onChangeCategory={setCategory}
+              genre={genre}
+              onChangeGenre={setGenre}
+              showDisplayToggle={true}
+              showViewToggle={displayType === "items" || !!subject}
+              showLimit={false}
+              showFilter={displayType === "items"}
+              showSort={displayType === "items"}
+            />
+          </Flex>
 
-          <Tabs.Content value="items">
-            <Flex
-              justify="space-between"
-              align="center"
-              mb={6}
-              wrap="wrap"
-              gap={4}
-            >
-              <Heading size="md">
-                {displayType === "collections"
-                  ? subject
-                    ? `Items in ${subject}`
-                    : "Item Collections"
-                  : "All Items"}
-              </Heading>
-              
-              <ItemsViewOptions
-                viewMode={viewMode}
-                onChangeViewMode={setViewMode}
-                displayType={displayType}
-                onChangeDisplayType={(type) => {
-                  setDisplayType(type)
-                  setSubject(undefined)
-                }}
-                organizeBy={organizeBy}
-                onChangeOrganizeBy={(val) => {
-                  setOrganizeBy(val)
-                  setSubject(undefined)
-                }}
-                sortBy={sortBy}
-                onChangeSortBy={setSortBy}
-                sortOrder={sortOrder}
-                onChangeSortOrder={setSortOrder}
-                category={category}
-                onChangeCategory={setCategory}
-                genre={genre}
-                onChangeGenre={setGenre}
-                showDisplayToggle={true} // Enable toggle between Items / Collections
-                showViewToggle={displayType === "items" || !!subject}
-                showLimit={false}
-                showFilter={displayType === "items"}
-                showSort={displayType === "items"}
-              />
-            </Flex>
+          {isLoadingItems ? (
+            <Text>Loading items...</Text>
+          ) : userItems.length === 0 ? (
+            <Text color="gray.500">No items found.</Text>
+          ) : (
+            <>
+              {/* Back Button for Drilldown */}
+              {subject && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  mb={4}
+                  onClick={() => setSubject(undefined)}
+                >
+                  <FaChevronLeft style={{ marginRight: "8px" }} /> Back to Collections
+                </Button>
+              )}
 
-            {isLoadingItems ? (
-              <Text>Loading items...</Text>
-            ) : userItems.length === 0 ? (
-              <Text color="gray.500">No items found.</Text>
-            ) : (
-              <>
-                {/* Back Button for Drilldown */}
-                {subject && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    mb={4}
-                    onClick={() => setSubject(undefined)}
-                  >
-                    <FaChevronLeft style={{ marginRight: "8px" }} /> Back to Collections
-                  </Button>
-                )}
-
-                {/* Render Collections Grid (GroupCards) */}
-                {displayType === "collections" && !subject ? (
-                  <Grid
-                    templateColumns={{
-                      base: "1fr",
-                      sm: "repeat(2, 1fr)",
-                      md: "repeat(3, 1fr)",
-                      lg: "repeat(4, 1fr)",
-                      xl: "repeat(5, 1fr)",
-                    }}
-                    gap={6}
-                  >
-                    {Object.entries(organizedItems).map(([name, groups]) => (
-                      <GroupCard
-                        key={name}
-                        name={name}
-                        type={organizeBy}
-                        groups={groups}
-                        onOpen={() => setSubject(name)}
+              {/* Render Collections Grid (GroupCards) */}
+              {displayType === "collections" && !subject ? (
+                <Grid
+                  templateColumns={{
+                    base: "1fr",
+                    sm: "repeat(2, 1fr)",
+                    md: "repeat(3, 1fr)",
+                    lg: "repeat(4, 1fr)",
+                    xl: "repeat(5, 1fr)",
+                  }}
+                  gap={6}
+                >
+                  {Object.entries(organizedItems).map(([name, groups]) => (
+                    <GroupCard
+                      key={name}
+                      name={name}
+                      type={organizeBy}
+                      groups={groups}
+                      onOpen={() => setSubject(name)}
+                    />
+                  ))}
+                </Grid>
+              ) : (
+                /* Render Items Grid */
+                <SimpleGrid
+                  columns={
+                    viewMode === "list" ? 1 : { base: 2, md: 3, xl: 4 }
+                  }
+                  gap={viewMode === "list" ? 2 : { base: 3, md: 6 }}
+                >
+                  {activeGroups.map((group) => {
+                    const firstItem = group[0]
+                    return viewMode === "list" ? (
+                      <CompactItemCard
+                        key={firstItem.id}
+                        item={group}
+                        onShowDetails={() => setSelectedItem(firstItem)}
                       />
-                    ))}
-                  </Grid>
-                ) : (
-                  /* Render Items Grid */
-                  <SimpleGrid
-                    columns={
-                      viewMode === "list" ? 1 : { base: 2, md: 3, xl: 4 }
-                    }
-                    gap={viewMode === "list" ? 2 : { base: 3, md: 6 }}
-                  >
-                    {activeGroups.map((group) => {
-                      const firstItem = group[0]
-                      return viewMode === "list" ? (
-                        <CompactItemCard
-                          key={firstItem.id}
-                          item={group}
-                          onShowDetails={() => setSelectedItem(firstItem)}
-                        />
-                      ) : (
-                        <ItemCard
-                          key={firstItem.id}
-                          item={group}
-                          displayOwnerId={userId}
-                          onShowDetails={() => setSelectedItem(firstItem)}
-                        />
-                      )
-                    })}
-                  </SimpleGrid>
-                )}
-              </>
-            )}
-          </Tabs.Content>
-
-          <Tabs.Content value="collections">
-            {collections?.data && collections.data.length > 0 ? (
-              <SimpleGrid columns={{ base: 1, md: 2, lg: 3, xl: 4 }} gap={6}>
-                {collections.data.map((c) => (
-                  <CollectionCard key={c.id} collection={c} />
-                ))}
-              </SimpleGrid>
-            ) : (
-              <Text color="gray.500">No custom collections found.</Text>
-            )}
-          </Tabs.Content>
-        </Tabs.Root>
+                    ) : (
+                      <ItemCard
+                        key={firstItem.id}
+                        item={group}
+                        displayOwnerId={userId}
+                        onShowDetails={() => setSelectedItem(firstItem)}
+                      />
+                    )
+                  })}
+                </SimpleGrid>
+              )}
+            </>
+          )}
+        </Box>
       ) : (
         <Box
           p={10}

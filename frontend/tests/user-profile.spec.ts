@@ -43,16 +43,6 @@ test.describe("User Profile Features", () => {
         },
       },
     })
-
-    // 4. Create Collection for User B
-    await request.post("/api/v1/collections/", {
-      headers: userBHeaders,
-      data: {
-        title: "My Sci-Fi Collection",
-        description: "Best books",
-        public: true,
-      },
-    })
   })
 
   test("Visit Friend Profile and Verify Views", async ({ page }) => {
@@ -60,21 +50,12 @@ test.describe("User Profile Features", () => {
     // (As the default logged-in Admin from global setup)
     await page.goto(`/users/${targetUser.id}`)
 
-    // 1. Verify Tabs exist
-    await expect(page.getByRole("tab", { name: /Items/i })).toBeVisible()
-    await expect(
-      page.getByRole("tab", { name: /Collections/i }),
-    ).toBeVisible()
-
-    // 2. Verify Curated Collection in "Collections" tab
-    await page.getByRole("tab", { name: /Collections/i }).click()
-    await expect(page.getByText("My Sci-Fi Collection")).toBeVisible()
-
-    // 3. Verify Items Tab - Default View (Flat List)
-    await page.getByRole("tab", { name: /Items/i }).click()
+    // 1. Verify Default Item View (Flat List)
+    // We expect "Items (1)" or similar heading
+    await expect(page.getByRole("heading", { name: /Items \(\d+\)/ })).toBeVisible()
     await expect(page.getByText("Dune")).toBeVisible()
     
-    // 4. Verify Smart Grouping (Subject View)
+    // 2. Verify Smart Grouping (Subject View)
     // Click "Collection View" toggle button (FaFolder icon)
     // The button has title "Collection View"
     const collectionViewBtn = page.getByTitle("Collection View")
@@ -85,15 +66,15 @@ test.describe("User Profile Features", () => {
     await expect(page.getByText("Science Fiction")).toBeVisible()
     await expect(page.getByText("SUBJECT COLLECTION")).toBeVisible()
 
-    // 5. Drill down into Group
+    // 3. Drill down into Group
     // GroupCard text is "Science Fiction", click it.
     await page.getByText("Science Fiction").click()
 
     // Verify Drill-down view
-    await expect(page.getByText("Items on Science Fiction")).toBeVisible()
+    await expect(page.getByText("Items in Science Fiction")).toBeVisible()
     await expect(page.getByText("Dune")).toBeVisible()
 
-    // 6. Verify Back Navigation
+    // 4. Verify Back Navigation
     const backBtn = page.getByRole("button", { name: "Back to Collections" })
     await expect(backBtn).toBeVisible()
     await backBtn.click()
