@@ -55,6 +55,9 @@ export const CompactItemCard = ({
   }
 
   const isOwner = item.owner_id === user?.id
+  const isCommunityOwned = !!item.community_owner
+  const canManage = isOwner || (isCommunityOwned && isAdmin)
+
   const isBorrowing =
     !!loan &&
     loan.requester_id === user?.id &&
@@ -149,7 +152,7 @@ export const CompactItemCard = ({
 
         {/* Ellipsis menu at the end */}
         <HStack gap={1} onClick={(e) => e.stopPropagation()}>
-          {isOwner ? (
+          {canManage ? (
             <ItemActionsMenu
               item={item}
               communityId={communityId}

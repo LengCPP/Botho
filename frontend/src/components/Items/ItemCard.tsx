@@ -191,6 +191,9 @@ const ItemCard = ({
 
   // Simplified ownership detection
   const isOwner = item.owner_id === user?.id
+  const isCommunityOwned = !!item.community_owner
+  const canManage = isOwner || (isCommunityOwned && isAdmin)
+
   const isBorrowing =
     !!loan &&
     loan.requester_id === user?.id &&
@@ -228,7 +231,7 @@ const ItemCard = ({
             <Flex justify="space-between" align="center" width="full" pr={8}>
               <DialogTitle>{item.title}</DialogTitle>
               <Box onClick={(e) => e.stopPropagation()}>
-                {isOwner ? (
+                {canManage ? (
                   <ItemActionsMenu
                     item={item}
                     communityId={communityId}
@@ -504,7 +507,7 @@ const ItemCard = ({
                       <FiExternalLink />
                     </IconButton>
                   )}
-                  {isOwner ? (
+                  {canManage ? (
                     <ItemActionsMenu
                       item={item}
                       communityId={communityId}

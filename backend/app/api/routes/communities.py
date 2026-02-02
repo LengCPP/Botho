@@ -197,8 +197,14 @@ def delete_community(
     if not community:
         raise HTTPException(status_code=404, detail="Community not found")
 
-    # Check if user is creator or admin
-    if community.created_by != current_user.id and not current_user.is_superuser:
+    # Check if user is admin
+    statement = select(CommunityMember).where(
+        CommunityMember.community_id == id,
+        CommunityMember.user_id == current_user.id,
+        CommunityMember.role == CommunityMemberRole.ADMIN
+    )
+    membership = session.exec(statement).first()
+    if not membership and not current_user.is_superuser:
         raise HTTPException(status_code=400, detail="Not enough permissions")
 
     session.delete(community)
