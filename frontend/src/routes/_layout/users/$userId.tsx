@@ -30,6 +30,7 @@ import CollectionCard from "@/components/Collections/CollectionCard"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
 import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
+import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
 import UserInformation from "@/components/UserSettings/UserInformation"
 import UserProfilePicture from "@/components/UserSettings/UserProfilePicture"
 import { useColorModeValue } from "@/components/ui/color-mode"
@@ -55,24 +56,16 @@ function UserProfilePage() {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
+  const [viewMode, setViewMode] = useState<"card" | "list">("card")
   const [sortBy, setSortBy] = useState("created_at")
   const [sortOrder, setSortOrder] = useState("desc")
+  const [category, setCategory] = useState<string | undefined>(undefined)
+  const [genre, setGenre] = useState<string | undefined>(undefined)
+
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
   const isMobile = useBreakpointValue({ base: true, md: false })
 
   const borderColor = useColorModeValue("accent.200", "gray.600")
-  const selectBg = useColorModeValue("white", "gray.800")
-  const selectColor = useColorModeValue("black", "white")
-  const selectBorder = useColorModeValue("#ccc", "gray.600")
-
-  const selectStyle = {
-    padding: "6px 10px",
-    borderRadius: "4px",
-    border: `1px solid ${selectBorder}`,
-    backgroundColor: selectBg,
-    color: selectColor,
-    fontSize: "12px",
-  }
 
   useEffect(() => {
     if (currentUser && currentUser.id === userId) {
@@ -98,7 +91,7 @@ function UserProfilePage() {
     queryKey: [
       "items",
       userId,
-      { excludeCollections: true, sortBy, sortOrder },
+      { excludeCollections: true, sortBy, sortOrder, category, genre },
     ],
     queryFn: () =>
       ItemsService.readItems({
@@ -106,6 +99,8 @@ function UserProfilePage() {
         excludeCollections: true,
         sortBy,
         sortOrder,
+        category,
+        genre,
       }),
     enabled: canSeeAll,
   })
@@ -240,24 +235,21 @@ function UserProfilePage() {
         <Heading size="lg">Other Items</Heading>
 
         {canSeeAll && (
-          <HStack gap={2}>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              style={selectStyle}
-            >
-              <option value="created_at">Date Created</option>
-              <option value="title">Name</option>
-            </select>
-            <select
-              value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value)}
-              style={selectStyle}
-            >
-              <option value="desc">Descending</option>
-              <option value="asc">Ascending</option>
-            </select>
-          </HStack>
+          <ItemsViewOptions
+            viewMode={viewMode}
+            onChangeViewMode={setViewMode}
+            sortBy={sortBy}
+            onChangeSortBy={setSortBy}
+            sortOrder={sortOrder}
+            onChangeSortOrder={setSortOrder}
+            category={category}
+            onChangeCategory={setCategory}
+            genre={genre}
+            onChangeGenre={setGenre}
+            showDisplayToggle={false}
+            showLimit={false}
+            showFilter={true}
+          />
         )}
       </Flex>
 
@@ -281,12 +273,18 @@ function UserProfilePage() {
       ) : (
         <>
           <SimpleGrid
-            columns={{ base: 2, md: 3, xl: 4 }}
-            gap={{ base: 3, md: 6 }}
+            columns={viewMode === "list" ? 1 : { base: 2, md: 3, xl: 4 }}
+            gap={viewMode === "list" ? 2 : { base: 3, md: 6 }}
           >
             {groupedItems.map((group) => {
               const firstItem = group[0]
-              return (
+              return viewMode === "list" ? (
+                <CompactItemCard
+                  key={firstItem.id}
+                  item={group}
+                  onShowDetails={() => setSelectedItem(firstItem)}
+                />
+              ) : (
                 <ItemCard
                   key={firstItem.id}
                   item={group}

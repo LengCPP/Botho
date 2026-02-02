@@ -18,15 +18,34 @@ export const useNotifications = () => {
   useEffect(() => {
     if (!user || !token) return
 
-    const baseUrl =
-      OpenAPI.BASE ||
-      (window.location.hostname === "localhost"
-        ? "http://localhost:8000"
-        : window.location.origin)
-    const wsUrl = `${baseUrl.replace(
-      /^http/,
-      "ws",
-    )}/api/v1/notifications/ws?token=${token}`
+    // Determine the base URL for the API
+    // If OpenAPI.BASE is not set, we assume the API is available at the same origin (via Nginx proxy)
+    // or at http://localhost:8000 for local dev if not proxied.
+    let baseUrl = OpenAPI.BASE
+
+    if (!baseUrl) {
+      if (window.location.hostname === "localhost") {
+        baseUrl = "http://localhost:8000"
+      } else {
+        // Fallback: use current origin. Nginx proxy will handle /api requests.
+        baseUrl = window.location.origin
+      }
+    }
+
+    // Ensure we use the correct protocol for WebSocket based on the HTTP protocol of the Base URL
+    // (or window location if relative)
+    const protocol = baseUrl.startsWith("http")
+      ? baseUrl.split(":")[0]
+      : window.location.protocol.slice(0, -1)
+    
+    const wsProtocol = protocol === "https" ? "wss" : "ws"
+
+    // Remove protocol from baseUrl to append strictly
+    const cleanBaseUrl = baseUrl.replace(/^https?:\/\//, "")
+    
+    const wsUrl = `${wsProtocol}://${cleanBaseUrl}/api/v1/notifications/ws?token=${token}`
+
+    console.log("WebSocket connecting to:", wsUrl)
 
     const socket = new WebSocket(wsUrl)
 

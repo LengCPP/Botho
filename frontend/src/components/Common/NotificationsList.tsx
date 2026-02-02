@@ -80,9 +80,7 @@ const NotificationsList = ({ onItemClick, limit }: NotificationsListProps) => {
           <Flex gap={3} w="100%" align="start">
             <Box mt={1.5} w={2}>
               {!notification.is_read && (
-                <Icon color="main.500" fontSize="8px">
-                  <FaCircle />
-                </Icon>
+                <Icon as={FaCircle} color="main.500" fontSize="8px" />
               )}
             </Box>
             <VStack align="start" gap={0} flex={1}>

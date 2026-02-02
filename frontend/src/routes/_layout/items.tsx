@@ -39,6 +39,7 @@ import AddItem from "@/components/Items/AddItem"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
 import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
+import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
 import PendingItems from "@/components/Pending/PendingItems"
 import { useColorModeValue } from "@/components/ui/color-mode"
 import {
@@ -249,273 +250,6 @@ function GroupCard({
         </Button>
       </Card.Body>
     </Card.Root>
-  )
-}
-
-function SortingControls() {
-  const navigate = useNavigate({ from: Route.fullPath })
-  const {
-    sort_by,
-    sort_order,
-    limit,
-    category,
-    genre,
-    view_mode,
-    display_type,
-    organize_by,
-  } = Route.useSearch()
-
-  const updateSearch = (newParams: any) => {
-    navigate({
-      search: (prev: any) => ({ ...prev, ...newParams, page: 1 }),
-    })
-  }
-
-  const selectBg = useColorModeValue("white", "gray.800")
-  const selectColor = useColorModeValue("black", "white")
-  const selectBorder = useColorModeValue("gray.300", "gray.600")
-
-  const selectStyle = {
-    padding: "8px",
-    borderRadius: "4px",
-    border: `1px solid ${selectBorder}`,
-    backgroundColor: selectBg,
-    color: selectColor,
-    fontSize: "14px",
-    width: "100%",
-  }
-
-  return (
-    <Flex gap={2} align="center" wrap="wrap">
-      {/* Display Type Toggle (Items vs Collections) */}
-      <HStack
-        border="1px solid"
-        borderColor="border.subtle"
-        p={1}
-        rounded="md"
-        gap={0}
-      >
-        <Button
-          size="xs"
-          variant={display_type === "items" ? "solid" : "ghost"}
-          onClick={() =>
-            updateSearch({ display_type: "items", subject: undefined })
-          }
-          title="Item View"
-        >
-          <FaBook />
-        </Button>
-        <Button
-          size="xs"
-          variant={display_type === "collections" ? "solid" : "ghost"}
-          onClick={() => updateSearch({ display_type: "collections" })}
-          title="Collection View"
-        >
-          <FaFolder />
-        </Button>
-      </HStack>
-
-      <Separator orientation="vertical" height="20px" mx={1} />
-
-      {/* View Mode Toggle (Card vs List) */}
-      <HStack
-        border="1px solid"
-        borderColor="border.subtle"
-        p={1}
-        rounded="md"
-        gap={0}
-      >
-        <Button
-          size="xs"
-          variant={view_mode === "card" ? "solid" : "ghost"}
-          onClick={() => updateSearch({ view_mode: "card" })}
-          title="Card View"
-        >
-          <FaThLarge />
-        </Button>
-        <Button
-          size="xs"
-          variant={view_mode === "list" ? "solid" : "ghost"}
-          onClick={() => updateSearch({ view_mode: "list" })}
-          title="List View"
-        >
-          <FaList />
-        </Button>
-      </HStack>
-
-      {/* Organize By / Filter Button */}
-      <Popover.Root>
-        <Popover.Trigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            colorPalette={
-              display_type === "collections" || category || genre
-                ? "accent"
-                : "gray"
-            }
-          >
-            <FaFilter />{" "}
-            {display_type === "collections" ? "Organize" : "Filter"}
-          </Button>
-        </Popover.Trigger>
-        <Portal>
-          <Popover.Positioner>
-            <Popover.Content width="300px">
-              <Popover.Arrow />
-              <Popover.Body>
-                <VStack gap={4} align="stretch">
-                  {display_type === "collections" ? (
-                    <Box>
-                      <Text fontSize="sm" fontWeight="bold" mb={2}>
-                        Organize Collections By
-                      </Text>
-                      <VStack gap={2} align="stretch">
-                        {(
-                          ["subject", "genre", "category", "author"] as const
-                        ).map((opt) => (
-                          <Button
-                            key={opt}
-                            size="sm"
-                            variant={organize_by === opt ? "solid" : "ghost"}
-                            justifyContent="flex-start"
-                            onClick={() =>
-                              updateSearch({
-                                organize_by: opt,
-                                subject: undefined,
-                              })
-                            }
-                          >
-                            {opt.charAt(0).toUpperCase() + opt.slice(1)}
-                          </Button>
-                        ))}
-                      </VStack>
-                    </Box>
-                  ) : (
-                    <>
-                      <Box>
-                        <Text fontSize="sm" fontWeight="bold" mb={1}>
-                          Category
-                        </Text>
-                        <select
-                          value={category || ""}
-                          onChange={(e) =>
-                            updateSearch({
-                              category: e.target.value || undefined,
-                              genre: undefined,
-                            })
-                          }
-                          style={selectStyle}
-                        >
-                          <option
-                            value=""
-                            style={{ backgroundColor: selectBg }}
-                          >
-                            All Categories
-                          </option>
-                          {Object.keys(BOOK_CLASSIFICATION).map((cat) => (
-                            <option
-                              key={cat}
-                              value={cat}
-                              style={{ backgroundColor: selectBg }}
-                            >
-                              {cat}
-                            </option>
-                          ))}
-                        </select>
-                      </Box>
-                      <Box>
-                        <Text fontSize="sm" fontWeight="bold" mb={1}>
-                          Genre
-                        </Text>
-                        <select
-                          value={genre || ""}
-                          onChange={(e) =>
-                            updateSearch({ genre: e.target.value || undefined })
-                          }
-                          style={selectStyle}
-                          disabled={!category}
-                        >
-                          <option
-                            value=""
-                            style={{ backgroundColor: selectBg }}
-                          >
-                            All Genres
-                          </option>
-                          {category &&
-                            BOOK_CLASSIFICATION[category]?.map((gen) => (
-                              <option
-                                key={gen}
-                                value={gen}
-                                style={{ backgroundColor: selectBg }}
-                              >
-                                {gen}
-                              </option>
-                            ))}
-                        </select>
-                      </Box>
-                      {(category || genre) && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() =>
-                            updateSearch({
-                              category: undefined,
-                              genre: undefined,
-                            })
-                          }
-                        >
-                          Clear Filters
-                        </Button>
-                      )}
-                    </>
-                  )}
-                </VStack>
-              </Popover.Body>
-            </Popover.Content>
-          </Popover.Positioner>
-        </Portal>
-      </Popover.Root>
-
-      {/* Sort Button */}
-      <MenuRoot>
-        <MenuTrigger asChild>
-          <Button variant="outline" size="sm">
-            <FaSortAmountDown /> Sort
-          </Button>
-        </MenuTrigger>
-        <MenuContent>
-          <MenuItemGroup title="Sort By">
-            <MenuRadioItemGroup
-              value={sort_by}
-              onValueChange={(e) => updateSearch({ sort_by: e.value })}
-            >
-              <MenuRadioItem value="created_at">Date Created</MenuRadioItem>
-              <MenuRadioItem value="title">Name</MenuRadioItem>
-            </MenuRadioItemGroup>
-          </MenuItemGroup>
-          <MenuItemGroup title="Order">
-            <MenuRadioItemGroup
-              value={sort_order}
-              onValueChange={(e) => updateSearch({ sort_order: e.value })}
-            >
-              <MenuRadioItem value="desc">Descending</MenuRadioItem>
-              <MenuRadioItem value="asc">Ascending</MenuRadioItem>
-            </MenuRadioItemGroup>
-          </MenuItemGroup>
-          <MenuItemGroup title="Items per page">
-            <MenuRadioItemGroup
-              value={String(limit)}
-              onValueChange={(e) => updateSearch({ limit: Number(e.value) })}
-            >
-              <MenuRadioItem value="12">12</MenuRadioItem>
-              <MenuRadioItem value="24">24</MenuRadioItem>
-              <MenuRadioItem value="10000">All</MenuRadioItem>
-            </MenuRadioItemGroup>
-          </MenuItemGroup>
-        </MenuContent>
-      </MenuRoot>
-    </Flex>
   )
 }
 
@@ -748,6 +482,24 @@ function ItemsTable() {
 }
 
 function Items() {
+  const navigate = useNavigate({ from: Route.fullPath })
+  const {
+    sort_by,
+    sort_order,
+    limit,
+    category,
+    genre,
+    view_mode,
+    display_type,
+    organize_by,
+  } = Route.useSearch()
+
+  const updateSearch = (newParams: any) => {
+    navigate({
+      search: (prev: any) => ({ ...prev, ...newParams, page: 1 }),
+    })
+  }
+
   return (
     <Container maxW="full">
       <VStack pt={12} align="start" gap={6}>
@@ -759,7 +511,35 @@ function Items() {
           gap={4}
         >
           <Heading size="lg">My Items</Heading>
-          <SortingControls />
+          <ItemsViewOptions
+            viewMode={view_mode}
+            onChangeViewMode={(mode) => updateSearch({ view_mode: mode })}
+            displayType={display_type}
+            onChangeDisplayType={(type) =>
+              updateSearch({ display_type: type, subject: undefined })
+            }
+            sortBy={sort_by}
+            onChangeSortBy={(val) => updateSearch({ sort_by: val })}
+            sortOrder={sort_order}
+            onChangeSortOrder={(val) => updateSearch({ sort_order: val })}
+            limit={limit}
+            onChangeLimit={(val) => updateSearch({ limit: val })}
+            category={category}
+            onChangeCategory={(val) =>
+              updateSearch({ category: val, genre: undefined })
+            }
+            genre={genre}
+            onChangeGenre={(val) => updateSearch({ genre: val })}
+            organizeBy={organize_by}
+            onChangeOrganizeBy={(val) =>
+              updateSearch({ organize_by: val, subject: undefined })
+            }
+            showDisplayToggle={true}
+            showViewToggle={true}
+            showFilter={true}
+            showSort={true}
+            showLimit={true}
+          />
         </Flex>
         <AddItem />
       </VStack>
