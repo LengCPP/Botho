@@ -271,7 +271,7 @@ export type LoansPublic = {
     count: number;
 };
 
-export type LoanStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'ACTIVE' | 'RETURN_PENDING' | 'RETURNED';
+export type LoanStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED' | 'ACTIVE' | 'RETURN_PENDING' | 'RETURNED';
 
 export type Message = {
     message: string;
@@ -833,6 +833,12 @@ export type LoansRespondToLoanRequestData = {
 };
 
 export type LoansRespondToLoanRequestResponse = (LoanPublic);
+
+export type LoansCancelLoanData = {
+    id: string;
+};
+
+export type LoansCancelLoanResponse = (LoanPublic);
 
 export type LoansRatifyLoanData = {
     id: string;

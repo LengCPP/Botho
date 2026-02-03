@@ -61,7 +61,7 @@ export const CompactItemCard = ({
   const isBorrowing =
     !!loan &&
     loan.requester_id === user?.id &&
-    ["active", "return_pending"].includes(loan.status)
+    ["ACTIVE", "RETURN_PENDING"].includes(loan.status)
 
   return (
     <Box

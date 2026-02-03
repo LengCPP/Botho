@@ -33,6 +33,15 @@ export function LoanCard({ loan, type }: LoanCardProps) {
     },
   })
 
+  const cancelMutation = useMutation({
+    mutationFn: () => LoansService.cancelLoan({ id: loan.id }),
+    onSuccess: () => {
+      showSuccessToast("Loan cancelled successfully")
+      queryClient.invalidateQueries({ queryKey: ["loans"] })
+      queryClient.invalidateQueries({ queryKey: ["communityLoans"] })
+    },
+  })
+
   const ratifyMutation = useMutation({
     mutationFn: () => LoansService.ratifyLoan({ id: loan.id }),
     onSuccess: () => {
@@ -53,6 +62,7 @@ export function LoanCard({ loan, type }: LoanCardProps) {
   const isPending = loan.status === "PENDING"
   const isAccepted = loan.status === "ACCEPTED"
   const isActive = loan.status === "ACTIVE"
+  const canCancel = isPending || isAccepted
 
   return (
     <Box p={4} borderWidth="1px" borderRadius="lg" bg="bg.panel" boxShadow="sm">
@@ -84,7 +94,7 @@ export function LoanCard({ loan, type }: LoanCardProps) {
                 ? "accent"
                 : loan.status === "ACCEPTED"
                   ? "main"
-                  : loan.status === "REJECTED"
+                  : loan.status === "REJECTED" || loan.status === "CANCELLED"
                     ? "red"
                     : "gray"
           }
@@ -162,6 +172,19 @@ export function LoanCard({ loan, type }: LoanCardProps) {
             loading={returnMutation.isPending}
           >
             Mark as Returned
+          </Button>
+        )}
+
+        {canCancel && (
+          <Button
+            size="xs"
+            variant="ghost"
+            colorPalette="red"
+            onClick={() => cancelMutation.mutate()}
+            loading={cancelMutation.isPending}
+            ml={type === "outgoing" && isAccepted ? 0 : "auto"}
+          >
+            Cancel
           </Button>
         )}
       </Flex>

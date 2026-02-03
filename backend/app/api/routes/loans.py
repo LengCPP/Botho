@@ -253,6 +253,84 @@ async def respond_to_loan_request(
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)
 
 
+@router.patch("/{id}/cancel", response_model=LoanPublic)
+async def cancel_loan(
+    *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID
+) -> Any:
+    """
+    Cancel a loan request (Requester or Owner/Admin).
+    Only possible before ratification (ACTIVE status).
+    """
+    loan = session.get(Loan, id)
+    if not loan:
+        raise HTTPException(status_code=404, detail="Loan not found")
+
+    # Permission check
+    is_requester = loan.requester_id == current_user.id
+    is_owner = False
+    if loan.owner_id == current_user.id:
+        is_owner = True
+    elif loan.community_id:
+        statement = select(CommunityMember).where(
+            CommunityMember.community_id == loan.community_id,
+            CommunityMember.user_id == current_user.id,
+            CommunityMember.role == CommunityMemberRole.ADMIN
+        )
+        if session.exec(statement).first():
+            is_owner = True
+
+    if not is_requester and not is_owner and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+
+    if loan.status not in [LoanStatus.PENDING, LoanStatus.ACCEPTED]:
+        raise HTTPException(status_code=400, detail="Loan cannot be cancelled at this stage")
+
+    loan.status = LoanStatus.CANCELLED
+    session.add(loan)
+    session.commit()
+    session.refresh(loan)
+
+    # Notify the other party
+    if is_requester:
+        # Notify owner or admins
+        if loan.community_id:
+            admin_statement = select(CommunityMember).where(
+                CommunityMember.community_id == loan.community_id,
+                CommunityMember.role == CommunityMemberRole.ADMIN
+            )
+            admins = session.exec(admin_statement).all()
+            for admin in admins:
+                await notify_user(
+                    session=session,
+                    recipient_id=admin.user_id,
+                    title="Loan Request Cancelled",
+                    message=f"{current_user.full_name or current_user.email} has cancelled their request for '{loan.item.title}'.",
+                    type=NotificationType.WARNING,
+                    link="/loans"
+                )
+        elif loan.owner_id:
+            await notify_user(
+                session=session,
+                recipient_id=loan.owner_id,
+                title="Loan Request Cancelled",
+                message=f"{current_user.full_name or current_user.email} has cancelled their request for '{loan.item.title}'.",
+                type=NotificationType.WARNING,
+                link="/loans"
+            )
+    else:
+        # Owner/Admin cancelled, notify requester
+        await notify_user(
+            session=session,
+            recipient_id=loan.requester_id,
+            title="Loan Request Cancelled",
+            message=f"The owner/admin has cancelled the loan for '{loan.item.title}'.",
+            type=NotificationType.WARNING,
+            link="/loans"
+        )
+
+    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)
+
+
 @router.patch("/{id}/ratify", response_model=LoanPublic)
 async def ratify_loan(
     *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID

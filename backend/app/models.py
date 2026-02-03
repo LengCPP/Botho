@@ -47,6 +47,7 @@ class LoanStatus(str, Enum):
     PENDING = "PENDING"
     ACCEPTED = "ACCEPTED"
     REJECTED = "REJECTED"
+    CANCELLED = "CANCELLED"
     ACTIVE = "ACTIVE"  # Ratified by requester
     RETURN_PENDING = "RETURN_PENDING" # Requester signaled return
     RETURNED = "RETURNED"
