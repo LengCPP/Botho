@@ -2,6 +2,7 @@ import {
   Container,
   EmptyState,
   Flex,
+  Grid,
   Heading,
   SimpleGrid,
   Text,
@@ -57,11 +58,15 @@ function Communities() {
           </EmptyState.Content>
         </EmptyState.Root>
       ) : (
-        <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={6} mt={6}>
+        <Grid
+          templateColumns="repeat(auto-fill, minmax(300px, 1fr))"
+          gap={6}
+          mt={6}
+        >
           {communities.map((community) => (
             <CommunityCard key={community.id} community={community} />
           ))}
-        </SimpleGrid>
+        </Grid>
       )}
     </Container>
   )

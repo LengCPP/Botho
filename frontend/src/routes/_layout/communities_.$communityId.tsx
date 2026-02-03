@@ -22,7 +22,7 @@ import {
 } from "@chakra-ui/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
-import { useMemo, useState } from "react"
+import { useMemo, useEffect, useState } from "react"
 import {
   FaChevronLeft,
   FaFilter,
@@ -770,8 +770,10 @@ function CommunityBoard() {
 
   const renderGroup = (groups: ItemPublic[][]) => (
     <SimpleGrid
-      columns={viewMode === "list" ? 1 : { base: 2, md: 3, lg: 4, xl: 5 }}
-      gap={viewMode === "list" ? 2 : { base: 3, md: 6 }}
+      columns={
+        viewMode === "list" ? 1 : { base: 3, sm: 3, md: 4, lg: 5, xl: 6 }
+      }
+      gap={viewMode === "list" ? 2 : { base: 2, md: 6 }}
     >
       {groups.map((group) => {
         const item = group[0]
@@ -1136,13 +1138,7 @@ function CommunityBoard() {
                 <VStack align="stretch" gap={12}>
                   {displayType === "collections" && !selectedGroup ? (
                     <Grid
-                      templateColumns={{
-                        base: "1fr",
-                        sm: "repeat(2, 1fr)",
-                        md: "repeat(3, 1fr)",
-                        lg: "repeat(4, 1fr)",
-                        xl: "repeat(5, 1fr)",
-                      }}
+                      templateColumns="repeat(auto-fill, minmax(200px, 1fr))"
                       gap={6}
                     >
                       {Object.entries(organizedItems).map(([name, data]) => (

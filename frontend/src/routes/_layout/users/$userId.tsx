@@ -465,14 +465,8 @@ function UserProfilePage() {
 
               {/* Render Collections Grid (GroupCards) */}
               {displayType === "collections" && !subject ? (
-                <Grid
-                  templateColumns={{
-                    base: "1fr",
-                    sm: "repeat(2, 1fr)",
-                    md: "repeat(3, 1fr)",
-                    lg: "repeat(4, 1fr)",
-                    xl: "repeat(5, 1fr)",
-                  }}
+                <SimpleGrid
+                  columns={{ base: 1, sm: 2, md: 3, lg: 4, xl: 5 }}
                   gap={6}
                 >
                   {Object.entries(organizedItems).map(([name, groups]) => (
@@ -484,14 +478,16 @@ function UserProfilePage() {
                       onOpen={() => setSubject(name)}
                     />
                   ))}
-                </Grid>
+                </SimpleGrid>
               ) : (
                 /* Render Items Grid */
                 <SimpleGrid
                   columns={
-                    viewMode === "list" ? 1 : { base: 2, md: 3, xl: 4 }
+                    viewMode === "list"
+                      ? 1
+                      : { base: 3, sm: 3, md: 4, lg: 5, xl: 6 }
                   }
-                  gap={viewMode === "list" ? 2 : { base: 3, md: 6 }}
+                  gap={viewMode === "list" ? 2 : { base: 2, md: 6 }}
                 >
                   {activeGroups.map((group) => {
                     const firstItem = group[0]

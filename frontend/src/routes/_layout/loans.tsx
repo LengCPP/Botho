@@ -2,6 +2,7 @@ import {
   Badge,
   Box,
   Container,
+  Grid,
   Heading,
   Separator,
   SimpleGrid,
@@ -125,9 +126,9 @@ function LoansPage() {
               columns={
                 viewMode === "list"
                   ? 1
-                  : { base: 1, sm: 2, md: 3, lg: 4, xl: 5 }
+                  : { base: 3, sm: 3, md: 4, lg: 5, xl: 6 }
               }
-              gap={viewMode === "list" ? 2 : 6}
+              gap={viewMode === "list" ? 2 : { base: 2, md: 6 }}
             >
               {sortedBorrowedItems.map((loan) =>
                 viewMode === "list" ? (

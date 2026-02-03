@@ -508,8 +508,12 @@ function CollectionDetail() {
           ) : (
             <>
               <SimpleGrid
-                columns={viewMode === "list" ? 1 : { base: 2, md: 3, xl: 4 }}
-                gap={viewMode === "list" ? 2 : { base: 3, md: 6 }}
+                columns={
+                  viewMode === "list"
+                    ? 1
+                    : { base: 3, sm: 3, md: 4, lg: 5, xl: 6 }
+                }
+                gap={viewMode === "list" ? 2 : { base: 2, md: 6 }}
               >
                 {groupedFilteredItems.map((group) => {
                   const item = group[0]
