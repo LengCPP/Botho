@@ -118,6 +118,10 @@ class Settings(BaseSettings):
     MINIO_PORT: int = 9000
     MINIO_PUBLIC_URL: str = "http://localhost:9000"
 
+    VAPID_PUBLIC_KEY: str | None = None
+    VAPID_PRIVATE_KEY: str | None = None
+    VAPID_MAILTO: str | None = None
+
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
             message = (

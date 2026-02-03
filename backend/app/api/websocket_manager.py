@@ -1,8 +1,14 @@
 import json
 import uuid
-from typing import Dict, List
+import logging
+from typing import Dict, List, Optional
 from fastapi import WebSocket
+from sqlmodel import Session, select
+from app.push import send_push_notification
+from app.models import PushSubscription
+from pywebpush import WebPushException
 
+logger = logging.getLogger(__name__)
 
 class ConnectionManager:
     def __init__(self):
@@ -17,19 +23,65 @@ class ConnectionManager:
 
     def disconnect(self, websocket: WebSocket, user_id: uuid.UUID):
         if user_id in self.active_connections:
-            self.active_connections[user_id].remove(websocket)
+            if websocket in self.active_connections[user_id]:
+                self.active_connections[user_id].remove(websocket)
             if not self.active_connections[user_id]:
                 del self.active_connections[user_id]
 
     async def send_personal_message(self, message: dict, user_id: uuid.UUID):
         if user_id in self.active_connections:
             for connection in self.active_connections[user_id]:
-                await connection.send_text(json.dumps(message))
+                try:
+                    await connection.send_text(json.dumps(message))
+                except Exception as e:
+                    logger.error(f"Error sending websocket message: {e}")
+
+    async def send_notification(
+        self, 
+        session: Session, 
+        user_id: uuid.UUID, 
+        title: str, 
+        message: str, 
+        notification_type: str = "INFO",
+        link: Optional[str] = None
+    ):
+        """
+        Send notification via WebSocket if connected, and always try Push Notification.
+        """
+        # 1. Send via WebSocket
+        ws_message = {
+            "title": title,
+            "message": message,
+            "type": notification_type,
+            "link": link
+        }
+        await self.send_personal_message(ws_message, user_id)
+
+        # 2. Send via Push Notifications
+        subscriptions = session.exec(
+            select(PushSubscription).where(PushSubscription.user_id == user_id)
+        ).all()
+        
+        for sub in subscriptions:
+            try:
+                # We do this synchronously for now, but in a real app with many subs, 
+                # this should be a background task or Celery task.
+                send_push_notification(sub, title, message, link)
+            except WebPushException as ex:
+                if ex.response and ex.response.status_code in [404, 410]:
+                    logger.info(f"Removing expired subscription: {sub.endpoint}")
+                    session.delete(sub)
+                    session.commit()
+            except Exception as e:
+                logger.error(f"Failed to send push notification: {e}")
 
     async def broadcast(self, message: dict):
         for user_id in self.active_connections:
             for connection in self.active_connections[user_id]:
-                await connection.send_text(json.dumps(message))
+                try:
+                    await connection.send_text(json.dumps(message))
+                except Exception as e:
+                    logger.error(f"Error broadcasting websocket message: {e}")
 
 
 notification_manager = ConnectionManager()

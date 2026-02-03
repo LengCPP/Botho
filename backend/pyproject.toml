@@ -25,6 +25,7 @@ dependencies = [
     "google-auth>=2.0.0",
     "meilisearch>=0.31.0",
     "mailtrap>=2.4.0",
+    "pywebpush>=1.14.0",
 ]
 
 [tool.uv]

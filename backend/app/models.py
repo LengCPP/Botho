@@ -156,6 +156,26 @@ class Notification(SQLModel, table=True):
     recipient: "User" = Relationship(back_populates="notifications")
 
 
+class PushSubscription(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
+    endpoint: str = Field(unique=True, index=True)
+    p256dh: str
+    auth: str
+    created_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    )
+
+    user: "User" = Relationship(back_populates="push_subscriptions")
+
+
+class PushSubscriptionCreate(SQLModel):
+    endpoint: str
+    p256dh: str
+    auth: str
+
+
 class Loan(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     item_id: uuid.UUID = Field(foreign_key="item.id", ondelete="CASCADE")
@@ -326,6 +346,7 @@ class User(UserBase, table=True):
     )
     interests: list["Interest"] = Relationship(back_populates="users", link_model=UserInterest)
     notifications: list["Notification"] = Relationship(back_populates="recipient", cascade_delete=True)
+    push_subscriptions: list["PushSubscription"] = Relationship(back_populates="user", cascade_delete=True)
     loans_out: list["Loan"] = Relationship(
         back_populates="owner",
         sa_relationship_kwargs={"foreign_keys": "Loan.owner_id"}

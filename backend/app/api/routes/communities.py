@@ -6,6 +6,7 @@ from sqlmodel import func, select, or_
 
 from app import crud
 from app.api.deps import CurrentUser, SessionDep
+from app.notifications import notify_user
 from app.api.websocket_manager import notification_manager
 from app.utils import send_email, generate_donation_notification_email
 from app.models import (
@@ -254,17 +255,13 @@ async def join_community(
         )
         staff = session.exec(admin_statement).all()
         for member in staff:
-            crud.create_notification(
+            await notify_user(
                 session=session,
                 recipient_id=member.user_id,
                 title="New Join Request",
                 message=f"{current_user.full_name or current_user.email} applied to join {community.name}.",
                 type=NotificationType.INFO,
                 link=f"/communities/{id}"
-            )
-            await notification_manager.send_personal_message(
-                {"type": "new_notification"},
-                member.user_id
             )
 
     return Message(message="Application sent" if community.requires_approval else "Joined successfully")
@@ -452,7 +449,7 @@ async def update_community_member_role(
 
     # Notify user of status/role change
     if member_in.status == CommunityMemberStatus.ACCEPTED:
-        crud.create_notification(
+        await notify_user(
             session=session,
             recipient_id=user_id,
             title="Community Request Accepted",
@@ -460,22 +457,14 @@ async def update_community_member_role(
             type=NotificationType.SUCCESS,
             link=f"/communities/{id}"
         )
-        await notification_manager.send_personal_message(
-            {"type": "new_notification"},
-            user_id
-        )
     elif member_in.role:
-        crud.create_notification(
+        await notify_user(
             session=session,
             recipient_id=user_id,
             title="Community Role Updated",
             message=f"Your role in {community.name} has been updated to {member_in.role}.",
             type=NotificationType.INFO,
             link=f"/communities/{id}"
-        )
-        await notification_manager.send_personal_message(
-            {"type": "new_notification"},
-            user_id
         )
 
     user = session.get(User, user_id)
@@ -660,7 +649,7 @@ def add_item_to_community(
 
 
 @router.post("/{id}/items/{item_id}/donate", response_model=Message)
-def initiate_donation(
+async def initiate_donation(
     *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, item_id: uuid.UUID
 ) -> Any:
     """
@@ -704,17 +693,13 @@ def initiate_donation(
     donor_name = current_user.full_name or current_user.email
     
     for member, user in staff_results:
-        crud.create_notification(
+        await notify_user(
             session=session,
             recipient_id=member.user_id,
             title="Item Donation Pending",
             message=f"{donor_name} wants to donate an item to the community.",
             type=NotificationType.INFO,
             link=f"/communities/{id}"
-        )
-        notification_manager.send_personal_message(
-            {"type": "new_notification"},
-            member.user_id
         )
         
         # Send email notification
@@ -791,17 +776,13 @@ async def ratify_donation(
     session.commit()
 
     # Notify donor
-    crud.create_notification(
+    await notify_user(
         session=session,
         recipient_id=donor_id,
         title="Donation Ratified",
         message=f"Your donation of '{item.title}' to {community.name} has been ratified. Thank you!",
         type=NotificationType.SUCCESS,
         link=f"/communities/{id}"
-    )
-    await notification_manager.send_personal_message(
-        {"type": "new_notification"},
-        donor_id
     )
     
     return Message(message="Donation ratified! The community now owns this item.")
@@ -953,18 +934,13 @@ async def create_community_announcement(
     )
     members = session.exec(member_statement).all()
     for member in members:
-        crud.create_notification(
+        await notify_user(
             session=session,
             recipient_id=member.user_id,
             title=f"New Announcement in {community.name}",
             message=announcement.title,
             type=NotificationType.INFO,
             link=f"/communities/{id}"
-        )
-        # Notify via websocket
-        await notification_manager.send_personal_message(
-            {"type": "new_notification"},
-            member.user_id
         )
 
     return announcement

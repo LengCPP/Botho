@@ -18,6 +18,8 @@ from app.models import (
     NotificationsPublic,
     TokenPayload,
     User,
+    PushSubscription,
+    PushSubscriptionCreate,
 )
 
 router = APIRouter()
@@ -128,13 +130,80 @@ def delete_notification(
     return Message(message="Notification deleted successfully")
 
 
+@router.get("/vapid-public-key")
+def get_vapid_public_key() -> Any:
+    """
+    Get the VAPID public key for push notifications.
+    """
+    return {"publicKey": settings.VAPID_PUBLIC_KEY}
+
+
+@router.post("/subscribe", response_model=Message)
+def subscribe_push(
+    *, session: SessionDep, current_user: CurrentUser, subscription: PushSubscriptionCreate
+) -> Any:
+    """
+    Subscribe to push notifications.
+    """
+    # Check if subscription already exists for this endpoint
+    existing = session.exec(
+        select(PushSubscription).where(
+            PushSubscription.endpoint == subscription.endpoint
+        )
+    ).first()
+    
+    if existing:
+        # If it exists but for another user, update it
+        if existing.user_id != current_user.id:
+            existing.user_id = current_user.id
+            existing.p256dh = subscription.p256dh
+            existing.auth = subscription.auth
+            session.add(existing)
+            session.commit()
+            return Message(message="Subscription updated for current user")
+        return Message(message="Already subscribed")
+    
+    db_subscription = PushSubscription(
+        user_id=current_user.id,
+        endpoint=subscription.endpoint,
+        p256dh=subscription.p256dh,
+        auth=subscription.auth
+    )
+    session.add(db_subscription)
+    session.commit()
+    return Message(message="Subscribed successfully")
+
+
+@router.post("/unsubscribe", response_model=Message)
+def unsubscribe_push(
+    *, session: SessionDep, current_user: CurrentUser, endpoint: str = Query(...)
+) -> Any:
+    """
+    Unsubscribe from push notifications.
+    """
+    subscription = session.exec(
+        select(PushSubscription).where(
+            PushSubscription.endpoint == endpoint,
+            PushSubscription.user_id == current_user.id
+        )
+    ).first()
+    if subscription:
+        session.delete(subscription)
+        session.commit()
+    return Message(message="Unsubscribed successfully")
+
+
+import asyncio
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocketState
+
+# ... rest of imports ...
+
 @router.websocket("/ws")
 async def websocket_endpoint(
     websocket: WebSocket,
     token: str = Query(...),
 ):
-    # We can't use SessionDep directly here easily with WebSocket if we want to handle it inside
-    # But we can manually get session if needed or just validate user
     from app.core.db import engine
     from sqlmodel import Session
     
@@ -142,14 +211,23 @@ async def websocket_endpoint(
         try:
             user = await get_current_user_ws(session=session, token=token)
         except HTTPException:
+            if websocket.client_state == WebSocketState.CONNECTING:
+                await websocket.accept()
             await websocket.close(code=1008)
             return
 
         await notification_manager.connect(websocket, user.id)
         try:
             while True:
-                # Keep connection alive and wait for messages (though we mostly push from server)
-                data = await websocket.receive_text()
-                # We could handle client messages here if needed
-        except WebSocketDisconnect:
+                # Use a small sleep/heartbeat to keep connection alive and detect disconnects
+                # We don't necessarily expect messages from client
+                try:
+                    # Try to receive with a timeout to detect disconnects while allowing server pushes
+                    data = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+                except asyncio.TimeoutError:
+                    # Send a ping or just continue to keep loop alive
+                    if websocket.client_state == WebSocketState.CONNECTED:
+                        await websocket.send_json({"type": "ping"})
+                    continue
+        except (WebSocketDisconnect, Exception):
             notification_manager.disconnect(websocket, user.id)

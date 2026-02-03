@@ -9,6 +9,7 @@ import { Radio, RadioGroup } from "@/components/ui/radio"
 import type { UserPublicExtended, UserSettingsUpdate } from "@/customTypes"
 import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
+import { usePushNotifications } from "@/hooks/usePushNotifications"
 
 const UserPreferences = () => {
   const { theme, setTheme } = useTheme()
@@ -16,6 +17,7 @@ const UserPreferences = () => {
   const queryClient = useQueryClient()
   const { user: currentUserData } = useAuth()
   const currentUser = currentUserData as UserPublicExtended
+  const { isSubscribed, subscribe, unsubscribe, isLoading: isPushLoading } = usePushNotifications()
 
   const mutation = useMutation({
     mutationFn: (data: UserSettingsUpdate) =>
@@ -68,6 +70,16 @@ const UserPreferences = () => {
     })
   }
 
+  const handlePushChange = async (details: {
+    checked: boolean | "indeterminate"
+  }) => {
+    if (details.checked) {
+      await subscribe()
+    } else {
+      await unsubscribe()
+    }
+  }
+
   return (
     <Box width="full" px={2}>
       <Heading size="sm" py={4}>
@@ -88,6 +100,17 @@ const UserPreferences = () => {
               <Radio value="dark">Dark Mode</Radio>
             </Stack>
           </RadioGroup>
+        </VStack>
+
+        <VStack align="start" gap={2}>
+          <Heading size="xs">Notifications</Heading>
+          <Checkbox
+            checked={isSubscribed}
+            onCheckedChange={handlePushChange}
+            disabled={isPushLoading}
+          >
+            Enable Browser Push Notifications
+          </Checkbox>
         </VStack>
 
         <VStack align="start" gap={2}>

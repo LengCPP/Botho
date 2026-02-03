@@ -22,7 +22,7 @@ from app.models import (
     CommunityMemberStatus,
     Community,
 )
-from app.api.websocket_manager import notification_manager
+from app.notifications import notify_user
 from app.api.utils import filter_loan_privacy, check_item_availability
 from app import crud
 
@@ -114,7 +114,7 @@ async def create_loan_request(
         for admin in admins:
             if admin.user_id == current_user.id:
                 continue
-            crud.create_notification(
+            await notify_user(
                 session=session,
                 recipient_id=admin.user_id,
                 title="New Community Loan Request",
@@ -122,23 +122,15 @@ async def create_loan_request(
                 type=NotificationType.INFO,
                 link="/loans"
             )
-            await notification_manager.send_personal_message(
-                {"type": "new_notification"},
-                admin.user_id
-            )
     elif owner_id:
         # Notify single owner
-        crud.create_notification(
+        await notify_user(
             session=session,
             recipient_id=owner_id,
             title="New Loan Request",
             message=f"{current_user.full_name or current_user.email} wants to borrow '{item.title}'.",
             type=NotificationType.INFO,
             link="/loans"
-        )
-        await notification_manager.send_personal_message(
-            {"type": "new_notification"},
-            owner_id
         )
 
     return filter_loan_privacy(db_loan, current_user.id, is_admin=current_user.is_superuser)
@@ -249,17 +241,13 @@ async def respond_to_loan_request(
 
     # Notify requester
     status_msg = "accepted" if accept else "rejected"
-    crud.create_notification(
+    await notify_user(
         session=session,
         recipient_id=loan.requester_id,
         title=f"Loan Request {status_msg.capitalize()}",
         message=f"Your request for '{loan.item.title}' has been {status_msg}.",
         type=NotificationType.SUCCESS if accept else NotificationType.WARNING,
         link="/loans"
-    )
-    await notification_manager.send_personal_message(
-        {"type": "new_notification"},
-        loan.requester_id
     )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)
@@ -293,7 +281,7 @@ async def ratify_loan(
         )
         admins = session.exec(admin_statement).all()
         for admin in admins:
-            crud.create_notification(
+            await notify_user(
                 session=session,
                 recipient_id=admin.user_id,
                 title="Loan Ratified",
@@ -301,22 +289,14 @@ async def ratify_loan(
                 type=NotificationType.INFO,
                 link="/loans"
             )
-            await notification_manager.send_personal_message(
-                {"type": "new_notification"},
-                admin.user_id
-            )
     elif loan.owner_id:
-        crud.create_notification(
+        await notify_user(
             session=session,
             recipient_id=loan.owner_id,
             title="Loan Ratified",
             message=f"{current_user.full_name or current_user.email} confirmed they have received '{loan.item.title}'.",
             type=NotificationType.INFO,
             link="/loans"
-        )
-        await notification_manager.send_personal_message(
-            {"type": "new_notification"},
-            loan.owner_id
         )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)
@@ -350,7 +330,7 @@ async def signal_return(
         )
         admins = session.exec(admin_statement).all()
         for admin in admins:
-            crud.create_notification(
+            await notify_user(
                 session=session,
                 recipient_id=admin.user_id,
                 title="Return Signaled",
@@ -358,22 +338,14 @@ async def signal_return(
                 type=NotificationType.INFO,
                 link="/loans"
             )
-            await notification_manager.send_personal_message(
-                {"type": "new_notification"},
-                admin.user_id
-            )
     elif loan.owner_id:
-        crud.create_notification(
+        await notify_user(
             session=session,
             recipient_id=loan.owner_id,
             title="Return Signaled",
             message=f"{current_user.full_name or current_user.email} signaled that they have returned '{loan.item.title}'. Please confirm receipt.",
             type=NotificationType.INFO,
             link="/loans"
-        )
-        await notification_manager.send_personal_message(
-            {"type": "new_notification"},
-            loan.owner_id
         )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)
@@ -416,17 +388,13 @@ async def return_loan(
     session.refresh(loan)
 
     # Notify requester
-    crud.create_notification(
+    await notify_user(
         session=session,
         recipient_id=loan.requester_id,
         title="Return Confirmed",
         message=f"Receipt of '{loan.item.title}' has been confirmed.",
         type=NotificationType.SUCCESS,
         link="/loans"
-    )
-    await notification_manager.send_personal_message(
-        {"type": "new_notification"},
-        loan.requester_id
     )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)
@@ -466,7 +434,7 @@ async def create_extension_request(
         )
         admins = session.exec(admin_statement).all()
         for admin in admins:
-            crud.create_notification(
+            await notify_user(
                 session=session,
                 recipient_id=admin.user_id,
                 title="Extension Requested",
@@ -474,22 +442,14 @@ async def create_extension_request(
                 type=NotificationType.INFO,
                 link="/loans"
             )
-            await notification_manager.send_personal_message(
-                {"type": "new_notification"},
-                admin.user_id
-            )
     elif loan.owner_id:
-        crud.create_notification(
+        await notify_user(
             session=session,
             recipient_id=loan.owner_id,
             title="Extension Requested",
             message=message_text,
             type=NotificationType.INFO,
             link="/loans"
-        )
-        await notification_manager.send_personal_message(
-            {"type": "new_notification"},
-            loan.owner_id
         )
         
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)
@@ -535,17 +495,13 @@ async def respond_to_extension_request(
     
     # Notify requester
     status_msg = "accepted" if accept else "rejected"
-    crud.create_notification(
+    await notify_user(
         session=session,
         recipient_id=loan.requester_id,
         title=f"Extension Request {status_msg.capitalize()}",
         message=f"Your extension request for '{loan.item.title}' has been {status_msg}.",
         type=NotificationType.SUCCESS if accept else NotificationType.WARNING,
         link="/loans"
-    )
-    await notification_manager.send_personal_message(
-        {"type": "new_notification"},
-        loan.requester_id
     )
     
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)

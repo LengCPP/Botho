@@ -6,7 +6,7 @@ from sqlmodel import func, select, or_
 
 from app import crud
 from app.api.deps import CurrentUser, SessionDep
-from app.api.websocket_manager import notification_manager
+from app.notifications import notify_user
 from app.api.utils import filter_user_privacy
 from app.models import (
     Friendship,
@@ -182,17 +182,13 @@ async def create_friend_request(
     crud.create_friend_request(session=session, user_id=current_user.id, friend_id=friend_id)
 
     # Notify friend
-    crud.create_notification(
+    await notify_user(
         session=session,
         recipient_id=friend_id,
         title="New Friend Request",
         message=f"{current_user.full_name or current_user.email} sent you a friend request.",
         type=NotificationType.INFO,
         link="/friends"
-    )
-    await notification_manager.send_personal_message(
-        {"type": "new_notification"},
-        friend_id
     )
 
     return Message(message="Friend request sent")
@@ -210,17 +206,13 @@ async def accept_friend_request(
         raise HTTPException(status_code=404, detail="Friend request not found")
     
     # Notify sender that request was accepted
-    crud.create_notification(
+    await notify_user(
         session=session,
         recipient_id=friend_id,
         title="Friend Request Accepted",
         message=f"{current_user.full_name or current_user.email} accepted your friend request.",
         type=NotificationType.SUCCESS,
         link="/friends"
-    )
-    await notification_manager.send_personal_message(
-        {"type": "new_notification"},
-        friend_id
     )
 
     return Message(message="Friend request accepted")
