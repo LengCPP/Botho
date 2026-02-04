@@ -37,12 +37,12 @@ export const useNotifications = () => {
     const protocol = baseUrl.startsWith("http")
       ? baseUrl.split(":")[0]
       : window.location.protocol.slice(0, -1)
-    
+
     const wsProtocol = protocol === "https" ? "wss" : "ws"
 
     // Remove protocol from baseUrl to append strictly
     const cleanBaseUrl = baseUrl.replace(/^https?:\/\//, "")
-    
+
     const wsUrl = `${wsProtocol}://${cleanBaseUrl}/api/v1/notifications/ws?token=${token}`
 
     console.log("WebSocket connecting to:", wsUrl)

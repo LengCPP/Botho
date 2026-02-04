@@ -17,7 +17,12 @@ const UserPreferences = () => {
   const queryClient = useQueryClient()
   const { user: currentUserData } = useAuth()
   const currentUser = currentUserData as UserPublicExtended
-  const { isSubscribed, subscribe, unsubscribe, isLoading: isPushLoading } = usePushNotifications()
+  const {
+    isSubscribed,
+    subscribe,
+    unsubscribe,
+    isLoading: isPushLoading,
+  } = usePushNotifications()
 
   const mutation = useMutation({
     mutationFn: (data: UserSettingsUpdate) =>

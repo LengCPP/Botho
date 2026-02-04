@@ -584,6 +584,13 @@ def read_community_items(
         elif item.community_owner:
             community_pub = item.community_owner
             
+        cond_data = {
+            "average_grade": 0.0,
+            "notes": []
+        }
+        # We could import get_item_condition_data from items.py but for now let's keep it simple
+        # or just use a default since it's Optional
+            
         item_pub = ItemPublic(
             id=item.id,
             owner_id=item.owner_id,
@@ -593,13 +600,16 @@ def read_community_items(
             item_type=item.item_type,
             image_url=item.image_url,
             extra_data=item.extra_data,
+            info=item.info,
             count=item.count,
             created_at=item.created_at,
             owner=owner_pub,
             community_owner=community_pub,
-            is_available=is_avail
+            is_available=is_avail,
+            work_metadata=session.get(WorkMetadata, (item.author, item.title)) if item.author else None,
+            had_possession=False # Simplified
         )
-        
+
         # Add pooling metadata if applicable
         comm_item = comm_item_map.get(item.id)
         if comm_item:

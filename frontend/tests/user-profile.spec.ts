@@ -13,12 +13,12 @@ test.describe("User Profile Features", () => {
     const userRes = await request.post("/api/v1/users/", {
       data: { email, password, full_name: fullName, is_active: true },
     })
-    
+
     // If we fail here (e.g. 403 Forbidden because we aren't admin), we skip.
     // Assuming the test runner uses the admin storageState.
     if (!userRes.ok()) {
-        console.error("Failed to create user:", await userRes.text())
-        return
+      console.error("Failed to create user:", await userRes.text())
+      return
     }
     targetUser = await userRes.json()
 
@@ -52,9 +52,11 @@ test.describe("User Profile Features", () => {
 
     // 1. Verify Default Item View (Flat List)
     // We expect "Items (1)" or similar heading
-    await expect(page.getByRole("heading", { name: /Items \(\d+\)/ })).toBeVisible()
+    await expect(
+      page.getByRole("heading", { name: /Items \(\d+\)/ }),
+    ).toBeVisible()
     await expect(page.getByText("Dune")).toBeVisible()
-    
+
     // 2. Verify Smart Grouping (Subject View)
     // Click "Collection View" toggle button (FaFolder icon)
     // The button has title "Collection View"

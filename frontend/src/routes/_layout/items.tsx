@@ -1,18 +1,11 @@
 import {
-  Badge,
   Box,
   Button,
-  Card,
   Container,
   EmptyState,
   Flex,
   Grid,
-  HStack,
   Heading,
-  Image,
-  Popover,
-  Portal,
-  Separator,
   SimpleGrid,
   Text,
   VStack,
@@ -37,6 +30,7 @@ import { z } from "zod"
 import { type ItemPublic, ItemsService } from "@/client"
 import AddItem from "@/components/Items/AddItem"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
+import { GroupCard } from "@/components/Items/GroupCard"
 import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
@@ -122,136 +116,6 @@ export const Route = createFileRoute("/_layout/items")({
   component: Items,
   validateSearch: (search) => itemsSearchSchema.parse(search),
 })
-
-function GroupCard({
-  name,
-  type,
-  groups,
-  onOpen,
-}: { name: string; type: string; groups: ItemPublic[][]; onOpen: () => void }) {
-  const bgColor = useColorModeValue("accent.50", "gray.800")
-  const borderColor = useColorModeValue("accent.200", "gray.600")
-  const textColor = useColorModeValue("gray.800", "gray.100")
-
-  const allItems = groups.flat()
-  const previewItems = allItems.slice(0, 3)
-
-  return (
-    <Card.Root
-      width="100%"
-      variant="outline"
-      bg={bgColor}
-      borderColor={borderColor}
-      overflow="hidden"
-      transition="transform 0.2s"
-      _hover={{ transform: "translateY(-4px)", boxShadow: "lg" }}
-      cursor="pointer"
-      onClick={onOpen}
-    >
-      <Card.Body p={4} as={Flex} direction="column" h="100%">
-        <Flex justify="space-between" align="start" mb={4}>
-          <VStack align="start" gap={0} flex={1}>
-            <Text
-              fontSize="xl"
-              fontWeight="bold"
-              color={textColor}
-              lineClamp={1}
-            >
-              {name}
-            </Text>
-            <Badge colorPalette="accent" variant="subtle" size="sm">
-              {(type || "subject").toUpperCase()} COLLECTION
-            </Badge>
-          </VStack>
-          <Badge variant="solid" colorPalette="teal">
-            {groups.length}{" "}
-            {groups[0][0].item_type === "book"
-              ? groups.length === 1
-                ? "Book"
-                : "Books"
-              : groups.length === 1
-                ? "Item"
-                : "Items"}
-          </Badge>
-        </Flex>
-
-        <Box
-          height="120px"
-          position="relative"
-          mb={4}
-          bg="blackAlpha.100"
-          borderRadius="md"
-          p={2}
-        >
-          {previewItems.length > 0 ? (
-            <HStack gap={-4} justify="center" height="100%">
-              {previewItems.map((item, index) => (
-                <Box
-                  key={item.id}
-                  zIndex={3 - index}
-                  transform={`translateX(${index * 10}px) rotate(${
-                    index * 5
-                  }deg)`}
-                >
-                  {item.image_url ? (
-                    <Image
-                      src={getImageUrl(item.image_url)}
-                      alt={item.title}
-                      height="100px"
-                      width="70px"
-                      objectFit="cover"
-                      borderRadius="sm"
-                      boxShadow="md"
-                      border="1px solid white"
-                    />
-                  ) : (
-                    <Box
-                      height="100px"
-                      width="70px"
-                      bg="gray.400"
-                      borderRadius="sm"
-                      display="flex"
-                      alignItems="center"
-                      justifyContent="center"
-                      border="1px solid white"
-                      p={1}
-                    >
-                      <Text
-                        fontSize="8px"
-                        fontWeight="bold"
-                        textAlign="center"
-                        color="white"
-                        lineClamp={3}
-                      >
-                        {item.title}
-                      </Text>
-                    </Box>
-                  )}
-                </Box>
-              ))}
-            </HStack>
-          ) : (
-            <Flex height="100%" align="center" justify="center">
-              <Text fontSize="sm" color="gray.500" fontStyle="italic">
-                Empty collection
-              </Text>
-            </Flex>
-          )}
-        </Box>
-
-        <Button
-          variant="solid"
-          colorPalette="accent"
-          width="full"
-          size="sm"
-          mt="auto"
-        >
-          View Details
-        </Button>
-      </Card.Body>
-    </Card.Root>
-  )
-}
 
 function ItemsTable() {
   const navigate = useNavigate({ from: Route.fullPath })
@@ -372,7 +236,7 @@ function ItemsTable() {
   const renderGroup = (groups: ItemPublic[][]) => (
     <SimpleGrid
       columns={
-        view_mode === "list" ? 1 : { base: 3, sm: 3, md: 4, lg: 5, xl: 6 }
+        view_mode === "list" ? 1 : { base: 2, sm: 3, md: 4, lg: 5, xl: 6 }
       }
       gap={view_mode === "list" ? 2 : { base: 2, md: 6 }}
       opacity={isPlaceholderData ? 0.5 : 1}
@@ -404,10 +268,9 @@ function ItemsTable() {
         <Grid
           templateColumns={{
             base: "1fr",
-            sm: "repeat(2, 1fr)",
-            md: "repeat(3, 1fr)",
-            lg: "repeat(4, 1fr)",
-            xl: "repeat(5, 1fr)",
+            md: "repeat(2, 1fr)",
+            lg: "repeat(3, 1fr)",
+            xl: "repeat(4, 1fr)",
           }}
           gap={6}
         >
@@ -448,12 +311,16 @@ function ItemsTable() {
             letterSpacing="wider"
           >
             {activeGroups[0]?.[0]?.item_type === "book" ? "Books" : "Items"}{" "}
-            {organize_by === "author"
-              ? "by"
-              : organize_by === "genre"
-                ? "in"
-                : "on"}{" "}
-            {subject} {activeGroups.length > 1 && `(${activeGroups.length})`}
+            {subject?.toLowerCase() === "others"
+              ? `with unspecified ${organize_by}`
+              : `${
+                  organize_by === "author"
+                    ? "by"
+                    : organize_by === "genre"
+                      ? "in"
+                      : "on"
+                } ${subject}`}{" "}
+            {activeGroups.length > 1 && `(${activeGroups.length})`}
           </Heading>
         </VStack>
       )}

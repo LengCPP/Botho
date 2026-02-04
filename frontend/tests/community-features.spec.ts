@@ -7,9 +7,7 @@ test.describe("Community Features", () => {
     await page.goto("/")
   })
 
-  test("Create community and verify redirect", async ({
-    page,
-  }) => {
+  test("Create community and verify redirect", async ({ page }) => {
     // 1. Create Community
     await page.getByRole("link", { name: "Communities" }).click()
     await page.getByRole("button", { name: "Create Community" }).click()

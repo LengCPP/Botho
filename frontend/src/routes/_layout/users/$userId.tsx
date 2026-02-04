@@ -19,7 +19,7 @@ import {
 } from "@chakra-ui/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import { useMemo, useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { BsThreeDotsVertical } from "react-icons/bs"
 import { FaChevronLeft } from "react-icons/fa"
 import {
@@ -38,6 +38,7 @@ import {
   UsersService,
 } from "@/client"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
+import { GroupCard } from "@/components/Items/GroupCard"
 import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
@@ -58,136 +59,6 @@ import { formatPublicId, getImageUrl, groupItems, handleError } from "@/utils"
 export const Route = createFileRoute("/_layout/users/$userId")({
   component: UserProfilePage,
 })
-
-function GroupCard({
-  name,
-  type,
-  groups,
-  onOpen,
-}: { name: string; type: string; groups: ItemPublic[][]; onOpen: () => void }) {
-  const bgColor = useColorModeValue("accent.50", "gray.800")
-  const borderColor = useColorModeValue("accent.200", "gray.600")
-  const textColor = useColorModeValue("gray.800", "gray.100")
-
-  const allItems = groups.flat()
-  const previewItems = allItems.slice(0, 3)
-
-  return (
-    <Card.Root
-      width="100%"
-      variant="outline"
-      bg={bgColor}
-      borderColor={borderColor}
-      overflow="hidden"
-      transition="transform 0.2s"
-      _hover={{ transform: "translateY(-4px)", boxShadow: "lg" }}
-      cursor="pointer"
-      onClick={onOpen}
-    >
-      <Card.Body p={4} as={Flex} direction="column" h="100%">
-        <Flex justify="space-between" align="start" mb={4}>
-          <VStack align="start" gap={0} flex={1}>
-            <Text
-              fontSize="xl"
-              fontWeight="bold"
-              color={textColor}
-              lineClamp={1}
-            >
-              {name}
-            </Text>
-            <Badge colorPalette="accent" variant="subtle" size="sm">
-              {(type || "subject").toUpperCase()} COLLECTION
-            </Badge>
-          </VStack>
-          <Badge variant="solid" colorPalette="teal">
-            {groups.length}{" "}
-            {groups[0][0].item_type === "book"
-              ? groups.length === 1
-                ? "Book"
-                : "Books"
-              : groups.length === 1
-                ? "Item"
-                : "Items"}
-          </Badge>
-        </Flex>
-
-        <Box
-          height="120px"
-          position="relative"
-          mb={4}
-          bg="blackAlpha.100"
-          borderRadius="md"
-          p={2}
-        >
-          {previewItems.length > 0 ? (
-            <HStack gap={-4} justify="center" height="100%">
-              {previewItems.map((item, index) => (
-                <Box
-                  key={item.id}
-                  zIndex={3 - index}
-                  transform={`translateX(${index * 10}px) rotate(${
-                    index * 5
-                  }deg)`}
-                >
-                  {item.image_url ? (
-                    <Image
-                      src={getImageUrl(item.image_url)}
-                      alt={item.title}
-                      height="100px"
-                      width="70px"
-                      objectFit="cover"
-                      borderRadius="sm"
-                      boxShadow="md"
-                      border="1px solid white"
-                    />
-                  ) : (
-                    <Box
-                      height="100px"
-                      width="70px"
-                      bg="gray.400"
-                      borderRadius="sm"
-                      display="flex"
-                      alignItems="center"
-                      justifyContent="center"
-                      border="1px solid white"
-                      p={1}
-                    >
-                      <Text
-                        fontSize="8px"
-                        fontWeight="bold"
-                        textAlign="center"
-                        color="white"
-                        lineClamp={3}
-                      >
-                        {item.title}
-                      </Text>
-                    </Box>
-                  )}
-                </Box>
-              ))}
-            </HStack>
-          ) : (
-            <Flex height="100%" align="center" justify="center">
-              <Text fontSize="sm" color="gray.500" fontStyle="italic">
-                Empty collection
-              </Text>
-            </Flex>
-          )}
-        </Box>
-
-        <Button
-          variant="solid"
-          colorPalette="accent"
-          width="full"
-          size="sm"
-          mt="auto"
-        >
-          View Details
-        </Button>
-      </Card.Body>
-    </Card.Root>
-  )
-}
 
 function UserProfilePage() {
   const { userId } = Route.useParams()
@@ -278,7 +149,7 @@ function UserProfilePage() {
   }
 
   const userItems = items?.data || []
-  
+
   // Calculate Organized Items for "Collections" view
   const organizedItems = useMemo(() => {
     const groupedPhysical = groupItems(userItems)
@@ -409,11 +280,13 @@ function UserProfilePage() {
             <Heading size="md">
               {displayType === "collections"
                 ? subject
-                  ? `Items in ${subject}`
+                  ? subject.toLowerCase() === "others"
+                    ? `Items with unspecified ${organizeBy}`
+                    : `Items in ${subject}`
                   : "Item Collections"
                 : `Items (${userItems.length})`}
             </Heading>
-            
+
             <ItemsViewOptions
               viewMode={viewMode}
               onChangeViewMode={setViewMode}
@@ -457,16 +330,14 @@ function UserProfilePage() {
                   mb={4}
                   onClick={() => setSubject(undefined)}
                 >
-                  <FaChevronLeft style={{ marginRight: "8px" }} /> Back to Collections
+                  <FaChevronLeft style={{ marginRight: "8px" }} /> Back to
+                  Collections
                 </Button>
               )}
 
               {/* Render Collections Grid (GroupCards) */}
               {displayType === "collections" && !subject ? (
-                <SimpleGrid
-                  columns={{ base: 1, sm: 2, md: 3, lg: 4, xl: 5 }}
-                  gap={6}
-                >
+                <SimpleGrid columns={{ base: 1, md: 2, lg: 3, xl: 4 }} gap={6}>
                   {Object.entries(organizedItems).map(([name, groups]) => (
                     <GroupCard
                       key={name}
@@ -483,7 +354,7 @@ function UserProfilePage() {
                   columns={
                     viewMode === "list"
                       ? 1
-                      : { base: 3, sm: 3, md: 4, lg: 5, xl: 6 }
+                      : { base: 2, sm: 3, md: 4, lg: 5, xl: 6 }
                   }
                   gap={viewMode === "list" ? 2 : { base: 2, md: 6 }}
                 >

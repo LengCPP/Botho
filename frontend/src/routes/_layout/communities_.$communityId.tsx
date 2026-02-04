@@ -22,7 +22,7 @@ import {
 } from "@chakra-ui/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
-import { useMemo, useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   FaChevronLeft,
   FaFilter,
@@ -62,6 +62,7 @@ import {
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import AddItem from "@/components/Items/AddItem"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
+import { GroupCard } from "@/components/Items/GroupCard"
 import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { LoanCard } from "@/components/Items/LoanCard"
@@ -90,136 +91,6 @@ import { getImageUrl, groupItems } from "@/utils"
 export const Route = createFileRoute("/_layout/communities/$communityId")({
   component: CommunityBoard,
 })
-
-function GroupCard({
-  name,
-  type,
-  groups,
-  onOpen,
-}: { name: string; type: string; groups: ItemPublic[][]; onOpen: () => void }) {
-  const bgColor = useColorModeValue("accent.50", "gray.800")
-  const borderColor = useColorModeValue("accent.200", "gray.600")
-  const textColor = useColorModeValue("gray.800", "gray.100")
-
-  const allItems = groups.flat()
-  const previewItems = allItems.slice(0, 3)
-
-  return (
-    <Card.Root
-      width="100%"
-      variant="outline"
-      bg={bgColor}
-      borderColor={borderColor}
-      overflow="hidden"
-      transition="transform 0.2s"
-      _hover={{ transform: "translateY(-4px)", boxShadow: "lg" }}
-      cursor="pointer"
-      onClick={onOpen}
-    >
-      <Card.Body p={4} as={Flex} direction="column" h="100%">
-        <Flex justify="space-between" align="start" mb={4}>
-          <VStack align="start" gap={0} flex={1}>
-            <Text
-              fontSize="xl"
-              fontWeight="bold"
-              color={textColor}
-              lineClamp={1}
-            >
-              {name}
-            </Text>
-            <Badge colorPalette="accent" variant="subtle" size="sm">
-              {(type || "subject").toUpperCase()} COLLECTION
-            </Badge>
-          </VStack>
-          <Badge variant="solid" colorPalette="teal">
-            {groups.length}{" "}
-            {groups[0][0].item_type === "book"
-              ? groups.length === 1
-                ? "Book"
-                : "Books"
-              : groups.length === 1
-                ? "Item"
-                : "Items"}
-          </Badge>
-        </Flex>
-
-        <Box
-          height="120px"
-          position="relative"
-          mb={4}
-          bg="blackAlpha.100"
-          borderRadius="md"
-          p={2}
-        >
-          {previewItems.length > 0 ? (
-            <HStack gap={-4} justify="center" height="100%">
-              {previewItems.map((item, index) => (
-                <Box
-                  key={item.id}
-                  zIndex={3 - index}
-                  transform={`translateX(${index * 10}px) rotate(${
-                    index * 5
-                  }deg)`}
-                >
-                  {item.image_url ? (
-                    <Image
-                      src={getImageUrl(item.image_url)}
-                      alt={item.title}
-                      height="100px"
-                      width="70px"
-                      objectFit="cover"
-                      borderRadius="sm"
-                      boxShadow="md"
-                      border="1px solid white"
-                    />
-                  ) : (
-                    <Box
-                      height="100px"
-                      width="70px"
-                      bg="gray.400"
-                      borderRadius="sm"
-                      display="flex"
-                      alignItems="center"
-                      justifyContent="center"
-                      border="1px solid white"
-                      p={1}
-                    >
-                      <Text
-                        fontSize="8px"
-                        fontWeight="bold"
-                        textAlign="center"
-                        color="white"
-                        lineClamp={3}
-                      >
-                        {item.title}
-                      </Text>
-                    </Box>
-                  )}
-                </Box>
-              ))}
-            </HStack>
-          ) : (
-            <Flex height="100%" align="center" justify="center">
-              <Text fontSize="sm" color="gray.500" fontStyle="italic">
-                Empty collection
-              </Text>
-            </Flex>
-          )}
-        </Box>
-
-        <Button
-          variant="solid"
-          colorPalette="accent"
-          width="full"
-          size="sm"
-          mt="auto"
-        >
-          View Details
-        </Button>
-      </Card.Body>
-    </Card.Root>
-  )
-}
 
 function AddAnnouncementModal({ communityId }: { communityId: string }) {
   const [title, setTitle] = useState("")
@@ -762,7 +633,7 @@ function CommunityBoard() {
   const renderGroup = (groups: ItemPublic[][]) => (
     <SimpleGrid
       columns={
-        viewMode === "list" ? 1 : { base: 3, sm: 3, md: 4, lg: 5, xl: 6 }
+        viewMode === "list" ? 1 : { base: 2, sm: 3, md: 4, lg: 5, xl: 6 }
       }
       gap={viewMode === "list" ? 2 : { base: 2, md: 6 }}
     >
@@ -1040,10 +911,7 @@ function CommunityBoard() {
           <Tabs.Content value="items" pt={6}>
             <VStack align="stretch" gap={8}>
               {isAdmin && (
-                <DonationManagement
-                  items={items}
-                  communityId={communityId}
-                />
+                <DonationManagement items={items} communityId={communityId} />
               )}
               <Flex justify="space-between" align="center" wrap="wrap" gap={4}>
                 <HStack gap={2}>
@@ -1132,10 +1000,10 @@ function CommunityBoard() {
                   </Text>
                 </Box>
               ) : (
-                <VStack align="stretch" gap={12}>
+                <Box mt={8}>
                   {displayType === "collections" && !selectedGroup ? (
-                    <Grid
-                      templateColumns="repeat(auto-fill, minmax(200px, 1fr))"
+                    <SimpleGrid
+                      columns={{ base: 1, md: 2, lg: 3, xl: 4 }}
                       gap={6}
                     >
                       {Object.entries(organizedItems).map(([name, data]) => (
@@ -1147,42 +1015,63 @@ function CommunityBoard() {
                           onOpen={() => setSelectedGroup(name)}
                         />
                       ))}
-                    </Grid>
+                    </SimpleGrid>
                   ) : displayType === "items" ? (
                     renderGroup(groupItems(items))
                   ) : (
-                    <>
+                    <Box>
+                      {selectedGroup && (
+                        <VStack align="start" mb={6} gap={2}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSelectedGroup(null)}
+                          >
+                            <FaChevronLeft style={{ marginRight: "8px" }} />{" "}
+                            Collections
+                          </Button>
+                          {Object.entries(organizedItems)
+                            .filter(([name]) => name === selectedGroup)
+                            .map(([name, data]) => (
+                              <Heading
+                                key={name}
+                                size="lg"
+                                color="ui.hover"
+                                textTransform="uppercase"
+                                letterSpacing="wider"
+                              >
+                                {[...data.pooled, ...data.owned][0]?.[0]
+                                  ?.item_type === "book"
+                                  ? "Books"
+                                  : "Items"}{" "}
+                                {name.toLowerCase() === "others"
+                                  ? `with unspecified ${organizeBy}`
+                                  : `${
+                                      organizeBy === "author"
+                                        ? "by"
+                                        : organizeBy === "genre"
+                                          ? "in"
+                                          : "on"
+                                    } ${name}`}
+                                {data.pooled.length + data.owned.length > 1 &&
+                                  ` (${
+                                    data.pooled.length + data.owned.length
+                                  })`}
+                              </Heading>
+                            ))}
+                        </VStack>
+                      )}
+
                       {Object.entries(organizedItems)
                         .filter(([name]) => name === selectedGroup)
                         .map(([name, data]) => (
                           <Box key={name}>
-                            <Heading
-                              size="md"
-                              mb={6}
-                              color="ui.hover"
-                              textTransform="uppercase"
-                              letterSpacing="widest"
-                            >
-                              {[...data.pooled, ...data.owned][0]?.[0]
-                                ?.item_type === "book"
-                                ? "Books"
-                                : "Items"}{" "}
-                              {organizeBy === "author"
-                                ? "by"
-                                : organizeBy === "genre"
-                                  ? "in"
-                                  : "on"}{" "}
-                              {name}
-                              {data.pooled.length + data.owned.length > 1 &&
-                                ` (${data.pooled.length + data.owned.length})`}
-                            </Heading>
-
                             {renderGroup([...data.pooled, ...data.owned])}
                           </Box>
                         ))}
-                    </>
+                    </Box>
                   )}
-                </VStack>
+                </Box>
               )}
 
               <ItemDetailModal

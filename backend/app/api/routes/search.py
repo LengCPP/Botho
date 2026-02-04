@@ -136,6 +136,7 @@ def search(
             community_pub = item.community_owner
         
         # Manually construct ItemPublic
+        from app.api.routes.items import get_work_metadata, check_possession
         item_pub = ItemPublic(
             id=item.id,
             owner_id=item.owner_id,
@@ -145,11 +146,14 @@ def search(
             item_type=item.item_type,
             image_url=item.image_url,
             extra_data=item.extra_data,
+            info=item.info,
             count=item.count,
             created_at=item.created_at,
             owner=owner_pub,
             community_owner=community_pub,
-            is_available=is_avail
+            is_available=is_avail,
+            work_metadata=get_work_metadata(session, item.author, item.title),
+            had_possession=check_possession(session, current_user.id, item.id)
         )
         items_public.append(item_pub)
 

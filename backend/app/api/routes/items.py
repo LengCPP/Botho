@@ -490,7 +490,8 @@ async def create_item(
             owner=owner_pub,
             community_owner=community_pub,
             is_available=True,
-            work_metadata=get_work_metadata(session, db_item.author, db_item.title)
+            work_metadata=get_work_metadata(session, db_item.author, db_item.title),
+            had_possession=True
         )
         return item_pub
     except HTTPException:
@@ -620,7 +621,8 @@ async def update_item(
             owner=owner_pub,
             community_owner=community_pub,
             is_available=is_avail,
-            work_metadata=get_work_metadata(session, db_item.author, db_item.title)
+            work_metadata=get_work_metadata(session, db_item.author, db_item.title),
+            had_possession=check_possession(session, current_user.id, db_item.id)
         )
         return item_pub
     except HTTPException:
@@ -717,7 +719,8 @@ def duplicate_item(
         created_at=new_item.created_at,
         owner=owner_pub,
         is_available=True,
-        work_metadata=get_work_metadata(session, new_item.author, new_item.title)
+        work_metadata=get_work_metadata(session, new_item.author, new_item.title),
+        had_possession=True
     )
 
 

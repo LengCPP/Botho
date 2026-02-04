@@ -1,5 +1,4 @@
 import * as Client from "@/client"
-import * as ApiRequest from "@/client/core/request"
 import { ChakraProvider, defaultSystem } from "@chakra-ui/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
@@ -12,7 +11,6 @@ vi.mock("@/hooks/useAuth", () => ({
     user: {
       id: "current-user-id",
       is_superuser: false,
-      communities: [{ id: "community-id" }],
     },
   }),
 }))
@@ -24,6 +22,11 @@ vi.mock("@/hooks/useCustomToast", () => ({
   }),
 }))
 
+// Mock Link
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({ children, to }: any) => <a href={to}>{children}</a>,
+}))
+
 // Mock API services
 vi.mock("@/client", async (importOriginal) => {
   const actual = await importOriginal<typeof Client>()
@@ -31,22 +34,11 @@ vi.mock("@/client", async (importOriginal) => {
     ...actual,
     CommunitiesService: {
       ...actual.CommunitiesService,
-      readCommunityMembers: vi.fn(),
-      leaveCommunity: vi.fn(),
       joinCommunity: vi.fn(),
       deleteCommunity: vi.fn(),
     },
-    FriendsService: {
-      readFriends: vi.fn(),
-      createFriendRequest: vi.fn(),
-    },
   }
 })
-
-// Mock apiRequest specifically since it's used directly in the mutation
-vi.mock("@/client/core/request", () => ({
-  request: vi.fn(),
-}))
 
 const createWrapper = () => {
   const queryClient = new QueryClient({
@@ -68,132 +60,85 @@ describe("CommunityCard", () => {
     id: "community-id",
     name: "Test Community",
     description: "A test community",
-    created_by: "current-user-id", // User is admin
+    created_by: "creator-id",
     requires_approval: false,
     is_private: false,
+    current_user_status: null,
+    current_user_role: null,
   }
-
-  const mockMembers = [
-    {
-      id: "current-user-id",
-      full_name: "Current User",
-      email: "user@test.com",
-      community_role: "admin",
-      community_status: "accepted",
-    },
-    {
-      id: "member-1",
-      full_name: "Member One",
-      email: "member1@test.com",
-      community_role: "member",
-      community_status: "accepted",
-    },
-  ]
 
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(Client.CommunitiesService.readCommunityMembers).mockResolvedValue(
-      {
-        data: mockMembers,
-        count: 2,
-      },
-    )
-    vi.mocked(Client.FriendsService.readFriends).mockResolvedValue({
-      data: [],
-      count: 0,
-    })
   })
 
-  it("should promote a member to admin", async () => {
-    vi.mocked(ApiRequest.request).mockResolvedValue({ success: true })
-
-    render(<CommunityCard community={mockCommunity} />, {
+  it("should render community name and description", () => {
+    render(<CommunityCard community={mockCommunity as any} />, {
       wrapper: createWrapper(),
     })
 
-    // Open members list
-    const showMembersBtn = screen.getByText("Show Members")
-    fireEvent.click(showMembersBtn)
-
-    // Wait for members to load
-    await waitFor(() => {
-      expect(screen.getByText("Member One")).toBeInTheDocument()
-    })
-
-    // Find the settings/manage role button for Member One
-    const manageRoleBtns = screen.getAllByTitle("Manage Role")
-    const manageRoleBtn = manageRoleBtns[0]
-    fireEvent.click(manageRoleBtn)
-
-    // Click "Promote to Admin"
-    const promoteBtn = await screen.findByText("Promote to Admin")
-    fireEvent.click(promoteBtn)
-
-    // Verify API call
-    await waitFor(() => {
-      expect(ApiRequest.request).toHaveBeenCalledWith(
-        expect.anything(), // OpenAPI config
-        expect.objectContaining({
-          method: "PATCH",
-          url: "/api/v1/communities/{id}/members/{user_id}",
-          path: {
-            id: "community-id",
-            user_id: "member-1",
-          },
-          body: { role: "admin", status: undefined },
-        }),
-      )
-    })
+    expect(screen.getByText("Test Community")).toBeInTheDocument()
+    expect(screen.getByText("A test community")).toBeInTheDocument()
   })
 
-  it("should demote an admin to member", async () => {
-    // Setup a scenario where Member One is an admin
-    const adminMembers = [...mockMembers]
-    adminMembers[1].community_role = "admin"
-
-    vi.mocked(Client.CommunitiesService.readCommunityMembers).mockResolvedValue(
-      {
-        data: adminMembers,
-        count: 2,
-      },
-    )
-
-    vi.mocked(ApiRequest.request).mockResolvedValue({ success: true })
-
-    render(<CommunityCard community={mockCommunity} />, {
+  it("should show 'Join Community' when user is not a member", () => {
+    render(<CommunityCard community={mockCommunity as any} />, {
       wrapper: createWrapper(),
     })
 
-    // Open members list
-    fireEvent.click(screen.getByText("Show Members"))
+    expect(screen.getByText("Join Community")).toBeInTheDocument()
+  })
 
-    // Wait for members
-    await waitFor(() => {
-      expect(screen.getByText("Member One")).toBeInTheDocument()
+  it("should show 'View Community' when user is a member", () => {
+    const memberCommunity = {
+      ...mockCommunity,
+      current_user_status: "ACCEPTED",
+    }
+    render(<CommunityCard community={memberCommunity as any} />, {
+      wrapper: createWrapper(),
     })
 
-    // Click manage role
-    const manageRoleBtns = screen.getAllByTitle("Manage Role")
-    fireEvent.click(manageRoleBtns[0])
+    expect(screen.getByText("View Community")).toBeInTheDocument()
+  })
 
-    // Click "Demote to Member"
-    const demoteBtn = await screen.findByText("Demote to Member")
-    fireEvent.click(demoteBtn)
-
-    // Verify API call
-    await waitFor(() => {
-      expect(ApiRequest.request).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          method: "PATCH",
-          url: "/api/v1/communities/{id}/members/{user_id}",
-          path: {
-            id: "community-id",
-            user_id: "member-1",
-          },
-          body: { role: "member", status: undefined },
-        }),
-      )
+  it("should show 'Apply to Join' when community requires approval", () => {
+    const closedCommunity = {
+      ...mockCommunity,
+      requires_approval: true,
+    }
+    render(<CommunityCard community={closedCommunity as any} />, {
+      wrapper: createWrapper(),
     })
+
+    expect(screen.getByText("Apply to Join")).toBeInTheDocument()
+  })
+
+  it("should call joinCommunity when Join button is clicked", async () => {
+    vi.mocked(Client.CommunitiesService.joinCommunity).mockResolvedValue({
+      message: "Joined successfully",
+    } as any)
+
+    render(<CommunityCard community={mockCommunity as any} />, {
+      wrapper: createWrapper(),
+    })
+
+    fireEvent.click(screen.getByText("Join Community"))
+
+    await waitFor(() => {
+      expect(Client.CommunitiesService.joinCommunity).toHaveBeenCalledWith({
+        id: "community-id",
+      })
+    })
+  })
+
+  it("should show admin actions if user is creator", () => {
+    const adminCommunity = {
+      ...mockCommunity,
+      created_by: "current-user-id",
+    }
+    render(<CommunityCard community={adminCommunity as any} />, {
+      wrapper: createWrapper(),
+    })
+
+    expect(screen.getByTitle("Disband Community")).toBeInTheDocument()
   })
 })
