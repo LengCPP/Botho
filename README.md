@@ -13,6 +13,7 @@ Botho follows a modern, containerized monorepo architecture designed for scalabi
 - **Frontend**: A single-page application (SPA) built with **React** and **TypeScript**, powered by **Vite**. It uses **Chakra UI** for styling, **TanStack Router** for navigation, and **TanStack Query** for data fetching.
 - **Backend**: A high-performance asynchronous API built with **FastAPI**. It utilizes **SQLModel** (combining SQLAlchemy and Pydantic) for database interactions and data validation.
 - **Database**: **PostgreSQL** serves as the primary relational database for structured data.
+- **Search**: **Meilisearch** provides fast, type-ahead search capabilities for items, users, and communities.
 - **Storage**: **MinIO** is integrated for handling image and file uploads.
 - **Reverse Proxy**: **Traefik** manages routing between the frontend and backend, handles SSL/TLS termination, and provides a monitoring dashboard.
 - **Deployment**: The entire stack is orchestrated using **Docker Compose**, ensuring consistency across development, staging, and production environments.
@@ -26,7 +27,7 @@ Botho follows a modern, containerized monorepo architecture designed for scalabi
 - **Reading Log**: Track reading progress (Reading, Completed, Dropped), rate items, and add personal tags and reviews to any book in the system.
 - **Lending System**: comprehensive tracking for borrowed and lent items, including due dates, return status, and approval workflows.
 - **Social Connectivity**: Connect with friends, manage relationships, and view user profiles with distinct custom styling.
-- **Notifications**: Stay updated on loan requests, returns, and community activity.
+- **Notifications**: Stay updated on loan requests, returns, and community activity via real-time WebSockets and Push Notifications.
 - **Enhanced Profile Management**: Unified interface for updating bio, alias, contact details, and interests.
 - **Visual Identity**: Standardized, deterministic avatar system with a themed orange ring for consistent user recognition.
 
@@ -54,6 +55,7 @@ Botho follows a modern, containerized monorepo architecture designed for scalabi
 - 🐋 [**Docker Compose**](https://www.docker.com) - Container orchestration.
 - 📞 [**Traefik**](https://traefik.io) - Cloud-native reverse proxy.
 - 📦 [**MinIO**](https://min.io/) - High-performance object storage.
+- 🔍 [**Meilisearch**](https://www.meilisearch.com/) - Lightning-fast search engine.
 - 🔒 **JWT Authentication** - Secure token-based access control.
 
 ---
@@ -80,35 +82,24 @@ docker compose up -d
 - **Frontend**: [http://localhost:5173](http://localhost:5173)
 - **Backend API**: [http://localhost:8000](http://localhost:8000)
 - **API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Meilisearch Dashboard**: [http://localhost:7700](http://localhost:7700)
 - **Traefik Dashboard**: [http://localhost:8090](http://localhost:8090)
 - **MinIO Console**: [http://localhost:9001](http://localhost:9001)
 
 ### 4. Staging Environment
-To run the application in the staging environment (mirroring development with hot-reloading):
+The project uses a staging environment at **staging.rsc-xchange.app**.
 
-1. **Create Network**:
-   ```bash
-   docker network create traefik-public
-   ```
-2. **Start Staging**:
+1. **Start Staging**:
    ```bash
    docker compose -f docker-compose.staging.yml up -d
    ```
-3. **Access**:
-   - App: [https://staging.rsc-xchange.app](https://staging.yourdomain.com)
+2. **Access**:
+   - App: [https://staging.rsc-xchange.app](https://staging.rsc-xchange.app)
    - API: [https://api.staging.rsc-xchange.app](https://api.staging.yourdomain.com)
-4. **Database Migrations (Staging)**:
+3. **Database Migrations (Staging)**:
    ```bash
    docker compose -f docker-compose.staging.yml exec backend alembic upgrade head
    ```
-
-**Note:** The staging environment is configured to use volume mounts for `/app` (backend) and `/app/src` (frontend), allowing for real-time code updates (hot-reloading) just like in development.
-
-### 5. Database Migrations (Local)
-Run migrations to set up the database schema:
-```bash
-docker compose exec backend alembic upgrade head
-```
 
 ---
 
@@ -118,7 +109,7 @@ We welcome contributions! Please follow these steps:
 
 1. **Branching**: Create a new branch for your feature or bugfix (`git checkout -b feature/my-feature`).
 2. **Coding Standards**:
-   - Backend: Use **Ruff** for linting and **Black** (via `format.sh`) for formatting.
+   - Backend: Use **Ruff** for linting and formatting.
    - Frontend: Adhere to the **Biome** configuration.
 3. **Testing**:
    - Run backend tests: `bash backend/scripts/test.sh`.
