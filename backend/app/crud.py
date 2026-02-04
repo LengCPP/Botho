@@ -6,10 +6,6 @@ from sqlmodel import Session, select, func
 from app.core.security import get_password_hash, verify_password
 from app.models import (
     BookCreate,
-    Collection,
-    CollectionCreate,
-    CollectionItem,
-    CollectionUpdate,
     Community,
     CommunityCreate,
     CommunityMember,
@@ -35,59 +31,6 @@ from app.search import (
     sync_community_to_search,
     delete_community_from_search
 )
-
-
-def create_collection(
-    *, session: Session, collection_in: CollectionCreate, owner_id: uuid.UUID | None = None, community_id: uuid.UUID | None = None
-) -> Collection:
-    db_collection = Collection.model_validate(
-        collection_in, update={"owner_id": owner_id, "community_id": community_id}
-    )
-    session.add(db_collection)
-    session.commit()
-    session.refresh(db_collection)
-    return db_collection
-
-
-def update_collection(
-    *, session: Session, db_collection: Collection, collection_in: CollectionUpdate
-) -> Collection:
-    collection_data = collection_in.model_dump(exclude_unset=True)
-    db_collection.sqlmodel_update(collection_data)
-    session.add(db_collection)
-    session.commit()
-    session.refresh(db_collection)
-    return db_collection
-
-
-def delete_collection(*, session: Session, collection_id: uuid.UUID) -> None:
-    db_collection = session.get(Collection, collection_id)
-    if db_collection:
-        session.delete(db_collection)
-        session.commit()
-
-
-def add_item_to_collection(
-    *, session: Session, collection_id: uuid.UUID, item_id: uuid.UUID
-) -> CollectionItem:
-    db_obj = CollectionItem(collection_id=collection_id, item_id=item_id)
-    session.add(db_obj)
-    session.commit()
-    session.refresh(db_obj)
-    return db_obj
-
-
-def remove_item_from_collection(
-    *, session: Session, collection_id: uuid.UUID, item_id: uuid.UUID
-) -> None:
-    statement = select(CollectionItem).where(
-        CollectionItem.collection_id == collection_id,
-        CollectionItem.item_id == item_id,
-    )
-    db_obj = session.exec(statement).first()
-    if db_obj:
-        session.delete(db_obj)
-        session.commit()
 
 
 def create_notification(    *,

@@ -163,16 +163,6 @@ const ItemCard = ({
     setItemIndex((prev) => (prev - 1 + items.length) % items.length)
   }
 
-  const handleGoToCollection = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (item.collection_id) {
-      navigate({
-        to: "/collections/$collectionId",
-        params: { collectionId: item.collection_id },
-      })
-    }
-  }
-
   const handleInfoClick = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (isMobile) {
@@ -407,22 +397,6 @@ const ItemCard = ({
                 ) : (
                   <FiPlus />
                 )}
-              </IconButton>
-            )}
-
-            {item.collection_id && (
-              <IconButton
-                aria-label="Go to collection"
-                size="xs"
-                position="absolute"
-                top={2}
-                right={2}
-                colorPalette="accent"
-                variant="solid"
-                onClick={handleGoToCollection}
-                zIndex={10}
-              >
-                <FiExternalLink />
               </IconButton>
             )}
           </Card.Root>

@@ -15,7 +15,6 @@ from app.models import (
     User,
     Friendship,
     FriendshipStatus,
-    CollectionItem,
     CommunityMember,
     CommunityMemberStatus,
 )
@@ -122,7 +121,7 @@ def search(
         )
         meili_items_raw = session.exec(item_statement).all()
 
-    # Convert raw items to ItemPublic and add collection info
+    # Convert raw items to ItemPublic
     items_public = []
     from app.api.routes.items import check_item_availability
     for item in meili_items_raw:
@@ -152,14 +151,6 @@ def search(
             community_owner=community_pub,
             is_available=is_avail
         )
-        
-        # Check for collection
-        collection_link = session.exec(
-            select(CollectionItem).where(CollectionItem.item_id == item.id)
-        ).first()
-        if collection_link:
-            item_pub.collection_id = collection_link.collection_id
-            
         items_public.append(item_pub)
 
     # 3. Search Communities using Meilisearch (Expansion: Global search)

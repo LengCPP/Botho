@@ -38,11 +38,6 @@ class ItemType(str, Enum):
     book = "book"
 
 
-class CollectionType(str, Enum):
-    GENERAL = "GENERAL"
-    LIBRARY = "LIBRARY"
-
-
 class LoanStatus(str, Enum):
     PENDING = "PENDING"
     ACCEPTED = "ACCEPTED"
@@ -67,13 +62,6 @@ class ReadingLogStatus(str, Enum):
 
 
 # Link Models
-class CollectionItem(SQLModel, table=True):
-    collection_id: uuid.UUID = Field(
-        foreign_key="collection.id", primary_key=True, ondelete="CASCADE"
-    )
-    item_id: uuid.UUID = Field(
-        foreign_key="item.id", primary_key=True, ondelete="CASCADE"
-    )
 
 
 class CommunityItem(SQLModel, table=True):
@@ -288,7 +276,7 @@ class UserUpdate(SQLModel):
 
     @field_validator("email", mode="before")
     @classmethod
-    def validate_email(cls, v: Optional[str]) -> Optional[str]:
+    def validate_email(cls, v: Optional[EmailStr]) -> Optional[str]:
         if isinstance(v, str):
             return v.lower().strip()
         return v
@@ -337,7 +325,6 @@ class User(UserBase, table=True):
             "viewonly": True
         }
     )
-    collections: list["Collection"] = Relationship(back_populates="owner")
     communities: list["Community"] = Relationship(
         back_populates="members", link_model=CommunityMember
     )
@@ -396,7 +383,6 @@ class Community(CommunityBase, table=True):
         }
     )
     loans: list["Loan"] = Relationship(back_populates="community")
-    collections: list["Collection"] = Relationship(back_populates="community")
 
 
 class CommunityAnnouncement(SQLModel, table=True):
@@ -426,25 +412,6 @@ class CommunityMessage(SQLModel, table=True):
 
     community: "Community" = Relationship(back_populates="messages")
     author: "User" = Relationship()
-
-
-class CollectionBase(SQLModel):
-    title: str = Field(min_length=1, max_length=255)
-    description: Optional[str] = Field(default=None, max_length=512)
-    collection_type: CollectionType = Field(default=CollectionType.GENERAL)
-
-
-class Collection(CollectionBase, table=True):
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    owner_id: Optional[uuid.UUID] = Field(default=None, foreign_key="user.id", ondelete="CASCADE")
-    community_id: Optional[uuid.UUID] = Field(default=None, foreign_key="community.id", ondelete="CASCADE")
-    created_at: Optional[datetime] = Field(
-        default=None,
-        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    )
-    items: list["Item"] = Relationship(link_model=CollectionItem)
-    owner: Optional["User"] = Relationship(back_populates="collections")
-    community: Optional["Community"] = Relationship(back_populates="collections")
 
 
 class WorkMetadata(SQLModel, table=True):
@@ -648,28 +615,6 @@ class UsersPublic(SQLModel):
     count: int
 
 
-class CollectionCreate(CollectionBase):
-    pass
-
-
-class CollectionUpdate(SQLModel):
-    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    description: Optional[str] = Field(default=None, max_length=512)
-    collection_type: Optional[CollectionType] = None
-
-
-class CollectionPublic(CollectionBase):
-    id: uuid.UUID
-    owner_id: Optional[uuid.UUID] = None
-    community_id: Optional[uuid.UUID] = None
-    items: list["ItemPublic"] = []
-
-
-class CollectionsPublic(SQLModel):
-    data: list["CollectionPublic"]
-    count: int
-
-
 class ItemCreate(ItemBase):
     pass
 
@@ -720,7 +665,6 @@ class ItemPublic(ItemBase):
     owner: Optional[ItemOwnerPublic] = None
     community_owner: Optional[CommunityPublic] = None
     communities: list["CommunityPublic"] = []
-    collection_id: Optional[uuid.UUID] = None
     is_available: bool = True
     added_by_id: Optional[uuid.UUID] = None
     is_donation_pending: bool = False

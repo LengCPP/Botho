@@ -54,13 +54,11 @@ import {
 } from "react-icons/fi"
 
 import {
-  CollectionsService,
   CommunitiesService,
   type CommunityPublic,
   FriendsService,
   type ItemPublic,
 } from "@/client"
-import CollectionCard from "@/components/Collections/CollectionCard"
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import AddItem from "@/components/Items/AddItem"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
@@ -591,13 +589,6 @@ function CommunityBoard() {
     enabled: !!isMember,
   })
 
-  const { data: communityCollections, isLoading: isLoadingCollections } =
-    useQuery({
-      queryKey: ["collections", { communityId }],
-      queryFn: () => CollectionsService.readCollections({ communityId }),
-      enabled: !!isMember,
-    })
-
   const { data: messages, isLoading: isLoadingMessages } = useQuery({
     queryKey: ["communityMessages", communityId],
     queryFn: () =>
@@ -1048,6 +1039,12 @@ function CommunityBoard() {
 
           <Tabs.Content value="items" pt={6}>
             <VStack align="stretch" gap={8}>
+              {isAdmin && (
+                <DonationManagement
+                  items={items}
+                  communityId={communityId}
+                />
+              )}
               <Flex justify="space-between" align="center" wrap="wrap" gap={4}>
                 <HStack gap={2}>
                   {/* Organize Button */}
@@ -1187,28 +1184,6 @@ function CommunityBoard() {
                   )}
                 </VStack>
               )}
-
-              {/* Community Collections Section (Libraries) */}
-              {!selectedGroup &&
-                communityCollections?.data &&
-                communityCollections.data.length > 0 && (
-                  <Box mt={8}>
-                    <Heading size="md" mb={4}>
-                      Community Collections
-                    </Heading>
-                    <SimpleGrid
-                      columns={{ base: 1, sm: 2, lg: 3, xl: 4 }}
-                      gap={6}
-                    >
-                      {communityCollections.data.map((collection) => (
-                        <CollectionCard
-                          key={collection.id}
-                          collection={collection}
-                        />
-                      ))}
-                    </SimpleGrid>
-                  </Box>
-                )}
 
               <ItemDetailModal
                 item={selectedItem}

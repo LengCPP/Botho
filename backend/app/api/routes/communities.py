@@ -42,16 +42,28 @@ from app.models import (
     User,
     UserPublic,
     UsersPublic,
-    CollectionCreate,
-    CollectionType,
     ItemType,
-    Collection,
-    CollectionItem,
 )
 from app.api.utils import filter_user_privacy, filter_owner_privacy, filter_loan_privacy, check_item_availability
 from app.search import delete_community_from_search, sync_community_to_search
 
 router = APIRouter()
+
+
+def get_community_admin_count(session: SessionDep, community_id: uuid.UUID) -> int:
+    """
+    Get the number of admins in a community.
+    """
+    statement = (
+        select(func.count())
+        .select_from(CommunityMember)
+        .where(
+            CommunityMember.community_id == community_id,
+            CommunityMember.role == CommunityMemberRole.ADMIN,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED
+        )
+    )
+    return session.exec(statement).one()
 
 
 @router.get("/", response_model=CommunitiesPublic)
@@ -725,6 +737,7 @@ async def ratify_donation(
 ) -> Any:
     """
     Ratify a donation (Admin only).
+    Admins cannot ratify their own donations if there is more than 1 admin.
     """
     # Admin check
     statement = select(CommunityMember).where(
@@ -747,6 +760,15 @@ async def ratify_donation(
     comm_item = session.exec(statement).first()
     if not comm_item or not comm_item.is_donation_pending:
         raise HTTPException(status_code=400, detail="No pending donation found")
+
+    # Check if admin is the donor
+    if comm_item.added_by == current_user.id:
+        admin_count = get_community_admin_count(session, id)
+        if admin_count > 1:
+            raise HTTPException(
+                status_code=403, 
+                detail="You cannot ratify your own donation when other admins are present"
+            )
 
     item = session.get(Item, item_id)
     if not item:
@@ -837,19 +859,6 @@ def remove_item_from_community(
     else:
         # Just remove pooling metadata
         session.delete(comm_item)
-        
-        # Also remove from any collections belonging to this community
-        coll_stmt = select(Collection).where(Collection.community_id == id)
-        collections = session.exec(coll_stmt).all()
-        if collections:
-            coll_ids = [c.id for c in collections]
-            coll_item_stmt = select(CollectionItem).where(
-                CollectionItem.item_id == item_id,
-                CollectionItem.collection_id.in_(coll_ids)
-            )
-            coll_items = session.exec(coll_item_stmt).all()
-            for ci in coll_items:
-                session.delete(ci)
 
     session.commit()
     return Message(message="Item removed from community")

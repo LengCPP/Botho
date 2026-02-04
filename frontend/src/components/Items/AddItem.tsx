@@ -23,7 +23,6 @@ import { FiCamera } from "react-icons/fi"
 
 import {
   type Body_items_create_item,
-  CollectionsService,
   CommunitiesService,
   ItemsService,
 } from "@/client"
@@ -221,23 +220,6 @@ const AddItem = ({
           ? "Community item created successfully."
           : "Item created successfully.",
       )
-
-      // If we are in a collection view, add the newly created item to the collection
-      if (collectionId) {
-        CollectionsService.addItemToCollection({
-          id: collectionId,
-          itemId: newItem.id,
-        })
-          .then(() => {
-            showSuccessToast("Item added to collection.")
-            queryClient.invalidateQueries({
-              queryKey: ["collections", collectionId],
-            })
-          })
-          .catch(() => {
-            showErrorToast("Failed to add new item to collection.")
-          })
-      }
 
       reset()
       setImageFile(null)

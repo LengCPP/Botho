@@ -32,13 +32,11 @@ import {
 } from "react-icons/fi"
 
 import {
-  CollectionsService,
   FriendsService,
   type ItemPublic,
   ItemsService,
   UsersService,
 } from "@/client"
-import CollectionCard from "@/components/Collections/CollectionCard"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
 import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"

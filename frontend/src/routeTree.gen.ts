@@ -29,7 +29,6 @@ import { Route as LayoutCommunitiesImport } from './routes/_layout/communities'
 import { Route as LayoutAdminImport } from './routes/_layout/admin'
 import { Route as LayoutUsersUserIdImport } from './routes/_layout/users/$userId'
 import { Route as LayoutCommunitiesCommunityIdImport } from './routes/_layout/communities_.$communityId'
-import { Route as LayoutCollectionsCollectionIdImport } from './routes/_layout/collections/$collectionId'
 
 // Create/Update Routes
 
@@ -124,12 +123,6 @@ const LayoutCommunitiesCommunityIdRoute =
     getParentRoute: () => LayoutRoute,
   } as any)
 
-const LayoutCollectionsCollectionIdRoute =
-  LayoutCollectionsCollectionIdImport.update({
-    path: '/collections/$collectionId',
-    getParentRoute: () => LayoutRoute,
-  } as any)
-
 // Populate the FileRoutesByPath interface
 
 declare module '@tanstack/react-router' {
@@ -198,10 +191,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutIndexImport
       parentRoute: typeof LayoutImport
     }
-    '/_layout/collections/$collectionId': {
-      preLoaderRoute: typeof LayoutCollectionsCollectionIdImport
-      parentRoute: typeof LayoutImport
-    }
     '/_layout/communities/$communityId': {
       preLoaderRoute: typeof LayoutCommunitiesCommunityIdImport
       parentRoute: typeof LayoutImport
@@ -226,7 +215,6 @@ export const routeTree = rootRoute.addChildren([
     LayoutReadingLogRoute,
     LayoutSettingsRoute,
     LayoutIndexRoute,
-    LayoutCollectionsCollectionIdRoute,
     LayoutCommunitiesCommunityIdRoute,
     LayoutUsersUserIdRoute,
   ]),

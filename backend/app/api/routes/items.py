@@ -162,7 +162,6 @@ def read_items(
     owner_id: uuid.UUID | None = None,
     sort_by: str = "created_at",
     sort_order: str = "desc",
-    exclude_collections: bool = False,
     category: str | None = None,
     genre: str | None = None
 ) -> Any:
@@ -209,13 +208,6 @@ def read_items(
             func.json_extract_path_text(Item.extra_data, 'genre') == genre
         )
 
-    if exclude_collections:
-        from app.models import CollectionItem
-        # Exclude items that are in any collection
-        statement = statement.where(
-            Item.id.not_in(select(CollectionItem.item_id))
-        )
-
     # Count total
     count_stmt = select(func.count()).select_from(statement.subquery())
     count = session.exec(count_stmt).one()
@@ -258,7 +250,7 @@ def read_items(
             image_url=item.image_url,
             extra_data=item.extra_data,
             info={
-                **item.info,
+                **(item.info or {}),
                 "average_condition_grade": cond_data["average_grade"],
                 "physical_notes": cond_data["notes"]
             },
@@ -330,7 +322,7 @@ def read_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> 
         image_url=item.image_url,
         extra_data=item.extra_data,
         info={
-            **item.info,
+            **(item.info or {}),
             "average_condition_grade": cond_data["average_grade"],
             "physical_notes": cond_data["notes"]
         },
@@ -619,7 +611,7 @@ async def update_item(
             image_url=db_item.image_url,
             extra_data=db_item.extra_data,
             info={
-                **db_item.info,
+                **(db_item.info or {}),
                 "average_condition_grade": cond_data["average_grade"],
                 "physical_notes": cond_data["notes"]
             },

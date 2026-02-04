@@ -29,6 +29,22 @@ from app import crud
 router = APIRouter(prefix="/loans", tags=["loans"])
 
 
+def get_community_admin_count(session: SessionDep, community_id: uuid.UUID) -> int:
+    """
+    Get the number of admins in a community.
+    """
+    statement = (
+        select(func.count())
+        .select_from(CommunityMember)
+        .where(
+            CommunityMember.community_id == community_id,
+            CommunityMember.role == CommunityMemberRole.ADMIN,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED
+        )
+    )
+    return session.exec(statement).one()
+
+
 @router.post("/request", response_model=LoanPublic)
 async def create_loan_request(
     *, session: SessionDep, current_user: CurrentUser, loan_in: LoanCreate
@@ -120,7 +136,7 @@ async def create_loan_request(
                 title="New Community Loan Request",
                 message=f"{current_user.full_name or current_user.email} wants to borrow '{item.title}' from {community.name}.",
                 type=NotificationType.INFO,
-                link="/loans"
+                link=f"/communities/{community_id}"
             )
     elif owner_id:
         # Notify single owner
@@ -141,36 +157,19 @@ def read_incoming_loan_requests(
     session: SessionDep, current_user: CurrentUser, skip: int = 0, limit: int = 100
 ) -> Any:
     """
-    Retrieve loan requests for items owned by the current user or their communities.
+    Retrieve loan requests for items owned by the current user.
+    Community loans are managed within the community's own loans section.
     """
-    # Get IDs of communities where user is an admin
-    admin_communities = session.exec(
-        select(CommunityMember.community_id).where(
-            CommunityMember.user_id == current_user.id,
-            CommunityMember.role == CommunityMemberRole.ADMIN
-        )
-    ).all()
-
     statement = (
         select(Loan)
-        .where(
-            or_(
-                Loan.owner_id == current_user.id,
-                Loan.community_id.in_(admin_communities) if admin_communities else False
-            )
-        )
+        .where(Loan.owner_id == current_user.id)
         .order_by(Loan.created_at.desc())
     )
     
     count_statement = (
         select(func.count())
         .select_from(Loan)
-        .where(
-            or_(
-                Loan.owner_id == current_user.id,
-                Loan.community_id.in_(admin_communities) if admin_communities else False
-            )
-        )
+        .where(Loan.owner_id == current_user.id)
     )
     
     count = session.exec(count_statement).one()
@@ -210,6 +209,7 @@ async def respond_to_loan_request(
 ) -> Any:
     """
     Accept or reject a loan request (Owner or Community Admin only).
+    Admins cannot approve their own requests if there is more than 1 admin.
     """
     loan = session.get(Loan, id)
     if not loan:
@@ -226,6 +226,14 @@ async def respond_to_loan_request(
             CommunityMember.role == CommunityMemberRole.ADMIN
         )
         if session.exec(statement).first():
+            # Check if admin is the requester
+            if loan.requester_id == current_user.id:
+                admin_count = get_community_admin_count(session, loan.community_id)
+                if admin_count > 1:
+                    raise HTTPException(
+                        status_code=403, 
+                        detail="You cannot approve your own loan request when other admins are present"
+                    )
             can_respond = True
             
     if not can_respond and not current_user.is_superuser:
@@ -247,7 +255,7 @@ async def respond_to_loan_request(
         title=f"Loan Request {status_msg.capitalize()}",
         message=f"Your request for '{loan.item.title}' has been {status_msg}.",
         type=NotificationType.SUCCESS if accept else NotificationType.WARNING,
-        link="/loans"
+        link=f"/communities/{loan.community_id}" if loan.community_id else "/loans"
     )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)
@@ -291,6 +299,7 @@ async def cancel_loan(
     session.refresh(loan)
 
     # Notify the other party
+    notif_link = f"/communities/{loan.community_id}" if loan.community_id else "/loans"
     if is_requester:
         # Notify owner or admins
         if loan.community_id:
@@ -306,7 +315,7 @@ async def cancel_loan(
                     title="Loan Request Cancelled",
                     message=f"{current_user.full_name or current_user.email} has cancelled their request for '{loan.item.title}'.",
                     type=NotificationType.WARNING,
-                    link="/loans"
+                    link=notif_link
                 )
         elif loan.owner_id:
             await notify_user(
@@ -315,7 +324,7 @@ async def cancel_loan(
                 title="Loan Request Cancelled",
                 message=f"{current_user.full_name or current_user.email} has cancelled their request for '{loan.item.title}'.",
                 type=NotificationType.WARNING,
-                link="/loans"
+                link=notif_link
             )
     else:
         # Owner/Admin cancelled, notify requester
@@ -325,7 +334,7 @@ async def cancel_loan(
             title="Loan Request Cancelled",
             message=f"The owner/admin has cancelled the loan for '{loan.item.title}'.",
             type=NotificationType.WARNING,
-            link="/loans"
+            link=notif_link
         )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)
@@ -436,6 +445,7 @@ async def return_loan(
     """
     Mark an item as returned (Owner or Community Admin only).
     Allows unilateral return by owner/admin regardless of 'return_pending' status.
+    Admins cannot confirm their own returns if there is more than 1 admin.
     """
     loan = session.get(Loan, id)
     if not loan:
@@ -452,6 +462,14 @@ async def return_loan(
             CommunityMember.role == CommunityMemberRole.ADMIN
         )
         if session.exec(statement).first():
+            # Check if admin is the borrower
+            if loan.requester_id == current_user.id:
+                admin_count = get_community_admin_count(session, loan.community_id)
+                if admin_count > 1:
+                    raise HTTPException(
+                        status_code=403, 
+                        detail="You cannot confirm receipt of your own loan return when other admins are present"
+                    )
             can_confirm = True
             
     if not can_confirm and not current_user.is_superuser:
@@ -539,6 +557,7 @@ async def respond_to_extension_request(
 ) -> Any:
     """
     Accept or reject a loan extension request (Owner or Community Admin only).
+    Admins cannot approve their own extensions if there is more than 1 admin.
     """
     loan = session.get(Loan, id)
     if not loan:
@@ -555,6 +574,14 @@ async def respond_to_extension_request(
             CommunityMember.role == CommunityMemberRole.ADMIN
         )
         if session.exec(statement).first():
+            # Check if admin is the borrower
+            if loan.requester_id == current_user.id:
+                admin_count = get_community_admin_count(session, loan.community_id)
+                if admin_count > 1:
+                    raise HTTPException(
+                        status_code=403, 
+                        detail="You cannot approve your own loan extension when other admins are present"
+                    )
             can_respond = True
             
     if not can_respond and not current_user.is_superuser:

@@ -3,173 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { CollectionsReadCollectionsData, CollectionsReadCollectionsResponse, CollectionsCreateCollectionData, CollectionsCreateCollectionResponse, CollectionsReadCollectionData, CollectionsReadCollectionResponse, CollectionsUpdateCollectionData, CollectionsUpdateCollectionResponse, CollectionsDeleteCollectionData, CollectionsDeleteCollectionResponse, CollectionsAddItemToCollectionData, CollectionsAddItemToCollectionResponse, CollectionsRemoveItemFromCollectionData, CollectionsRemoveItemFromCollectionResponse, CommunitiesReadCommunitiesData, CommunitiesReadCommunitiesResponse, CommunitiesCreateCommunityData, CommunitiesCreateCommunityResponse, CommunitiesReadCommunityData, CommunitiesReadCommunityResponse, CommunitiesUpdateCommunityData, CommunitiesUpdateCommunityResponse, CommunitiesDeleteCommunityData, CommunitiesDeleteCommunityResponse, CommunitiesJoinCommunityData, CommunitiesJoinCommunityResponse, CommunitiesLeaveCommunityData, CommunitiesLeaveCommunityResponse, CommunitiesReadCommunityMembersData, CommunitiesReadCommunityMembersResponse, CommunitiesUpdateCommunityMemberRoleData, CommunitiesUpdateCommunityMemberRoleResponse, CommunitiesUpdateCommunityNotificationsData, CommunitiesUpdateCommunityNotificationsResponse, CommunitiesReadCommunityItemsData, CommunitiesReadCommunityItemsResponse, CommunitiesAddItemToCommunityData, CommunitiesAddItemToCommunityResponse, CommunitiesRemoveItemFromCommunityData, CommunitiesRemoveItemFromCommunityResponse, CommunitiesInitiateDonationData, CommunitiesInitiateDonationResponse, CommunitiesRatifyDonationData, CommunitiesRatifyDonationResponse, CommunitiesReadCommunityAnnouncementsData, CommunitiesReadCommunityAnnouncementsResponse, CommunitiesCreateCommunityAnnouncementData, CommunitiesCreateCommunityAnnouncementResponse, CommunitiesReadCommunityMessagesData, CommunitiesReadCommunityMessagesResponse, CommunitiesCreateCommunityMessageData, CommunitiesCreateCommunityMessageResponse, CommunitiesUpdateCommunityMessageData, CommunitiesUpdateCommunityMessageResponse, CommunitiesDeleteCommunityMessageData, CommunitiesDeleteCommunityMessageResponse, CommunitiesReadCommunityLoansData, CommunitiesReadCommunityLoansResponse, FriendsSearchUserByIdData, FriendsSearchUserByIdResponse, FriendsReadFriendsData, FriendsReadFriendsResponse, FriendsReadFriendRequestsData, FriendsReadFriendRequestsResponse, FriendsReadSentFriendRequestsData, FriendsReadSentFriendRequestsResponse, FriendsCreateFriendRequestData, FriendsCreateFriendRequestResponse, FriendsAcceptFriendRequestData, FriendsAcceptFriendRequestResponse, FriendsRemoveFriendData, FriendsRemoveFriendResponse, InterestsReadInterestsData, InterestsReadInterestsResponse, ItemsSearchBookRegistryData, ItemsSearchBookRegistryResponse, ItemsLookupBookRegistryData, ItemsLookupBookRegistryResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, ItemsDuplicateItemData, ItemsDuplicateItemResponse, ItemsReadWorkMetadataData, ItemsReadWorkMetadataResponse, ItemsUpdateWorkMetadataData, ItemsUpdateWorkMetadataResponse, ItemsCreateReviewData, ItemsCreateReviewResponse, ItemsReadReviewsData, ItemsReadReviewsResponse, ItemsVoteReviewData, ItemsVoteReviewResponse, ItemsCreateConditionRatingData, ItemsCreateConditionRatingResponse, ItemsReadItemConditionRatingsData, ItemsReadItemConditionRatingsResponse, LoansCreateLoanRequestData, LoansCreateLoanRequestResponse, LoansReadIncomingLoanRequestsData, LoansReadIncomingLoanRequestsResponse, LoansReadOutgoingLoanRequestsData, LoansReadOutgoingLoanRequestsResponse, LoansRespondToLoanRequestData, LoansRespondToLoanRequestResponse, LoansCancelLoanData, LoansCancelLoanResponse, LoansRatifyLoanData, LoansRatifyLoanResponse, LoansSignalReturnData, LoansSignalReturnResponse, LoansReturnLoanData, LoansReturnLoanResponse, LoansCreateExtensionRequestData, LoansCreateExtensionRequestResponse, LoansRespondToExtensionRequestData, LoansRespondToExtensionRequestResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginVerifyEmailData, LoginVerifyEmailResponse, LoginResendVerificationEmailData, LoginResendVerificationEmailResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, LoginLoginGoogleInitResponse, LoginLoginGoogleCallbackData, LoginLoginGoogleCallbackResponse, NotificationsReadNotificationsData, NotificationsReadNotificationsResponse, NotificationsMarkNotificationAsReadData, NotificationsMarkNotificationAsReadResponse, NotificationsMarkAllNotificationsAsReadResponse, NotificationsDeleteNotificationData, NotificationsDeleteNotificationResponse, NotificationsGetVapidPublicKeyResponse, NotificationsSubscribePushData, NotificationsSubscribePushResponse, NotificationsUnsubscribePushData, NotificationsUnsubscribePushResponse, ReadingLogReadReadingLogData, ReadingLogReadReadingLogResponse, ReadingLogCreateReadingLogEntryData, ReadingLogCreateReadingLogEntryResponse, ReadingLogUpdateReadingLogEntryData, ReadingLogUpdateReadingLogEntryResponse, ReadingLogDeleteReadingLogEntryData, ReadingLogDeleteReadingLogEntryResponse, SearchSearchData, SearchSearchResponse, StorageUploadData, StorageUploadResponse, StorageGetImageData, StorageGetImageResponse, StorageDeleteData, StorageDeleteResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersUpdateUserProfileData, UsersUpdateUserProfileResponse, UsersUploadUserProfilePictureData, UsersUploadUserProfilePictureResponse, UsersReadUserSettingsMeResponse, UsersUpdateUserSettingsData, UsersUpdateUserSettingsResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
-
-export class CollectionsService {
-    /**
-     * Read Collections
-     * Retrieve collections.
-     * @param data The data for the request.
-     * @param data.skip
-     * @param data.limit
-     * @param data.ownerId
-     * @param data.communityId
-     * @returns CollectionsPublic Successful Response
-     * @throws ApiError
-     */
-    public static readCollections(data: CollectionsReadCollectionsData = {}): CancelablePromise<CollectionsReadCollectionsResponse> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/collections/',
-            query: {
-                skip: data.skip,
-                limit: data.limit,
-                owner_id: data.ownerId,
-                community_id: data.communityId
-            },
-            errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-    
-    /**
-     * Create Collection
-     * Create new collection.
-     * @param data The data for the request.
-     * @param data.requestBody
-     * @param data.communityId
-     * @returns CollectionPublic Successful Response
-     * @throws ApiError
-     */
-    public static createCollection(data: CollectionsCreateCollectionData): CancelablePromise<CollectionsCreateCollectionResponse> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/collections/',
-            query: {
-                community_id: data.communityId
-            },
-            body: data.requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-    
-    /**
-     * Read Collection
-     * Get collection by ID.
-     * @param data The data for the request.
-     * @param data.id
-     * @returns CollectionPublic Successful Response
-     * @throws ApiError
-     */
-    public static readCollection(data: CollectionsReadCollectionData): CancelablePromise<CollectionsReadCollectionResponse> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/collections/{id}',
-            path: {
-                id: data.id
-            },
-            errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-    
-    /**
-     * Update Collection
-     * Update a collection.
-     * @param data The data for the request.
-     * @param data.id
-     * @param data.requestBody
-     * @returns CollectionPublic Successful Response
-     * @throws ApiError
-     */
-    public static updateCollection(data: CollectionsUpdateCollectionData): CancelablePromise<CollectionsUpdateCollectionResponse> {
-        return __request(OpenAPI, {
-            method: 'PATCH',
-            url: '/api/v1/collections/{id}',
-            path: {
-                id: data.id
-            },
-            body: data.requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-    
-    /**
-     * Delete Collection
-     * Delete a collection.
-     * @param data The data for the request.
-     * @param data.id
-     * @returns Message Successful Response
-     * @throws ApiError
-     */
-    public static deleteCollection(data: CollectionsDeleteCollectionData): CancelablePromise<CollectionsDeleteCollectionResponse> {
-        return __request(OpenAPI, {
-            method: 'DELETE',
-            url: '/api/v1/collections/{id}',
-            path: {
-                id: data.id
-            },
-            errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-    
-    /**
-     * Add Item To Collection
-     * Add an item to a collection.
-     * @param data The data for the request.
-     * @param data.id
-     * @param data.itemId
-     * @returns Message Successful Response
-     * @throws ApiError
-     */
-    public static addItemToCollection(data: CollectionsAddItemToCollectionData): CancelablePromise<CollectionsAddItemToCollectionResponse> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/collections/{id}/items/{item_id}',
-            path: {
-                id: data.id,
-                item_id: data.itemId
-            },
-            errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-    
-    /**
-     * Remove Item From Collection
-     * Remove an item from a collection.
-     * @param data The data for the request.
-     * @param data.id
-     * @param data.itemId
-     * @returns Message Successful Response
-     * @throws ApiError
-     */
-    public static removeItemFromCollection(data: CollectionsRemoveItemFromCollectionData): CancelablePromise<CollectionsRemoveItemFromCollectionResponse> {
-        return __request(OpenAPI, {
-            method: 'DELETE',
-            url: '/api/v1/collections/{id}/items/{item_id}',
-            path: {
-                id: data.id,
-                item_id: data.itemId
-            },
-            errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-    
-}
+import type { CommunitiesReadCommunitiesData, CommunitiesReadCommunitiesResponse, CommunitiesCreateCommunityData, CommunitiesCreateCommunityResponse, CommunitiesReadCommunityData, CommunitiesReadCommunityResponse, CommunitiesUpdateCommunityData, CommunitiesUpdateCommunityResponse, CommunitiesDeleteCommunityData, CommunitiesDeleteCommunityResponse, CommunitiesJoinCommunityData, CommunitiesJoinCommunityResponse, CommunitiesLeaveCommunityData, CommunitiesLeaveCommunityResponse, CommunitiesReadCommunityMembersData, CommunitiesReadCommunityMembersResponse, CommunitiesUpdateCommunityMemberRoleData, CommunitiesUpdateCommunityMemberRoleResponse, CommunitiesUpdateCommunityNotificationsData, CommunitiesUpdateCommunityNotificationsResponse, CommunitiesReadCommunityItemsData, CommunitiesReadCommunityItemsResponse, CommunitiesAddItemToCommunityData, CommunitiesAddItemToCommunityResponse, CommunitiesRemoveItemFromCommunityData, CommunitiesRemoveItemFromCommunityResponse, CommunitiesInitiateDonationData, CommunitiesInitiateDonationResponse, CommunitiesRatifyDonationData, CommunitiesRatifyDonationResponse, CommunitiesReadCommunityAnnouncementsData, CommunitiesReadCommunityAnnouncementsResponse, CommunitiesCreateCommunityAnnouncementData, CommunitiesCreateCommunityAnnouncementResponse, CommunitiesReadCommunityMessagesData, CommunitiesReadCommunityMessagesResponse, CommunitiesCreateCommunityMessageData, CommunitiesCreateCommunityMessageResponse, CommunitiesUpdateCommunityMessageData, CommunitiesUpdateCommunityMessageResponse, CommunitiesDeleteCommunityMessageData, CommunitiesDeleteCommunityMessageResponse, CommunitiesReadCommunityLoansData, CommunitiesReadCommunityLoansResponse, FriendsSearchUserByIdData, FriendsSearchUserByIdResponse, FriendsReadFriendsData, FriendsReadFriendsResponse, FriendsReadFriendRequestsData, FriendsReadFriendRequestsResponse, FriendsReadSentFriendRequestsData, FriendsReadSentFriendRequestsResponse, FriendsCreateFriendRequestData, FriendsCreateFriendRequestResponse, FriendsAcceptFriendRequestData, FriendsAcceptFriendRequestResponse, FriendsRemoveFriendData, FriendsRemoveFriendResponse, InterestsReadInterestsData, InterestsReadInterestsResponse, ItemsSearchBookRegistryData, ItemsSearchBookRegistryResponse, ItemsLookupBookRegistryData, ItemsLookupBookRegistryResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, ItemsDuplicateItemData, ItemsDuplicateItemResponse, ItemsReadWorkMetadataData, ItemsReadWorkMetadataResponse, ItemsUpdateWorkMetadataData, ItemsUpdateWorkMetadataResponse, ItemsCreateReviewData, ItemsCreateReviewResponse, ItemsReadReviewsData, ItemsReadReviewsResponse, ItemsVoteReviewData, ItemsVoteReviewResponse, ItemsCreateConditionRatingData, ItemsCreateConditionRatingResponse, ItemsReadItemConditionRatingsData, ItemsReadItemConditionRatingsResponse, LoansCreateLoanRequestData, LoansCreateLoanRequestResponse, LoansReadIncomingLoanRequestsData, LoansReadIncomingLoanRequestsResponse, LoansReadOutgoingLoanRequestsData, LoansReadOutgoingLoanRequestsResponse, LoansRespondToLoanRequestData, LoansRespondToLoanRequestResponse, LoansCancelLoanData, LoansCancelLoanResponse, LoansRatifyLoanData, LoansRatifyLoanResponse, LoansSignalReturnData, LoansSignalReturnResponse, LoansReturnLoanData, LoansReturnLoanResponse, LoansCreateExtensionRequestData, LoansCreateExtensionRequestResponse, LoansRespondToExtensionRequestData, LoansRespondToExtensionRequestResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginVerifyEmailData, LoginVerifyEmailResponse, LoginResendVerificationEmailData, LoginResendVerificationEmailResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, LoginLoginGoogleInitResponse, LoginLoginGoogleCallbackData, LoginLoginGoogleCallbackResponse, NotificationsReadNotificationsData, NotificationsReadNotificationsResponse, NotificationsMarkNotificationAsReadData, NotificationsMarkNotificationAsReadResponse, NotificationsMarkAllNotificationsAsReadResponse, NotificationsDeleteNotificationData, NotificationsDeleteNotificationResponse, NotificationsGetVapidPublicKeyResponse, NotificationsSubscribePushData, NotificationsSubscribePushResponse, NotificationsUnsubscribePushData, NotificationsUnsubscribePushResponse, ReadingLogReadReadingLogData, ReadingLogReadReadingLogResponse, ReadingLogCreateReadingLogEntryData, ReadingLogCreateReadingLogEntryResponse, ReadingLogUpdateReadingLogEntryData, ReadingLogUpdateReadingLogEntryResponse, ReadingLogDeleteReadingLogEntryData, ReadingLogDeleteReadingLogEntryResponse, SearchSearchData, SearchSearchResponse, StorageUploadData, StorageUploadResponse, StorageGetImageData, StorageGetImageResponse, StorageDeleteData, StorageDeleteResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersUpdateUserProfileData, UsersUpdateUserProfileResponse, UsersUploadUserProfilePictureData, UsersUploadUserProfilePictureResponse, UsersReadUserSettingsMeResponse, UsersUpdateUserSettingsData, UsersUpdateUserSettingsResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
 
 export class CommunitiesService {
     /**
@@ -508,6 +342,7 @@ export class CommunitiesService {
     /**
      * Ratify Donation
      * Ratify a donation (Admin only).
+     * Admins cannot ratify their own donations if there is more than 1 admin.
      * @param data The data for the request.
      * @param data.id
      * @param data.itemId
@@ -946,7 +781,6 @@ export class ItemsService {
      * @param data.ownerId
      * @param data.sortBy
      * @param data.sortOrder
-     * @param data.excludeCollections
      * @param data.category
      * @param data.genre
      * @returns ItemsPublic Successful Response
@@ -962,7 +796,6 @@ export class ItemsService {
                 owner_id: data.ownerId,
                 sort_by: data.sortBy,
                 sort_order: data.sortOrder,
-                exclude_collections: data.excludeCollections,
                 category: data.category,
                 genre: data.genre
             },
@@ -1269,7 +1102,8 @@ export class LoansService {
     
     /**
      * Read Incoming Loan Requests
-     * Retrieve loan requests for items owned by the current user or their communities.
+     * Retrieve loan requests for items owned by the current user.
+     * Community loans are managed within the community's own loans section.
      * @param data The data for the request.
      * @param data.skip
      * @param data.limit
@@ -1316,6 +1150,7 @@ export class LoansService {
     /**
      * Respond To Loan Request
      * Accept or reject a loan request (Owner or Community Admin only).
+     * Admins cannot approve their own requests if there is more than 1 admin.
      * @param data The data for the request.
      * @param data.id
      * @param data.accept
@@ -1406,6 +1241,7 @@ export class LoansService {
      * Return Loan
      * Mark an item as returned (Owner or Community Admin only).
      * Allows unilateral return by owner/admin regardless of 'return_pending' status.
+     * Admins cannot confirm their own returns if there is more than 1 admin.
      * @param data The data for the request.
      * @param data.id
      * @returns LoanPublic Successful Response
@@ -1452,6 +1288,7 @@ export class LoansService {
     /**
      * Respond To Extension Request
      * Accept or reject a loan extension request (Owner or Community Admin only).
+     * Admins cannot approve their own extensions if there is more than 1 admin.
      * @param data The data for the request.
      * @param data.id
      * @param data.accept

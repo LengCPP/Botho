@@ -39,8 +39,10 @@ def delete_community_from_search(community_id: uuid.UUID):
 
 def sync_work_metadata_to_search(meta: WorkMetadata):
     index = client.index("works")
+    # Use deterministic UUID based on author and title for safe Meilisearch ID
+    safe_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{meta.author}:{meta.title}"))
     document = {
-        "id": f"{meta.author}|{meta.title}", # Composite key for indexing
+        "id": safe_id,
         "author": meta.author,
         "title": meta.title,
         "isbn": meta.isbn,

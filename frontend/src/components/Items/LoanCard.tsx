@@ -62,6 +62,7 @@ export function LoanCard({ loan, type }: LoanCardProps) {
   const isPending = loan.status === "PENDING"
   const isAccepted = loan.status === "ACCEPTED"
   const isActive = loan.status === "ACTIVE"
+  const isReturnPending = loan.status === "RETURN_PENDING"
   const canCancel = isPending || isAccepted
 
   return (
@@ -96,10 +97,12 @@ export function LoanCard({ loan, type }: LoanCardProps) {
                   ? "main"
                   : loan.status === "REJECTED" || loan.status === "CANCELLED"
                     ? "red"
-                    : "gray"
+                    : loan.status === "RETURN_PENDING"
+                      ? "orange"
+                      : "gray"
           }
         >
-          {loan.status.toUpperCase()}
+          {loan.status.replace("_", " ").toUpperCase()}
         </Badge>
       </Flex>
 
@@ -163,15 +166,21 @@ export function LoanCard({ loan, type }: LoanCardProps) {
           </Button>
         )}
 
-        {type === "incoming" && isActive && (
+        {type === "incoming" && (isActive || isReturnPending) && (
           <Button
             size="xs"
-            colorPalette="gray"
+            colorPalette={isReturnPending ? "green" : "gray"}
             width="full"
             onClick={() => returnMutation.mutate()}
             loading={returnMutation.isPending}
           >
-            Mark as Returned
+            {isReturnPending ? (
+              <>
+                <FiCheckCircle /> Confirm Receipt
+              </>
+            ) : (
+              "Mark as Returned"
+            )}
           </Button>
         )}
 
