@@ -235,9 +235,7 @@ function ItemsTable() {
 
   const renderGroup = (groups: ItemPublic[][]) => (
     <SimpleGrid
-      columns={
-        view_mode === "list" ? 1 : { base: 2, sm: 3, md: 4, lg: 5, xl: 6 }
-      }
+      columns={view_mode === "list" ? 1 : { base: 2, sm: 3, md: 4 }}
       gap={view_mode === "list" ? 2 : { base: 2, md: 6 }}
       opacity={isPlaceholderData ? 0.5 : 1}
     >

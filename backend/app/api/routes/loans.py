@@ -1,30 +1,29 @@
 import uuid
+from datetime import datetime
 from typing import Any
-from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException
-from sqlmodel import select, func, or_
+from sqlmodel import and_, func, or_, select
 
 from app.api.deps import CurrentUser, SessionDep
+from app.api.utils import check_item_availability, filter_loan_privacy
 from app.models import (
+    Community,
+    CommunityItem,
+    CommunityMember,
+    CommunityMemberRole,
+    CommunityMemberStatus,
+    Friendship,
+    FriendshipStatus,
+    Item,
     Loan,
     LoanCreate,
     LoanPublic,
     LoansPublic,
     LoanStatus,
-    Item,
-    Message,
     NotificationType,
-    User,
-    CommunityItem,
-    CommunityMember,
-    CommunityMemberRole,
-    CommunityMemberStatus,
-    Community,
 )
 from app.notifications import notify_user
-from app.api.utils import filter_loan_privacy, check_item_availability
-from app import crud
 
 router = APIRouter(prefix="/loans", tags=["loans"])
 
@@ -55,7 +54,7 @@ async def create_loan_request(
     item = session.get(Item, loan_in.item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
-    
+
     # Check if user is already the owner
     if item.owner_id == current_user.id:
         raise HTTPException(status_code=400, detail="You already own this item")
@@ -67,7 +66,7 @@ async def create_loan_request(
     if loan_in.community_id:
         # Borrowing from a community pool
         community_id = loan_in.community_id
-        
+
         # Check if item is in this community pool
         statement = select(CommunityItem).where(
             CommunityItem.community_id == community_id,
@@ -77,19 +76,49 @@ async def create_loan_request(
             # Also check if it's exclusively community owned
             if item.owner_id != community_id:
                 raise HTTPException(status_code=400, detail="Item is not in this community")
-        
-        # Check if requester is a member
+
+        # Check if requester is a member (Admins are members)
         statement = select(CommunityMember).where(
             CommunityMember.community_id == community_id,
             CommunityMember.user_id == current_user.id,
             CommunityMember.status == CommunityMemberStatus.ACCEPTED
         )
-        if not session.exec(statement).first():
+        if not session.exec(statement).first() and not current_user.is_superuser:
             raise HTTPException(status_code=403, detail="Must be a member of the community to borrow its items")
     else:
         # Personal loan OR borrowing community-owned item directly
         if item.user_owner:
             owner_id = item.owner_id
+
+            # Check if they are friends or share a community
+            friends_stmt = select(Friendship).where(
+                Friendship.status == FriendshipStatus.ACCEPTED,
+                or_(
+                    and_(Friendship.user_id == current_user.id, Friendship.friend_id == owner_id),
+                    and_(Friendship.user_id == owner_id, Friendship.friend_id == current_user.id)
+                )
+            )
+            is_friend = session.exec(friends_stmt).first() is not None
+
+            if not is_friend:
+                # Try to find a shared community to act as a bridge
+                shared_comm_stmt = select(CommunityMember.community_id).where(
+                    CommunityMember.user_id == current_user.id,
+                    CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+                    CommunityMember.community_id.in_(
+                        select(CommunityMember.community_id).where(
+                            CommunityMember.user_id == owner_id,
+                            CommunityMember.status == CommunityMemberStatus.ACCEPTED
+                        )
+                    )
+                )
+                shared_comm_ids = session.exec(shared_comm_stmt).all()
+                if shared_comm_ids:
+                    # Use the first shared community as the bridge
+                    community_id = shared_comm_ids[0]
+                else:
+                    # No bridge found
+                    raise HTTPException(status_code=403, detail="You must be friends or share a community to borrow this item")
         elif item.community_owner:
             community_id = item.owner_id
             # Ensure they are members if it's community owned
@@ -149,7 +178,7 @@ async def create_loan_request(
             link="/loans"
         )
 
-    return filter_loan_privacy(db_loan, current_user.id, is_admin=current_user.is_superuser)
+    return filter_loan_privacy(db_loan, current_user.id, is_admin=current_user.is_superuser, session=session)
 
 
 @router.get("/incoming", response_model=LoansPublic)
@@ -165,19 +194,27 @@ def read_incoming_loan_requests(
         .where(Loan.owner_id == current_user.id)
         .order_by(Loan.created_at.desc())
     )
-    
+
     count_statement = (
         select(func.count())
         .select_from(Loan)
         .where(Loan.owner_id == current_user.id)
     )
-    
+
     count = session.exec(count_statement).one()
     loans = session.exec(statement.offset(skip).limit(limit)).all()
-    
+
     return LoansPublic(
-        data=[filter_loan_privacy(l, current_user.id, is_admin=current_user.is_superuser) for l in loans], 
-        count=count
+        data=[
+            filter_loan_privacy(
+                loan_obj,
+                current_user.id,
+                is_admin=current_user.is_superuser,
+                session=session,
+            )
+            for loan_obj in loans
+        ],
+        count=count,
     )
 
 
@@ -194,12 +231,20 @@ def read_outgoing_loan_requests(
         .order_by(Loan.created_at.desc())
     )
     count_statement = select(func.count()).select_from(Loan).where(Loan.requester_id == current_user.id)
-    
+
     count = session.exec(count_statement).one()
     loans = session.exec(statement.offset(skip).limit(limit)).all()
     return LoansPublic(
-        data=[filter_loan_privacy(l, current_user.id, is_admin=current_user.is_superuser) for l in loans], 
-        count=count
+        data=[
+            filter_loan_privacy(
+                loan_obj,
+                current_user.id,
+                is_admin=current_user.is_superuser,
+                session=session,
+            )
+            for loan_obj in loans
+        ],
+        count=count,
     )
 
 
@@ -214,7 +259,7 @@ async def respond_to_loan_request(
     loan = session.get(Loan, id)
     if not loan:
         raise HTTPException(status_code=404, detail="Loan request not found")
-    
+
     # Permission check
     can_respond = False
     if loan.owner_id == current_user.id:
@@ -231,14 +276,14 @@ async def respond_to_loan_request(
                 admin_count = get_community_admin_count(session, loan.community_id)
                 if admin_count > 1:
                     raise HTTPException(
-                        status_code=403, 
+                        status_code=403,
                         detail="You cannot approve your own loan request when other admins are present"
                     )
             can_respond = True
-            
+
     if not can_respond and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Not enough permissions")
-        
+
     if loan.status != LoanStatus.PENDING:
         raise HTTPException(status_code=400, detail="Loan is not in pending state")
 
@@ -258,7 +303,7 @@ async def respond_to_loan_request(
         link=f"/communities/{loan.community_id}" if loan.community_id else "/loans"
     )
 
-    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)
+    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
 
 
 @router.patch("/{id}/cancel", response_model=LoanPublic)
@@ -337,7 +382,7 @@ async def cancel_loan(
             link=notif_link
         )
 
-    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)
+    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
 
 
 @router.patch("/{id}/ratify", response_model=LoanPublic)
@@ -386,7 +431,7 @@ async def ratify_loan(
             link="/loans"
         )
 
-    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)
+    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
 
 
 @router.patch("/{id}/return-signal", response_model=LoanPublic)
@@ -435,7 +480,7 @@ async def signal_return(
             link="/loans"
         )
 
-    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)
+    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
 
 
 @router.patch("/{id}/return", response_model=LoanPublic)
@@ -450,7 +495,7 @@ async def return_loan(
     loan = session.get(Loan, id)
     if not loan:
         raise HTTPException(status_code=404, detail="Loan not found")
-    
+
     # Permission check
     can_confirm = False
     if loan.owner_id == current_user.id:
@@ -467,14 +512,14 @@ async def return_loan(
                 admin_count = get_community_admin_count(session, loan.community_id)
                 if admin_count > 1:
                     raise HTTPException(
-                        status_code=403, 
+                        status_code=403,
                         detail="You cannot confirm receipt of your own loan return when other admins are present"
                     )
             can_confirm = True
-            
+
     if not can_confirm and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Not enough permissions")
-        
+
     if loan.status not in [LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING]:
         raise HTTPException(status_code=400, detail="Loan must be active or return pending to be returned")
 
@@ -493,7 +538,7 @@ async def return_loan(
         link="/loans"
     )
 
-    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)
+    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
 
 
 @router.post("/{id}/extension", response_model=LoanPublic)
@@ -506,21 +551,21 @@ async def create_extension_request(
     loan = session.get(Loan, id)
     if not loan:
         raise HTTPException(status_code=404, detail="Loan not found")
-    
+
     if loan.requester_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not enough permissions")
-    
+
     if loan.status != LoanStatus.ACTIVE:
         raise HTTPException(status_code=400, detail="Loan must be active to request extension")
-        
+
     if new_end_date <= loan.end_date:
         raise HTTPException(status_code=400, detail="New end date must be after current end date")
-        
+
     loan.pending_extension_date = new_end_date
     session.add(loan)
     session.commit()
     session.refresh(loan)
-    
+
     # Notify owner or admins
     message_text = f"{current_user.full_name or current_user.email} requested an extension for '{loan.item.title}' until {new_end_date.strftime('%Y-%m-%d')}."
     if loan.community_id:
@@ -547,8 +592,8 @@ async def create_extension_request(
             type=NotificationType.INFO,
             link="/loans"
         )
-        
-    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)
+
+    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
 
 
 @router.patch("/{id}/extension/respond", response_model=LoanPublic)
@@ -562,7 +607,7 @@ async def respond_to_extension_request(
     loan = session.get(Loan, id)
     if not loan:
         raise HTTPException(status_code=404, detail="Loan not found")
-        
+
     # Permission check
     can_respond = False
     if loan.owner_id == current_user.id:
@@ -579,25 +624,25 @@ async def respond_to_extension_request(
                 admin_count = get_community_admin_count(session, loan.community_id)
                 if admin_count > 1:
                     raise HTTPException(
-                        status_code=403, 
+                        status_code=403,
                         detail="You cannot approve your own loan extension when other admins are present"
                     )
             can_respond = True
-            
+
     if not can_respond and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Not enough permissions")
-        
+
     if not loan.pending_extension_date:
         raise HTTPException(status_code=400, detail="No pending extension request")
-        
+
     if accept:
         loan.end_date = loan.pending_extension_date
-        
+
     loan.pending_extension_date = None
     session.add(loan)
     session.commit()
     session.refresh(loan)
-    
+
     # Notify requester
     status_msg = "accepted" if accept else "rejected"
     await notify_user(
@@ -608,5 +653,5 @@ async def respond_to_extension_request(
         type=NotificationType.SUCCESS if accept else NotificationType.WARNING,
         link="/loans"
     )
-    
-    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser)
+
+    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)

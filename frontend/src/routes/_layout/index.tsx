@@ -103,8 +103,8 @@ function Dashboard() {
                       <Heading size="sm" mb={4}>
                         Items
                       </Heading>
-                      <Grid
-                        templateColumns="repeat(auto-fill, minmax(160px, 1fr))"
+                      <SimpleGrid
+                        columns={{ base: 2, sm: 3, md: 4 }}
                         gap={{ base: 4, md: 6 }}
                       >
                         {groupItems(searchResults?.items || []).map(
@@ -112,7 +112,7 @@ function Dashboard() {
                             <ItemCard key={group[0].id} item={group} />
                           ),
                         )}
-                      </Grid>
+                      </SimpleGrid>
                     </Box>
                   )}
 

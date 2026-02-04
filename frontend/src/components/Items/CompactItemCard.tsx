@@ -1,4 +1,8 @@
-import type { ItemPublic, LoanPublic } from "@/client"
+import {
+  CommunitiesService,
+  type ItemPublic,
+  type LoanPublic,
+} from "@/client"
 import { ItemActionsMenu } from "@/components/Common/ItemActionsMenu"
 import { useColorModeValue } from "@/components/ui/color-mode"
 import useAuth from "@/hooks/useAuth"
@@ -13,6 +17,7 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react"
+import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
 import { FiChevronRight, FiEye } from "react-icons/fi"
 import { FriendItemActionsMenu } from "./FriendItemActionsMenu"
@@ -36,6 +41,12 @@ export const CompactItemCard = ({
 }: CompactItemCardProps) => {
   const [itemIndex, setItemIndex] = useState(0)
   const { user } = useAuth()
+
+  const { data: community } = useQuery({
+    queryKey: ["community", communityId],
+    queryFn: () => CommunitiesService.readCommunity({ id: communityId! }),
+    enabled: !!communityId,
+  })
 
   const items = Array.isArray(itemProp) ? itemProp : [itemProp]
   const isGrouped = items.length > 1
@@ -166,6 +177,7 @@ export const CompactItemCard = ({
               isBorrowing={isBorrowing}
               loanId={loan?.id}
               communityId={communityId}
+              community={community}
               isAdmin={isAdmin}
               onShowDetails={onShowDetails}
             />

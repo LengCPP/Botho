@@ -632,9 +632,7 @@ function CommunityBoard() {
 
   const renderGroup = (groups: ItemPublic[][]) => (
     <SimpleGrid
-      columns={
-        viewMode === "list" ? 1 : { base: 2, sm: 3, md: 4, lg: 5, xl: 6 }
-      }
+      columns={viewMode === "list" ? 1 : { base: 2, sm: 3, md: 4 }}
       gap={viewMode === "list" ? 2 : { base: 2, md: 6 }}
     >
       {groups.map((group) => {
@@ -970,16 +968,6 @@ function CommunityBoard() {
                         </Popover.Positioner>
                       </Portal>
                     </Popover.Root>
-                  )}
-                  {selectedGroup && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSelectedGroup(null)}
-                    >
-                      <FaChevronLeft style={{ marginRight: "8px" }} />{" "}
-                      Collections
-                    </Button>
                   )}
                 </HStack>
                 <AddItem communityId={communityId} isAdmin={isAdmin} />

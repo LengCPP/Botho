@@ -43,6 +43,7 @@ from app.models import (
     UserPublic,
     UsersPublic,
     ItemType,
+    WorkMetadata,
 )
 from app.api.utils import filter_user_privacy, filter_owner_privacy, filter_loan_privacy, check_item_availability
 from app.search import delete_community_from_search, sync_community_to_search

@@ -1,5 +1,6 @@
 import {
   CommunitiesService,
+  type CommunityPublic,
   type ItemPublic,
   ItemsService,
   LoansService,
@@ -41,6 +42,7 @@ interface FriendItemActionsMenuProps {
   isBorrowing?: boolean
   loanId?: string
   communityId?: string
+  community?: CommunityPublic
   isAdmin?: boolean
   onShowDetails?: () => void
 }
@@ -50,6 +52,7 @@ export const FriendItemActionsMenu = ({
   isBorrowing = false,
   loanId,
   communityId,
+  community,
   isAdmin = false,
   onShowDetails,
 }: FriendItemActionsMenuProps) => {
@@ -378,7 +381,7 @@ export const FriendItemActionsMenu = ({
           item={item}
           isOpen={isLoanModalOpen}
           onClose={() => setIsLoanModalOpen(false)}
-          communityId={communityId}
+          community={community}
         />
       </>
     )
@@ -399,7 +402,7 @@ export const FriendItemActionsMenu = ({
         item={item}
         isOpen={isLoanModalOpen}
         onClose={() => setIsLoanModalOpen(false)}
-        communityId={communityId}
+        community={community}
       />
     </>
   )

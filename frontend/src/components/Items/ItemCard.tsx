@@ -207,6 +207,12 @@ const ItemCard = ({
     isDisplayAvailable = item.owner.is_available
   }
 
+  const { data: community } = useQuery({
+    queryKey: ["community", communityId],
+    queryFn: () => CommunitiesService.readCommunity({ id: communityId! }),
+    enabled: !!communityId,
+  })
+
   return (
     <>
       <DialogRoot
@@ -236,6 +242,7 @@ const ItemCard = ({
                     isBorrowing={isBorrowing}
                     loanId={loan?.id}
                     communityId={communityId}
+                    community={community}
                     isAdmin={isAdmin}
                     onShowDetails={onShowDetails}
                   />
@@ -253,6 +260,8 @@ const ItemCard = ({
       <Box
         aspectRatio={isBook ? 2 / 3 : 3 / 4}
         width="100%"
+        maxW="400px"
+        mx="auto"
         minW="160px"
         cursor="pointer"
         perspective="1000px"

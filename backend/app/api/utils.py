@@ -59,17 +59,65 @@ def filter_owner_privacy(owner: User, current_user_id: Any = None, is_admin: boo
         show_contact_details=show_contact
     )
 
-def filter_loan_privacy(loan: Loan, current_user_id: Any = None, is_admin: bool = False) -> LoanPublic:
+def filter_loan_privacy(loan: Loan, current_user_id: Any = None, is_admin: bool = False, session: Session | None = None) -> LoanPublic:
     """
     Apply privacy filters to a loan object's owner and requester.
+    Reveals details if they are friends or share a private community.
     """
     loan_public = LoanPublic.model_validate(loan)
     
+    reveal_requester = is_admin
+    reveal_owner = is_admin
+    
+    if session and loan.owner_id and loan.requester_id:
+        # Check if current user is the owner and needs to see requester details for a decision
+        is_owner = current_user_id and str(loan.owner_id) == str(current_user_id)
+        if is_owner and loan.status in [LoanStatus.PENDING, LoanStatus.ACCEPTED]:
+            reveal_requester = True
+
+        # Check friendship
+        is_friend = session.exec(
+            select(Friendship).where(
+                Friendship.status == FriendshipStatus.ACCEPTED,
+                or_(
+                    and_(Friendship.user_id == loan.owner_id, Friendship.friend_id == loan.requester_id),
+                    and_(Friendship.user_id == loan.requester_id, Friendship.friend_id == loan.owner_id)
+                )
+            )
+        ).first() is not None
+        
+        if is_friend:
+            reveal_requester = True
+            reveal_owner = True
+        else:
+            # Check shared private community
+            from app.models import Community, CommunityMember, CommunityMemberStatus
+            
+            shared_private_comm = session.exec(
+                select(Community)
+                .join(CommunityMember, Community.id == CommunityMember.community_id)
+                .where(
+                    Community.is_private == True,
+                    CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+                    CommunityMember.user_id == loan.owner_id,
+                    Community.id.in_(
+                        select(CommunityMember.community_id).where(
+                            CommunityMember.user_id == loan.requester_id,
+                            CommunityMember.status == CommunityMemberStatus.ACCEPTED
+                        )
+                    )
+                )
+            ).first() is not None
+            
+            if shared_private_comm:
+                reveal_requester = True
+                reveal_owner = True
+
     if loan.owner:
-        loan_public.owner = filter_user_privacy(loan.owner, current_user_id, is_admin)
+        loan_public.owner = filter_user_privacy(loan.owner, current_user_id, is_admin=reveal_owner)
     
     if loan.requester:
-        loan_public.requester = filter_user_privacy(loan.requester, current_user_id, is_admin)
+        loan_public.requester = filter_user_privacy(loan.requester, current_user_id, is_admin=reveal_requester)
         
     return loan_public
 

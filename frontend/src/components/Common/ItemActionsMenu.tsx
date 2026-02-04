@@ -1,19 +1,31 @@
 import {
+  CommunitiesService,
+  type CommunityPublic,
+  type ItemPublic,
+  ItemsService,
+} from "@/client"
+import useAuth from "@/hooks/useAuth"
+import useCustomToast from "@/hooks/useCustomToast"
+import {
   Button,
   IconButton,
   VStack,
   useBreakpointValue,
 } from "@chakra-ui/react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { BsThreeDotsVertical } from "react-icons/bs"
-import { FiCopy, FiEye, FiHeart, FiMinusCircle, FiTrash2 } from "react-icons/fi"
-import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from "../ui/menu"
-
-import { CommunitiesService, type ItemPublic, ItemsService } from "@/client"
-import useCustomToast from "@/hooks/useCustomToast"
+import {
+  FiBookOpen,
+  FiCopy,
+  FiEye,
+  FiHeart,
+  FiMinusCircle,
+  FiTrash2,
+} from "react-icons/fi"
 import DeleteItem from "../Items/DeleteItem"
 import EditItem from "../Items/EditItem"
+import { LoanRequestModal } from "../Items/LoanRequestModal"
 import {
   DialogBody,
   DialogCloseTrigger,
@@ -23,6 +35,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../ui/dialog"
+import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from "../ui/menu"
 import ConfirmationModal from "./ConfirmationModal"
 
 interface ItemActionsMenuProps {
@@ -43,14 +56,22 @@ export const ItemActionsMenu = ({
   onShowDetails,
 }: ItemActionsMenuProps) => {
   const queryClient = useQueryClient()
+  const { user: currentUser } = useAuth()
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const [confirmationType, setConfirmationType] = useState<
     "donate" | "removeCommunity" | "removeCollection" | null
   >(null)
   const [isActionsModalOpen, setIsActionsModalOpen] = useState(false)
+  const [isLoanModalOpen, setIsLoanModalOpen] = useState(false)
 
   const isMobile = useBreakpointValue({ base: true, md: false })
   const isCommunityOwned = !!item.community_owner
+
+  const { data: community } = useQuery({
+    queryKey: ["community", communityId],
+    queryFn: () => CommunitiesService.readCommunity({ id: communityId! }),
+    enabled: !!communityId,
+  })
 
   const donateMutation = useMutation({
     mutationFn: () =>
@@ -250,6 +271,31 @@ export const ItemActionsMenu = ({
 
       {communityId && (
         <>
+          {isMobile ? (
+            <Button
+              variant="ghost"
+              justifyContent="center"
+              width="full"
+              onClick={() => {
+                setIsLoanModalOpen(true)
+                setIsActionsModalOpen(false)
+              }}
+              disabled={!item.is_available}
+            >
+              <FiBookOpen style={{ marginRight: "8px" }} />
+              {item.is_available ? "Request Loan" : "On Loan (Unavailable)"}
+            </Button>
+          ) : (
+            <MenuItem
+              value="request-loan"
+              onClick={() => setIsLoanModalOpen(true)}
+              disabled={!item.is_available}
+            >
+              <FiBookOpen style={{ marginRight: "8px" }} />
+              {item.is_available ? "Request Loan" : "On Loan (Unavailable)"}
+            </MenuItem>
+          )}
+
           {!isCommunityOwned &&
             !item.is_donation_pending &&
             (isMobile ? (
@@ -337,6 +383,13 @@ export const ItemActionsMenu = ({
           </DialogContent>
         </DialogRoot>
 
+        <LoanRequestModal
+          item={item}
+          isOpen={isLoanModalOpen}
+          onClose={() => setIsLoanModalOpen(false)}
+          community={community}
+        />
+
         <ConfirmationModal
           isOpen={!!confirmationType}
           onClose={() => setConfirmationType(null)}
@@ -359,6 +412,13 @@ export const ItemActionsMenu = ({
         </MenuTrigger>
         <MenuContent>{actions}</MenuContent>
       </MenuRoot>
+
+      <LoanRequestModal
+        item={item}
+        isOpen={isLoanModalOpen}
+        onClose={() => setIsLoanModalOpen(false)}
+        community={community}
+      />
 
       <ConfirmationModal
         isOpen={!!confirmationType}
