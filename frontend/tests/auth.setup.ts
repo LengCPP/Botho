@@ -9,7 +9,9 @@ setup("authenticate", async ({ page }) => {
   const password = process.env.FIRST_SUPERUSER_PASSWORD
 
   if (!email || !password) {
-    throw new Error("FIRST_SUPERUSER or FIRST_SUPERUSER_PASSWORD not found in environment variables")
+    throw new Error(
+      "FIRST_SUPERUSER or FIRST_SUPERUSER_PASSWORD not found in environment variables",
+    )
   }
 
   await page.getByPlaceholder("Email").fill(email)

@@ -265,9 +265,15 @@ const AddItem = ({
     })
   }
 
-  const filteredItems = myItems?.data.filter((item) =>
-    item.title.toLowerCase().includes(searchQuery.toLowerCase()),
-  )
+  const filteredItems = myItems?.data.filter((item) => {
+    const matchesSearch = item.title
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase())
+    const alreadyInCommunity = item.communities?.some(
+      (c) => c.id === communityId,
+    )
+    return matchesSearch && !alreadyInCommunity
+  })
 
   const selectStyle = {
     width: "100%",
@@ -342,7 +348,9 @@ const AddItem = ({
               id="title"
               name="title"
               value={watch("title")}
-              onChange={(val) => setValue("title", val, { shouldValidate: true })}
+              onChange={(val) =>
+                setValue("title", val, { shouldValidate: true })
+              }
               onSelect={handleBookSelect}
             />
           ) : (

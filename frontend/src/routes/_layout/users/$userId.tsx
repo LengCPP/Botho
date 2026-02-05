@@ -351,11 +351,7 @@ function UserProfilePage() {
               ) : (
                 /* Render Items Grid */
                 <SimpleGrid
-                  columns={
-                    viewMode === "list"
-                      ? 1
-                      : { base: 2, sm: 3, md: 4 }
-                  }
+                  columns={viewMode === "list" ? 1 : { base: 2, sm: 3, md: 4 }}
                   gap={viewMode === "list" ? 2 : { base: 2, md: 6 }}
                 >
                   {activeGroups.map((group) => {

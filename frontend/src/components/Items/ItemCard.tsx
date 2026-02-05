@@ -2,6 +2,7 @@ import {
   CommunitiesService,
   type ItemPublic,
   type LoanPublic,
+  LoansService,
   ReadingLogService,
 } from "@/client"
 import { ItemActionsMenu } from "@/components/Common/ItemActionsMenu"
@@ -23,7 +24,7 @@ import {
   useBreakpointValue,
 } from "@chakra-ui/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Link, useNavigate } from "@tanstack/react-router"
+import { Link } from "@tanstack/react-router"
 import { format } from "date-fns"
 import type React from "react"
 import { useState } from "react"
@@ -32,12 +33,13 @@ import {
   FiBookOpen,
   FiBookmark,
   FiCheck,
-  FiChevronLeft,
   FiChevronRight,
-  FiExternalLink,
+  FiClock,
+  FiCornerUpLeft,
   FiInfo,
   FiMaximize2,
   FiPlus,
+  FiX,
 } from "react-icons/fi"
 import {
   DialogBody,
@@ -47,9 +49,10 @@ import {
   DialogRoot,
   DialogTitle,
 } from "../ui/dialog"
-import EditItem from "./EditItem"
+import { ExtensionRequestModal } from "./ExtensionRequestModal"
 import { FriendItemActionsMenu } from "./FriendItemActionsMenu"
 import ItemExtendedInfo from "./ItemExtendedInfo"
+import { LoanRequestModal } from "./LoanRequestModal"
 
 interface ItemCardProps {
   item: ItemPublic | ItemPublic[]
@@ -63,7 +66,7 @@ interface ItemCardProps {
 
 const ItemCard = ({
   item: itemProp,
-  loan,
+  loan: loanProp,
   communityId,
   isAdmin,
   displayOwnerId,
@@ -73,22 +76,66 @@ const ItemCard = ({
   const [isFlipped, setIsFlipped] = useState(false)
   const [showAdditionalInfo, setShowAdditionalInfo] = useState(false)
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false)
+  const [isLoanModalOpen, setIsLoanModalOpen] = useState(false)
+  const [isExtensionModalOpen, setIsExtensionModalOpen] = useState(false)
   const [itemIndex, setItemIndex] = useState(0)
   const { user } = useAuth()
-  const navigate = useNavigate()
   const isMobile = useBreakpointValue({ base: true, md: false })
   const queryClient = useQueryClient()
-  const { showSuccessToast } = useCustomToast()
+  const { showSuccessToast, showErrorToast } = useCustomToast()
 
   const items = Array.isArray(itemProp) ? itemProp : [itemProp]
   const isGrouped = items.length > 1
   const item = items[itemIndex]
   const availableCount = items.filter((i) => i.is_available).length
 
+  // Fetch user's outgoing loans to check status
+  const { data: outgoingLoans } = useQuery({
+    queryKey: ["loans", "outgoing"],
+    queryFn: () => LoansService.readOutgoingLoanRequests({}),
+    enabled: !!user,
+  })
+
+  const currentLoan =
+    loanProp ||
+    outgoingLoans?.data.find(
+      (l) =>
+        l.item_id === item.id &&
+        !["REJECTED", "CANCELLED", "RETURNED"].includes(l.status),
+    )
+
+  const isPending = currentLoan?.status === "PENDING"
+  const isActive = currentLoan?.status === "ACTIVE"
+  const isReturnPending = currentLoan?.status === "RETURN_PENDING"
+
   // Color Mode Values
   const bgColor = useColorModeValue("accent.50", "gray.800")
   const textColor = useColorModeValue("gray.800", "gray.100")
   const borderColor = useColorModeValue("accent.200", "gray.600")
+
+  // Mutations
+  const cancelLoanMutation = useMutation({
+    mutationFn: () => LoansService.cancelLoan({ id: currentLoan!.id }),
+    onSuccess: () => {
+      showSuccessToast("Loan request cancelled.")
+      queryClient.invalidateQueries({ queryKey: ["loans"] })
+    },
+    onError: (err: any) => {
+      showErrorToast(err.body?.detail || "Failed to cancel loan request")
+    },
+  })
+
+  const signalReturnMutation = useMutation({
+    mutationFn: () =>
+      LoansService.signalReturn({ id: (loanProp?.id || currentLoan?.id)! }),
+    onSuccess: () => {
+      showSuccessToast("Return signaled to owner.")
+      queryClient.invalidateQueries({ queryKey: ["loans"] })
+    },
+    onError: (err: any) => {
+      showErrorToast(err.body?.detail || "Failed to signal return")
+    },
+  })
 
   // Reading Log Logic
   const { data: readingLogData } = useQuery({
@@ -123,7 +170,6 @@ const ItemCard = ({
           },
         })
       }
-      // If completed, do nothing for now (or maybe toggle back?)
       return null
     },
     onSuccess: (data) => {
@@ -149,18 +195,12 @@ const ItemCard = ({
   const handleFlip = (e: React.MouseEvent) => {
     e.stopPropagation()
     setIsFlipped(!isFlipped)
-    // Reset additional info view when flipping back
     if (isFlipped) setShowAdditionalInfo(false)
   }
 
   const handleNextItem = (e: React.MouseEvent) => {
     e.stopPropagation()
     setItemIndex((prev) => (prev + 1) % items.length)
-  }
-
-  const handlePrevItem = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    setItemIndex((prev) => (prev - 1 + items.length) % items.length)
   }
 
   const handleInfoClick = (e: React.MouseEvent) => {
@@ -179,39 +219,108 @@ const ItemCard = ({
     }
   }
 
-  // Simplified ownership detection
+  // Ownership detection
   const isOwner = item.owner_id === user?.id
   const isCommunityOwned = !!item.community_owner
   const canManage = isOwner || (isCommunityOwned && isAdmin)
 
   const isBorrowing =
-    !!loan &&
-    loan.requester_id === user?.id &&
-    ["active", "return_pending"].includes(loan.status)
+    !!currentLoan &&
+    currentLoan.requester_id === user?.id &&
+    ["ACTIVE", "RETURN_PENDING"].includes(currentLoan.status)
 
   const isBook = item.item_type === "book"
   const extraData = (item.extra_data as any) || {}
-  const itemInfo = (item.info as any) || {}
-
-  const effectiveDisplayOwnerId = displayOwnerId || item.added_by_id
-
-  // Determine availability status based on context
-  let isDisplayAvailable = item.is_available
-  if (isOwner && item.owner) {
-    isDisplayAvailable = item.owner.is_available
-  } else if (
-    effectiveDisplayOwnerId &&
-    item.owner &&
-    item.owner.id === effectiveDisplayOwnerId
-  ) {
-    isDisplayAvailable = item.owner.is_available
-  }
 
   const { data: community } = useQuery({
     queryKey: ["community", communityId],
     queryFn: () => CommunitiesService.readCommunity({ id: communityId! }),
     enabled: !!communityId,
   })
+
+  const renderLoanAction = () => {
+    if (isOwner) return null
+
+    if (isPending) {
+      return (
+        <Button
+          size="xs"
+          width="full"
+          colorPalette="red"
+          variant="subtle"
+          onClick={(e) => {
+            e.stopPropagation()
+            cancelLoanMutation.mutate()
+          }}
+          loading={cancelLoanMutation.isPending}
+        >
+          <FiX /> Cancel Request
+        </Button>
+      )
+    }
+
+    if (isActive) {
+      return (
+        <HStack width="full" gap={1}>
+          <Button
+            size="xs"
+            flex={1}
+            colorPalette="main"
+            variant="solid"
+            onClick={(e) => {
+              e.stopPropagation()
+              setIsExtensionModalOpen(true)
+            }}
+          >
+            <FiClock /> Extend
+          </Button>
+          <Button
+            size="xs"
+            flex={1}
+            colorPalette="gray"
+            variant="outline"
+            onClick={(e) => {
+              e.stopPropagation()
+              signalReturnMutation.mutate()
+            }}
+            loading={signalReturnMutation.isPending}
+          >
+            <FiCornerUpLeft /> Return
+          </Button>
+        </HStack>
+      )
+    }
+
+    if (isReturnPending) {
+      return (
+        <Badge
+          colorPalette="orange"
+          variant="subtle"
+          width="full"
+          justifyContent="center"
+          p={1}
+        >
+          Return Pending
+        </Badge>
+      )
+    }
+
+    return (
+      <Button
+        size="xs"
+        width="full"
+        colorPalette="accent"
+        onClick={(e) => {
+          e.stopPropagation()
+          setIsLoanModalOpen(true)
+        }}
+        disabled={!item.is_available}
+      >
+        <FiBookOpen />
+        {item.is_available ? "Request Loan" : "On Loan"}
+      </Button>
+    )
+  }
 
   return (
     <>
@@ -240,7 +349,7 @@ const ItemCard = ({
                   <FriendItemActionsMenu
                     item={item}
                     isBorrowing={isBorrowing}
-                    loanId={loan?.id}
+                    loanId={currentLoan?.id}
                     communityId={communityId}
                     community={community}
                     isAdmin={isAdmin}
@@ -269,21 +378,18 @@ const ItemCard = ({
         position="relative"
         data-testid="item-card"
       >
-        {/* Dynamic Layered effect for grouped items (up to 3 total items visible) */}
+        {/* Layered effect for groups */}
         {items.slice(1, 3).map((layerItem, idx) => (
           <Box
             key={layerItem.id}
             position="absolute"
             inset="0"
             bg={layerItem.image_url ? "black" : bgColor}
-            borderWidth={layerItem.image_url ? "0" : "1px"}
-            borderColor={borderColor}
             borderRadius="lg"
             transform={`translate(${(idx + 1) * 4}px, -${
               (idx + 1) * 4
             }px) rotate(${(idx + 1) * 2}deg)`}
             zIndex={-(idx + 1)}
-            boxShadow={idx === 0 ? "sm" : "xs"}
             opacity={idx === 0 ? 1 : 0.7}
             overflow="hidden"
           >
@@ -308,7 +414,7 @@ const ItemCard = ({
           transformStyle="preserve-3d"
           transform={isFlipped ? "rotateY(180deg)" : "rotateY(0deg)"}
         >
-          {/* --- FRONT FACE (Cover) --- */}
+          {/* FRONT FACE */}
           <Card.Root
             position="absolute"
             width="100%"
@@ -319,18 +425,17 @@ const ItemCard = ({
             borderRadius="lg"
             borderWidth="0"
             boxShadow="md"
-            bg={item.image_url ? "black" : bgColor} // Black bg for covers to avoid white gaps
+            bg={item.image_url ? "black" : bgColor}
           >
             {item.image_url ? (
               <Image
                 src={getImageUrl(item.image_url)}
                 alt={item.title}
-                objectFit="cover" // Cover entire area to avoid white spaces
+                objectFit="cover"
                 width="100%"
                 height="100%"
               />
             ) : (
-              // Fallback Cover if no image is present
               <Flex
                 direction="column"
                 justify="center"
@@ -353,9 +458,9 @@ const ItemCard = ({
                 >
                   {item.title}
                 </Text>
-                {isBook && (item.author || extraData.author) && (
+                {item.author && (
                   <Text fontSize="md" fontStyle="italic">
-                    {String(item.author || extraData.author)}
+                    {item.author}
                   </Text>
                 )}
               </Flex>
@@ -370,14 +475,12 @@ const ItemCard = ({
                 variant="solid"
                 size="sm"
                 borderRadius="full"
-                boxShadow="lg"
               >
                 {items.length}
               </Badge>
             )}
 
-            {/* Reading Log Button */}
-            {item.author && ( // Only for items with author (Books)
+            {item.author && (
               <IconButton
                 aria-label="Reading Log"
                 size="xs"
@@ -411,7 +514,7 @@ const ItemCard = ({
             )}
           </Card.Root>
 
-          {/* --- BACK FACE (Details) --- */}
+          {/* BACK FACE */}
           <Card.Root
             position="absolute"
             width="100%"
@@ -480,17 +583,6 @@ const ItemCard = ({
                     </IconButton>
                   )}
 
-                  {item.collection_id && (
-                    <IconButton
-                      aria-label="Go to collection"
-                      size="xs"
-                      colorPalette="accent"
-                      variant="ghost"
-                      onClick={handleGoToCollection}
-                    >
-                      <FiExternalLink />
-                    </IconButton>
-                  )}
                   {canManage ? (
                     <ItemActionsMenu
                       item={item}
@@ -504,7 +596,7 @@ const ItemCard = ({
                     <FriendItemActionsMenu
                       item={item}
                       isBorrowing={isBorrowing}
-                      loanId={loan?.id}
+                      loanId={currentLoan?.id}
                       communityId={communityId}
                       isAdmin={isAdmin}
                       onShowDetails={onShowDetails}
@@ -530,34 +622,15 @@ const ItemCard = ({
                     {item.title}
                   </Text>
 
-                  {isBook && (item.author || extraData.author) && (
+                  {item.author && (
                     <Text
                       fontSize="sm"
                       fontStyle="italic"
                       color="gray.500"
                       lineClamp={1}
                     >
-                      By {String(item.author || extraData.author)}
+                      By {item.author}
                     </Text>
-                  )}
-
-                  {isBook && (extraData.category || extraData.genre) && (
-                    <HStack gap={1} mt={1} wrap="wrap">
-                      {extraData.category && (
-                        <Badge variant="outline" size="xs" colorPalette="main">
-                          {extraData.category}
-                        </Badge>
-                      )}
-                      {extraData.genre && (
-                        <Badge
-                          variant="outline"
-                          size="xs"
-                          colorPalette="purple"
-                        >
-                          {extraData.genre}
-                        </Badge>
-                      )}
-                    </HStack>
                   )}
 
                   <Box
@@ -584,36 +657,8 @@ const ItemCard = ({
                 borderTopWidth="1px"
                 borderColor={borderColor}
               >
-                {loan && (
-                  <VStack align="start" gap={0} mb={2}>
-                    <Text
-                      fontSize="2xs"
-                      color="fg.muted"
-                      fontWeight="bold"
-                      textTransform="uppercase"
-                    >
-                      Due Date
-                    </Text>
-                    <Text fontSize="xs" fontWeight="bold" color="accent.500">
-                      {format(new Date(loan.end_date), "MMM d, yyyy")}
-                    </Text>
-                  </VStack>
-                )}
-                <Badge
-                  colorPalette={availableCount > 0 ? "green" : "red"}
-                  variant="solid"
-                  mb={2}
-                  width="full"
-                  justifyContent="center"
-                >
-                  {isGrouped
-                    ? availableCount > 0
-                      ? `${availableCount} Available`
-                      : "On Loan"
-                    : availableCount > 0
-                      ? "Available"
-                      : "On Loan"}
-                </Badge>
+                <Box mb={3}>{renderLoanAction()}</Box>
+
                 <Flex justify="space-between" align="center" mb={1}>
                   <HStack gap={2}>
                     <Text fontSize="xs" fontWeight="semibold">
@@ -640,19 +685,20 @@ const ItemCard = ({
                       </IconButton>
                     </HStack>
                   )}
-                </Flex>{" "}
+                </Flex>
+
                 <HStack gap={1} flexWrap="wrap">
-                  {loan ? (
+                  {currentLoan ? (
                     <Link
                       to={
-                        loan.owner?.id === user?.id
+                        currentLoan.owner?.id === user?.id
                           ? "/profile"
                           : "/users/$userId"
                       }
                       params={
-                        loan.owner?.id === user?.id
+                        currentLoan.owner?.id === user?.id
                           ? {}
-                          : { userId: loan.owner?.id || "" }
+                          : { userId: currentLoan.owner?.id || "" }
                       }
                       onClick={(e) => e.stopPropagation()}
                       style={{ textDecoration: "none" }}
@@ -662,10 +708,13 @@ const ItemCard = ({
                         color="main.500"
                         _hover={{ textDecoration: "underline" }}
                       >
-                        {loan.owner
-                          ? loan.owner.id === user?.id
+                        {currentLoan.owner
+                          ? currentLoan.owner.id === user?.id
                             ? "You"
-                            : String(loan.owner.full_name || loan.owner.email)
+                            : String(
+                                currentLoan.owner.full_name ||
+                                  currentLoan.owner.email,
+                              )
                           : item.community_owner?.name || "Community"}
                       </Text>
                     </Link>
@@ -688,86 +737,52 @@ const ItemCard = ({
                           </Text>
                         </Link>
                       ) : (
-                        <>
-                          {effectiveDisplayOwnerId && (
-                            <Link
-                              to={
-                                effectiveDisplayOwnerId === user?.id
-                                  ? "/profile"
-                                  : "/users/$userId"
-                              }
-                              params={
-                                effectiveDisplayOwnerId === user?.id
-                                  ? {}
-                                  : { userId: effectiveDisplayOwnerId }
-                              }
-                              onClick={(e) => e.stopPropagation()}
-                              style={{ textDecoration: "none" }}
-                            >
-                              <Text
-                                fontSize="xs"
-                                color="main.500"
-                                _hover={{ textDecoration: "underline" }}
-                              >
-                                {effectiveDisplayOwnerId === user?.id
-                                  ? "You"
-                                  : String(
-                                      item.owner?.id === effectiveDisplayOwnerId
-                                        ? item.owner.full_name ||
-                                            item.owner.email
-                                        : "Owner",
-                                    )}
-                              </Text>
-                            </Link>
-                          )}
-                          {!effectiveDisplayOwnerId && item.owner && (
-                            <Link
-                              to={
-                                item.owner.id === user?.id
-                                  ? "/profile"
-                                  : "/users/$userId"
-                              }
-                              params={
-                                item.owner.id === user?.id
-                                  ? {}
-                                  : { userId: item.owner.id }
-                              }
-                              onClick={(e) => e.stopPropagation()}
-                              style={{ textDecoration: "none" }}
-                            >
-                              <Text
-                                fontSize="xs"
-                                color="main.500"
-                                _hover={{ textDecoration: "underline" }}
-                              >
-                                {item.owner.id === user?.id
-                                  ? "You"
-                                  : String(
-                                      item.owner.full_name || item.owner.email,
-                                    )}
-                              </Text>
-                            </Link>
-                          )}
-                        </>
+                        <Link
+                          to={isOwner ? "/profile" : "/users/$userId"}
+                          params={isOwner ? {} : { userId: item.owner_id }}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ textDecoration: "none" }}
+                        >
+                          <Text
+                            fontSize="xs"
+                            color="main.500"
+                            _hover={{ textDecoration: "underline" }}
+                          >
+                            {isOwner
+                              ? "You"
+                              : String(
+                                  item.owner?.full_name ||
+                                    item.owner?.email ||
+                                    "Owner",
+                                )}
+                          </Text>
+                        </Link>
                       )}
                     </>
                   )}
                 </HStack>
-                {isBook && extraData.isbn && !showAdditionalInfo && (
-                  <Text
-                    fontSize="2xs"
-                    color="gray.400"
-                    mt={2}
-                    fontFamily="mono"
-                  >
-                    ISBN: {String(extraData.isbn)}
-                  </Text>
-                )}
               </Box>
             </Card.Body>
           </Card.Root>
         </Box>
       </Box>
+
+      <LoanRequestModal
+        item={item}
+        isOpen={isLoanModalOpen}
+        onClose={() => setIsLoanModalOpen(false)}
+        community={community}
+      />
+
+      {currentLoan && (
+        <ExtensionRequestModal
+          loanId={currentLoan.id}
+          itemTitle={item.title}
+          currentEndDate={currentLoan.end_date}
+          isOpen={isExtensionModalOpen}
+          onClose={() => setIsExtensionModalOpen(false)}
+        />
+      )}
     </>
   )
 }

@@ -4,7 +4,7 @@ test.use({ storageState: { cookies: [], origins: [] } }) // Use empty storage st
 
 test("should login successfully", async ({ page }) => {
   await page.goto("/login")
-  
+
   const email = process.env.FIRST_SUPERUSER || "usevalid@email.com"
   const password = process.env.FIRST_SUPERUSER_PASSWORD || "usevalidpassword"
 

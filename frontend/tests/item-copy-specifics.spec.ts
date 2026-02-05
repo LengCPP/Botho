@@ -53,7 +53,7 @@ test("Item Copy Specifics: Create, View, and Update", async ({ page }) => {
   // 4. Verify Item Creation
   // Ensure we are on the right page and view
   await expect(page.getByRole("heading", { name: "My Items" })).toBeVisible()
-  
+
   const itemsViewBtn = page.getByTitle("Item View")
   if (await itemsViewBtn.isVisible()) {
     await itemsViewBtn.click()
@@ -66,7 +66,10 @@ test("Item Copy Specifics: Create, View, and Update", async ({ page }) => {
 
   // 5. Interact with Card
   // Click the specific card containing our title
-  const ourCard = page.getByTestId("item-card").filter({ hasText: uniqueTitle }).first()
+  const ourCard = page
+    .getByTestId("item-card")
+    .filter({ hasText: uniqueTitle })
+    .first()
   await ourCard.scrollIntoViewIfNeeded()
   await ourCard.click({ force: true })
   await page.waitForTimeout(1500) // Give more time for flip animation
@@ -82,8 +85,11 @@ test("Item Copy Specifics: Create, View, and Update", async ({ page }) => {
 
   // 7. Update Additional Info
   // It's the only button with a pencil icon in that section
-  const updateInfoBtn = ourCard.locator('button').filter({ has: page.locator('svg') }).first()
-  await page.waitForTimeout(2000) 
+  const updateInfoBtn = ourCard
+    .locator("button")
+    .filter({ has: page.locator("svg") })
+    .first()
+  await page.waitForTimeout(2000)
   await updateInfoBtn.click({ force: true })
 
   // Dialog opens with "Update Copy Specifics"
@@ -101,32 +107,38 @@ test("Item Copy Specifics: Create, View, and Update", async ({ page }) => {
   // 9. Verify Duplication does NOT copy physical specifics
   // Close the back face by clicking title again or just go to ellipsis
   await page.getByText(uniqueTitle).first().click()
-  
+
   // Find ellipsis menu for our card (using existing ourCard variable)
   // The trigger button has no text usually, just an icon.
   // In ItemActionsMenu.tsx: <IconButton variant="ghost" color="inherit"><BsThreeDotsVertical /></IconButton>
-  // It doesn't have an explicit aria-label in the code I saw, 
+  // It doesn't have an explicit aria-label in the code I saw,
   // but Card might have some or we can find the button.
-  await ourCard.locator('button').filter({ has: page.locator('svg') }).last().click()
-  
+  await ourCard
+    .locator("button")
+    .filter({ has: page.locator("svg") })
+    .last()
+    .click()
+
   // Click "I have another copy" (Duplicate)
   await page.getByRole("menuitem", { name: /I have another copy/i }).click()
-  
+
   // Verify toast
-  await expect(page.getByText("Another copy added to your collection!")).toBeVisible()
-  
+  await expect(
+    page.getByText("Another copy added to your collection!"),
+  ).toBeVisible()
+
   // Now we should have 2 items in the group
   await expect(ourCard.getByText("2")).toBeVisible()
-  
+
   // Click next item in group to see the new copy
   await ourCard.getByLabel("Next Owner").click()
-  
+
   // Flip to back
   await ourCard.click()
-  
+
   // Open info
   await ourCard.getByLabel("Additional Info").click()
-  
+
   // The new copy should NOT have the 8.0/10 grade or the notes.
   // It should show "N/A" for grade and "No specific notes provided."
   await expect(page.getByText("N/A")).toBeVisible()

@@ -271,31 +271,6 @@ export const ItemActionsMenu = ({
 
       {communityId && (
         <>
-          {isMobile ? (
-            <Button
-              variant="ghost"
-              justifyContent="center"
-              width="full"
-              onClick={() => {
-                setIsLoanModalOpen(true)
-                setIsActionsModalOpen(false)
-              }}
-              disabled={!item.is_available}
-            >
-              <FiBookOpen style={{ marginRight: "8px" }} />
-              {item.is_available ? "Request Loan" : "On Loan (Unavailable)"}
-            </Button>
-          ) : (
-            <MenuItem
-              value="request-loan"
-              onClick={() => setIsLoanModalOpen(true)}
-              disabled={!item.is_available}
-            >
-              <FiBookOpen style={{ marginRight: "8px" }} />
-              {item.is_available ? "Request Loan" : "On Loan (Unavailable)"}
-            </MenuItem>
-          )}
-
           {!isCommunityOwned &&
             !item.is_donation_pending &&
             (isMobile ? (

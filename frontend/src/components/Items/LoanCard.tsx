@@ -12,16 +12,19 @@ import { format } from "date-fns"
 import { FiCheckCircle, FiXCircle } from "react-icons/fi"
 
 import { type LoanPublic, LoansService } from "@/client"
+import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
 
 interface LoanCardProps {
   loan: LoanPublic
   type: "incoming" | "outgoing"
+  otherAdminsExist?: boolean
 }
 
-export function LoanCard({ loan, type }: LoanCardProps) {
+export function LoanCard({ loan, type, otherAdminsExist }: LoanCardProps) {
   const queryClient = useQueryClient()
   const { showSuccessToast } = useCustomToast()
+  const { user: currentUser } = useAuth()
 
   const respondMutation = useMutation({
     mutationFn: (accept: boolean) =>
@@ -65,8 +68,34 @@ export function LoanCard({ loan, type }: LoanCardProps) {
   const isReturnPending = loan.status === "RETURN_PENDING"
   const canCancel = isPending || isAccepted
 
+  const isSelfRequested =
+    type === "incoming" && loan.requester_id === currentUser?.id
+  const restrictionApplies = isSelfRequested && !!otherAdminsExist
+
   return (
-    <Box p={4} borderWidth="1px" borderRadius="lg" bg="bg.panel" boxShadow="sm">
+    <Box
+      p={4}
+      borderWidth="1px"
+      borderRadius="lg"
+      bg="bg.panel"
+      boxShadow="sm"
+      opacity={restrictionApplies ? 0.6 : 1}
+      filter={restrictionApplies ? "grayscale(40%)" : "none"}
+      pointerEvents={restrictionApplies ? "none" : "auto"}
+      position="relative"
+    >
+      {restrictionApplies && (
+        <Badge
+          position="absolute"
+          top={2}
+          right={2}
+          colorPalette="gray"
+          variant="subtle"
+          fontSize="3xs"
+        >
+          Your Request (Requires Other Admin)
+        </Badge>
+      )}
       <Flex justify="space-between" align="start" mb={4}>
         <VStack align="start" gap={0}>
           <Text fontWeight="bold" fontSize="lg">
@@ -78,7 +107,7 @@ export function LoanCard({ loan, type }: LoanCardProps) {
                   loan.requester?.full_name ||
                   loan.requester?.email ||
                   "Unknown"
-                }`
+                } ${isSelfRequested ? "(You)" : ""}`
               : `Owner: ${
                   loan.owner?.full_name ||
                   loan.owner?.email ||
@@ -139,6 +168,7 @@ export function LoanCard({ loan, type }: LoanCardProps) {
               colorPalette="green"
               onClick={() => respondMutation.mutate(true)}
               loading={respondMutation.isPending}
+              disabled={restrictionApplies}
             >
               <FiCheckCircle /> Accept
             </Button>
@@ -148,6 +178,7 @@ export function LoanCard({ loan, type }: LoanCardProps) {
               variant="outline"
               onClick={() => respondMutation.mutate(false)}
               loading={respondMutation.isPending}
+              disabled={restrictionApplies}
             >
               <FiXCircle /> Reject
             </Button>
@@ -161,6 +192,7 @@ export function LoanCard({ loan, type }: LoanCardProps) {
             width="full"
             onClick={() => ratifyMutation.mutate()}
             loading={ratifyMutation.isPending}
+            disabled={restrictionApplies}
           >
             <FiCheckCircle /> Confirm I have the item
           </Button>
@@ -173,6 +205,7 @@ export function LoanCard({ loan, type }: LoanCardProps) {
             width="full"
             onClick={() => returnMutation.mutate()}
             loading={returnMutation.isPending}
+            disabled={restrictionApplies}
           >
             {isReturnPending ? (
               <>
@@ -192,6 +225,7 @@ export function LoanCard({ loan, type }: LoanCardProps) {
             onClick={() => cancelMutation.mutate()}
             loading={cancelMutation.isPending}
             ml={type === "outgoing" && isAccepted ? 0 : "auto"}
+            disabled={restrictionApplies}
           >
             Cancel
           </Button>

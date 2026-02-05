@@ -19,25 +19,25 @@ test.describe("User Profile Features", () => {
       console.error(`Failed to signup user B (${userRes.status()}):`, text)
       return
     }
-    
-    // We need to verify this user in the DB. Since we are running outside docker, 
+
+    // We need to verify this user in the DB. Since we are running outside docker,
     // we assume the agent (me) will handle it or it's handled via a hook if possible.
     // For now, I will manually run the verification command again after this if needed.
-    
+
     targetUser = await userRes.json()
 
     // 2. Login as User B
     const loginRes = await request.post("/api/v1/login/access-token", {
       form: { username: email, password: password },
     })
-    
+
     if (!loginRes.ok()) {
-        const text = await loginRes.text()
-        console.error(`Failed to login as user B (${loginRes.status()}):`, text)
-        // If it's "User not verified", we'll see it here.
-        return
+      const text = await loginRes.text()
+      console.error(`Failed to login as user B (${loginRes.status()}):`, text)
+      // If it's "User not verified", we'll see it here.
+      return
     }
-    
+
     const loginData = await loginRes.json()
     userBToken = loginData.access_token
 
@@ -59,23 +59,25 @@ test.describe("User Profile Features", () => {
     // 4. Establish Friendship (Admin setup)
     // We assume the admin is the one running the tests (from global setup)
     await request.post("/api/v1/friends/request", {
-      data: { friend_id: targetUser.id }
+      data: { friend_id: targetUser.id },
     })
     // Accept as User B
     await request.post("/api/v1/friends/accept", {
       headers: userBHeaders,
-      data: { friend_id: process.env.FIRST_SUPERUSER_ID || "" } // Need to find admin id or just accept all incoming
+      data: { friend_id: process.env.FIRST_SUPERUSER_ID || "" }, // Need to find admin id or just accept all incoming
     })
-    
+
     // Actually, it's easier to just make them friends via DB or direct API calls if IDs are known.
     // Let's use the friend request flow. User B accepts.
-    const incomingRes = await request.get("/api/v1/friends/requests", { headers: userBHeaders })
+    const incomingRes = await request.get("/api/v1/friends/requests", {
+      headers: userBHeaders,
+    })
     const incoming = await incomingRes.json()
     if (incoming.data.length > 0) {
-        await request.post("/api/v1/friends/accept", {
-            headers: userBHeaders,
-            data: { friend_id: incoming.data[0].id }
-        })
+      await request.post("/api/v1/friends/accept", {
+        headers: userBHeaders,
+        data: { friend_id: incoming.data[0].id },
+      })
     }
   })
 

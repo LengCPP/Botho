@@ -12,9 +12,7 @@ test.describe("Community Features", () => {
     await page.getByRole("link", { name: "Communities" }).click()
     await page.getByRole("button", { name: "Create Community" }).click()
     await page.getByPlaceholder("Community Name").fill(communityName)
-    await page
-      .getByPlaceholder("Description")
-      .fill("Test Description")
+    await page.getByPlaceholder("Description").fill("Test Description")
     await page.getByRole("button", { name: "Save" }).click()
 
     // Verify redirect to community page

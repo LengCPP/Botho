@@ -332,7 +332,14 @@ function MessageItem({
 function DonationManagement({
   items,
   communityId,
-}: { items: ItemPublic[]; communityId: string }) {
+  otherAdminsExist,
+  currentUserId,
+}: {
+  items: ItemPublic[]
+  communityId: string
+  otherAdminsExist: boolean
+  currentUserId?: string
+}) {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
@@ -366,33 +373,45 @@ function DonationManagement({
         Donation Management
       </Heading>
       <VStack align="stretch" gap={3}>
-        {pending.map((item) => (
-          <Flex
-            key={item.id}
-            justify="space-between"
-            align="center"
-            p={3}
-            bg="bg.muted"
-            rounded="md"
-          >
-            <VStack align="start" gap={0}>
-              <Text fontWeight="bold">{item.title}</Text>
-              <Text fontSize="xs" color="fg.muted">
-                Donated by member
-              </Text>
-            </VStack>
-            <Button
-              size="sm"
-              colorPalette="green"
-              onClick={() => ratifyMutation.mutate(item.id)}
-              loading={
-                ratifyMutation.isPending && ratifyMutation.variables === item.id
-              }
+        {pending.map((item) => {
+          const isOwnDonation = item.added_by_id === currentUserId
+          const canAction = !isOwnDonation || !otherAdminsExist
+
+          return (
+            <Flex
+              key={item.id}
+              justify="space-between"
+              align="center"
+              p={3}
+              bg="bg.muted"
+              rounded="md"
+              opacity={canAction ? 1 : 0.6}
             >
-              Accept & Confirm Receipt
-            </Button>
-          </Flex>
-        ))}
+              <VStack align="start" gap={0}>
+                <Text fontWeight="bold">
+                  {item.title} {isOwnDonation && "(Your Donation)"}
+                </Text>
+                <Text fontSize="xs" color="fg.muted">
+                  {isOwnDonation
+                    ? "Waiting for another admin to verify"
+                    : "Donated by member"}
+                </Text>
+              </VStack>
+              <Button
+                size="sm"
+                colorPalette="green"
+                onClick={() => ratifyMutation.mutate(item.id)}
+                disabled={!canAction}
+                loading={
+                  ratifyMutation.isPending &&
+                  ratifyMutation.variables === item.id
+                }
+              >
+                Accept & Confirm Receipt
+              </Button>
+            </Flex>
+          )
+        })}
       </VStack>
     </Box>
   )
@@ -444,6 +463,13 @@ function CommunityBoard() {
     enabled: !!isMember,
   })
 
+  const otherAdminsExist = useMemo(() => {
+    if (!members?.data) return false
+    return members.data.some(
+      (m) => m.community_role === "ADMIN" && m.id !== currentUser?.id,
+    )
+  }, [members, currentUser])
+
   const { data: applicants, isLoading: isLoadingApplicants } = useQuery({
     queryKey: ["communityApplicants", communityId],
     queryFn: () =>
@@ -479,6 +505,28 @@ function CommunityBoard() {
     queryFn: () => CommunitiesService.readCommunityLoans({ id: communityId }),
     enabled: !!isAdmin,
   })
+
+  const activeLoans = useMemo(() => {
+    return (
+      communityLoans?.data.filter((loan) =>
+        ["ACCEPTED", "ACTIVE", "RETURN_PENDING"].includes(loan.status),
+      ) || []
+    )
+  }, [communityLoans])
+
+  const pendingRequests = useMemo(() => {
+    return (
+      communityLoans?.data.filter((loan) => loan.status === "PENDING") || []
+    )
+  }, [communityLoans])
+
+  const auditTrail = useMemo(() => {
+    return (
+      communityLoans?.data.filter((loan) =>
+        ["REJECTED", "CANCELLED", "RETURNED"].includes(loan.status),
+      ) || []
+    )
+  }, [communityLoans])
 
   const postMessageMutation = useMutation({
     mutationFn: (content: string) =>
@@ -909,7 +957,12 @@ function CommunityBoard() {
           <Tabs.Content value="items" pt={6}>
             <VStack align="stretch" gap={8}>
               {isAdmin && (
-                <DonationManagement items={items} communityId={communityId} />
+                <DonationManagement
+                  items={items}
+                  communityId={communityId}
+                  otherAdminsExist={otherAdminsExist}
+                  currentUserId={currentUser?.id}
+                />
               )}
               <Flex justify="space-between" align="center" wrap="wrap" gap={4}>
                 <HStack gap={2}>
@@ -1155,28 +1208,133 @@ function CommunityBoard() {
               {isAdmin && (
                 <Tabs.Content value="loans" pt={6}>
                   <VStack align="stretch" gap={4}>
-                    <Heading size="md">Manage Loan Requests</Heading>
-                    {isLoadingLoans ? (
-                      <Text>Loading loans...</Text>
-                    ) : communityLoans?.data.length === 0 ? (
-                      <Box
-                        p={8}
-                        textAlign="center"
-                        borderWidth="1px"
-                        borderRadius="lg"
-                        borderStyle="dashed"
-                      >
-                        <Text color="fg.muted" fontStyle="italic">
-                          No loan requests found.
-                        </Text>
-                      </Box>
-                    ) : (
-                      <VStack align="stretch" gap={4}>
-                        {communityLoans?.data.map((loan) => (
-                          <LoanCard key={loan.id} loan={loan} type="incoming" />
-                        ))}
-                      </VStack>
-                    )}
+                    <Tabs.Root defaultValue="requests" variant="plain">
+                      <Tabs.List gap={8} mb={6} borderBottomWidth="1px" pb={2}>
+                        <Tabs.Trigger
+                          value="requests"
+                          _selected={{
+                            color: "ui.hover",
+                            borderBottom: "2px solid",
+                            borderColor: "ui.hover",
+                          }}
+                        >
+                          <Heading size="md">
+                            Manage Loan Requests ({pendingRequests.length})
+                          </Heading>
+                        </Tabs.Trigger>
+                        <Tabs.Trigger
+                          value="active"
+                          _selected={{
+                            color: "ui.hover",
+                            borderBottom: "2px solid",
+                            borderColor: "ui.hover",
+                          }}
+                        >
+                          <Heading size="md">
+                            Active Loans ({activeLoans.length})
+                          </Heading>
+                        </Tabs.Trigger>
+                        <Tabs.Trigger
+                          value="audit"
+                          _selected={{
+                            color: "ui.hover",
+                            borderBottom: "2px solid",
+                            borderColor: "ui.hover",
+                          }}
+                        >
+                          <Heading size="md">
+                            Audit Trail ({auditTrail.length})
+                          </Heading>
+                        </Tabs.Trigger>
+                      </Tabs.List>
+
+                      <Tabs.Content value="requests">
+                        {isLoadingLoans ? (
+                          <Text>Loading requests...</Text>
+                        ) : pendingRequests.length === 0 ? (
+                          <Box
+                            p={8}
+                            textAlign="center"
+                            borderWidth="1px"
+                            borderRadius="lg"
+                            borderStyle="dashed"
+                          >
+                            <Text color="fg.muted" fontStyle="italic">
+                              No pending loan requests.
+                            </Text>
+                          </Box>
+                        ) : (
+                          <VStack align="stretch" gap={4}>
+                            {pendingRequests.map((loan) => (
+                              <LoanCard
+                                key={loan.id}
+                                loan={loan}
+                                type="incoming"
+                                otherAdminsExist={otherAdminsExist}
+                              />
+                            ))}
+                          </VStack>
+                        )}
+                      </Tabs.Content>
+
+                      <Tabs.Content value="active">
+                        {isLoadingLoans ? (
+                          <Text>Loading active loans...</Text>
+                        ) : activeLoans.length === 0 ? (
+                          <Box
+                            p={8}
+                            textAlign="center"
+                            borderWidth="1px"
+                            borderRadius="lg"
+                            borderStyle="dashed"
+                          >
+                            <Text color="fg.muted" fontStyle="italic">
+                              No active loans.
+                            </Text>
+                          </Box>
+                        ) : (
+                          <VStack align="stretch" gap={4}>
+                            {activeLoans.map((loan) => (
+                              <LoanCard
+                                key={loan.id}
+                                loan={loan}
+                                type="incoming"
+                                otherAdminsExist={otherAdminsExist}
+                              />
+                            ))}
+                          </VStack>
+                        )}
+                      </Tabs.Content>
+
+                      <Tabs.Content value="audit">
+                        {isLoadingLoans ? (
+                          <Text>Loading audit trail...</Text>
+                        ) : auditTrail.length === 0 ? (
+                          <Box
+                            p={8}
+                            textAlign="center"
+                            borderWidth="1px"
+                            borderRadius="lg"
+                            borderStyle="dashed"
+                          >
+                            <Text color="fg.muted" fontStyle="italic">
+                              Audit trail is empty.
+                            </Text>
+                          </Box>
+                        ) : (
+                          <VStack align="stretch" gap={4}>
+                            {auditTrail.map((loan) => (
+                              <LoanCard
+                                key={loan.id}
+                                loan={loan}
+                                type="incoming"
+                                otherAdminsExist={otherAdminsExist}
+                              />
+                            ))}
+                          </VStack>
+                        )}
+                      </Tabs.Content>
+                    </Tabs.Root>
                   </VStack>
                 </Tabs.Content>
               )}

@@ -2,7 +2,6 @@ import {
   Badge,
   Box,
   Container,
-  Grid,
   Heading,
   Separator,
   SimpleGrid,
@@ -14,9 +13,10 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useState } from "react"
 import { FiArrowDownLeft, FiArrowUpRight, FiClock } from "react-icons/fi"
 
-import { LoansService } from "@/client"
+import { type ItemPublic, LoansService } from "@/client"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
 import ItemCard from "@/components/Items/ItemCard"
+import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
 import { LoanCard } from "@/components/Items/LoanCard"
 
@@ -28,13 +28,14 @@ function LoansPage() {
   const [viewMode, setViewMode] = useState<"card" | "list">("card")
   const [sortBy, setSortBy] = useState("created_at")
   const [sortOrder, setSortOrder] = useState("desc")
+  const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
 
-  const { data: incoming, isLoading: isLoadingIn } = useQuery({
+  const { data: incoming } = useQuery({
     queryKey: ["loans", "incoming"],
     queryFn: () => LoansService.readIncomingLoanRequests({}),
   })
 
-  const { data: outgoing, isLoading: isLoadingOut } = useQuery({
+  const { data: outgoing } = useQuery({
     queryKey: ["loans", "outgoing"],
     queryFn: () => LoansService.readOutgoingLoanRequests({}),
   })
@@ -62,7 +63,6 @@ function LoansPage() {
       valA = a.item.title.toLowerCase()
       valB = b.item.title.toLowerCase()
     } else {
-      // Default to created_at (Loan creation date)
       valA = new Date(a.created_at).getTime()
       valB = new Date(b.created_at).getTime()
     }
@@ -79,14 +79,14 @@ function LoansPage() {
       </Heading>
 
       <VStack align="stretch" gap={12}>
-        {/* Borrowed Items (The "New Collection") */}
+        {/* Borrowed Items */}
         <Box>
           <Heading
             size="md"
             mb={6}
             display="flex"
             alignItems="center"
-            justify="space-between"
+            justifyContent="space-between"
             gap={2}
             flexWrap="wrap"
           >
@@ -136,11 +136,15 @@ function LoansPage() {
                     key={loan.id}
                     item={loan.item}
                     loan={loan}
-                    onShowDetails={() => {}} // TODO: Add details modal if needed
+                    onShowDetails={() => setSelectedItem(loan.item)}
                   />
                 ) : (
                   <VStack key={loan.id} align="stretch" gap={2}>
-                    <ItemCard item={loan.item} loan={loan} />
+                    <ItemCard
+                      item={loan.item}
+                      loan={loan}
+                      onShowDetails={() => setSelectedItem(loan.item)}
+                    />
                     {loan.status === "RETURN_PENDING" && (
                       <Badge
                         colorPalette="main"
@@ -209,6 +213,12 @@ function LoansPage() {
           </Box>
         </SimpleGrid>
       </VStack>
+
+      <ItemDetailModal
+        item={selectedItem}
+        isOpen={!!selectedItem}
+        onClose={() => setSelectedItem(null)}
+      />
     </Container>
   )
 }

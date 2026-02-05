@@ -9,7 +9,9 @@ import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
 import {
   Button,
+  HStack,
   IconButton,
+  Text,
   VStack,
   useBreakpointValue,
 } from "@chakra-ui/react"
@@ -19,11 +21,13 @@ import { BsThreeDotsVertical } from "react-icons/bs"
 import {
   FiBookOpen,
   FiCheck,
+  FiClock,
   FiCopy,
   FiCornerUpLeft,
   FiEye,
   FiHeart,
   FiTrash2,
+  FiX,
 } from "react-icons/fi"
 import {
   DialogBody,
@@ -35,6 +39,7 @@ import {
   DialogTrigger,
 } from "../ui/dialog"
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from "../ui/menu"
+import { ExtensionRequestModal } from "./ExtensionRequestModal"
 import { LoanRequestModal } from "./LoanRequestModal"
 
 interface FriendItemActionsMenuProps {
@@ -57,6 +62,7 @@ export const FriendItemActionsMenu = ({
   onShowDetails,
 }: FriendItemActionsMenuProps) => {
   const [isLoanModalOpen, setIsLoanModalOpen] = useState(false)
+  const [isExtensionModalOpen, setIsExtensionModalOpen] = useState(false)
   const [isActionsModalOpen, setIsActionsModalOpen] = useState(false)
 
   const queryClient = useQueryClient()
@@ -66,6 +72,23 @@ export const FriendItemActionsMenu = ({
   const isMobile = useBreakpointValue({ base: true, md: false })
   const isPooledByMe = item.added_by_id === currentUser?.id
   const isCommunityOwned = !!item.community_owner
+
+  // Fetch user's outgoing loans to check status
+  const { data: outgoingLoans } = useQuery({
+    queryKey: ["loans", "outgoing"],
+    queryFn: () => LoansService.readOutgoingLoanRequests({}),
+    enabled: !!currentUser,
+  })
+
+  const currentLoan = outgoingLoans?.data.find(
+    (l) =>
+      l.item_id === item.id &&
+      !["REJECTED", "CANCELLED", "RETURNED"].includes(l.status),
+  )
+
+  const isPending = currentLoan?.status === "PENDING"
+  const isActive = currentLoan?.status === "ACTIVE"
+  const isReturnPending = currentLoan?.status === "RETURN_PENDING"
 
   // Check if user already has a copy
   const { data: myItemsData } = useQuery({
@@ -81,8 +104,20 @@ export const FriendItemActionsMenu = ({
         (item.author || "").toLowerCase().trim(),
   )
 
+  const cancelLoanMutation = useMutation({
+    mutationFn: () => LoansService.cancelLoan({ id: currentLoan!.id }),
+    onSuccess: () => {
+      showSuccessToast("Loan request cancelled.")
+      queryClient.invalidateQueries({ queryKey: ["loans"] })
+    },
+    onError: (err: any) => {
+      showErrorToast(err.body?.detail || "Failed to cancel loan request")
+    },
+  })
+
   const signalReturnMutation = useMutation({
-    mutationFn: () => LoansService.signalReturn({ id: loanId! }),
+    mutationFn: () =>
+      LoansService.signalReturn({ id: (loanId || currentLoan?.id)! }),
     onSuccess: () => {
       showSuccessToast("Return signaled to owner.")
       queryClient.invalidateQueries({ queryKey: ["loans"] })
@@ -150,21 +185,91 @@ export const FriendItemActionsMenu = ({
     onError: () => showErrorToast("Failed to copy item"),
   })
 
-  if (isBorrowing) {
+  const loanAction = () => {
+    if (isPending) {
+      return (
+        <>
+          {isMobile ? (
+            <Button
+              variant="ghost"
+              justifyContent="center"
+              width="full"
+              colorPalette="red"
+              onClick={() => cancelLoanMutation.mutate()}
+              loading={cancelLoanMutation.isPending}
+            >
+              <FiX style={{ marginRight: "8px" }} /> Cancel Request
+            </Button>
+          ) : (
+            <MenuItem
+              value="cancel-request"
+              color="red.500"
+              onClick={() => cancelLoanMutation.mutate()}
+              disabled={cancelLoanMutation.isPending}
+            >
+              <FiX style={{ marginRight: "8px" }} /> Cancel Request
+            </MenuItem>
+          )}
+        </>
+      )
+    }
+    if (isActive) {
+      return (
+        <>
+          {isMobile ? (
+            <Button
+              variant="ghost"
+              justifyContent="center"
+              width="full"
+              onClick={() => setIsExtensionModalOpen(true)}
+            >
+              <FiClock style={{ marginRight: "8px" }} /> Request Extension
+            </Button>
+          ) : (
+            <MenuItem
+              value="request-extension"
+              onClick={() => setIsExtensionModalOpen(true)}
+            >
+              <FiClock style={{ marginRight: "8px" }} /> Request Extension
+            </MenuItem>
+          )}
+        </>
+      )
+    }
+    if (isReturnPending) {
+      return (
+        <Text fontSize="xs" color="orange.500" textAlign="center" p={2}>
+          Return Pending Confirmation
+        </Text>
+      )
+    }
     return (
-      <IconButton
-        size="xs"
-        colorPalette="main"
-        variant="ghost"
-        onClick={(e) => {
-          e.stopPropagation()
-          signalReturnMutation.mutate()
-        }}
-        loading={signalReturnMutation.isPending}
-        title="Signal Return"
-      >
-        <FiCornerUpLeft />
-      </IconButton>
+      <>
+        {isMobile ? (
+          <Button
+            variant="ghost"
+            justifyContent="center"
+            width="full"
+            onClick={() => {
+              setIsLoanModalOpen(true)
+              setIsActionsModalOpen(false)
+            }}
+            disabled={!item.is_available}
+          >
+            <FiBookOpen style={{ marginRight: "8px" }} />
+            {item.is_available ? "Request Loan" : "On Loan (Unavailable)"}
+          </Button>
+        ) : (
+          <MenuItem
+            value="request-loan"
+            onClick={() => setIsLoanModalOpen(true)}
+            disabled={!item.is_available}
+          >
+            <FiBookOpen style={{ marginRight: "8px" }} />
+            {item.is_available ? "Request Loan" : "On Loan (Unavailable)"}
+          </MenuItem>
+        )}
+      </>
     )
   }
 
@@ -199,29 +304,37 @@ export const FriendItemActionsMenu = ({
             <FiEye style={{ marginRight: "8px" }} /> View Details
           </MenuItem>
         ))}
-      {isMobile ? (
-        <Button
-          variant="ghost"
-          justifyContent="center"
-          width="full"
-          onClick={() => {
-            setIsLoanModalOpen(true)
-            setIsActionsModalOpen(false)
-          }}
-          disabled={!item.is_available}
-        >
-          <FiBookOpen style={{ marginRight: "8px" }} />
-          {item.is_available ? "Request Loan" : "On Loan (Unavailable)"}
-        </Button>
-      ) : (
-        <MenuItem
-          value="request-loan"
-          onClick={() => setIsLoanModalOpen(true)}
-          disabled={!item.is_available}
-        >
-          <FiBookOpen style={{ marginRight: "8px" }} />
-          {item.is_available ? "Request Loan" : "On Loan (Unavailable)"}
-        </MenuItem>
+
+      {loanAction()}
+
+      {(isActive || isBorrowing) && !isReturnPending && (
+        <>
+          {isMobile ? (
+            <Button
+              variant="ghost"
+              justifyContent="center"
+              width="full"
+              onClick={(e) => {
+                e.stopPropagation()
+                signalReturnMutation.mutate()
+              }}
+              loading={signalReturnMutation.isPending}
+            >
+              <FiCornerUpLeft style={{ marginRight: "8px" }} /> Signal Return
+            </Button>
+          ) : (
+            <MenuItem
+              value="signal-return"
+              onClick={(e) => {
+                e.stopPropagation()
+                signalReturnMutation.mutate()
+              }}
+              disabled={signalReturnMutation.isPending}
+            >
+              <FiCornerUpLeft style={{ marginRight: "8px" }} /> Signal Return
+            </MenuItem>
+          )}
+        </>
       )}
 
       {isMobile ? (
@@ -383,6 +496,16 @@ export const FriendItemActionsMenu = ({
           onClose={() => setIsLoanModalOpen(false)}
           community={community}
         />
+
+        {(currentLoan || loanId) && (
+          <ExtensionRequestModal
+            loanId={(loanId || currentLoan?.id)!}
+            itemTitle={item.title}
+            currentEndDate={currentLoan?.end_date || ""}
+            isOpen={isExtensionModalOpen}
+            onClose={() => setIsExtensionModalOpen(false)}
+          />
+        )}
       </>
     )
   }
@@ -404,6 +527,16 @@ export const FriendItemActionsMenu = ({
         onClose={() => setIsLoanModalOpen(false)}
         community={community}
       />
+
+      {(currentLoan || loanId) && (
+        <ExtensionRequestModal
+          loanId={(loanId || currentLoan?.id)!}
+          itemTitle={item.title}
+          currentEndDate={currentLoan?.end_date || ""}
+          isOpen={isExtensionModalOpen}
+          onClose={() => setIsExtensionModalOpen(false)}
+        />
+      )}
     </>
   )
 }
