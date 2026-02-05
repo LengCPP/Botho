@@ -342,6 +342,7 @@ const AddItem = ({
               id="title"
               name="title"
               value={watch("title")}
+              onChange={(val) => setValue("title", val, { shouldValidate: true })}
               onSelect={handleBookSelect}
             />
           ) : (

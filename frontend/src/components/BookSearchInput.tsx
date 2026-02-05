@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react"
 
 interface BookSearchInputProps {
   onSelect: (book: BookResult) => void
+  onChange?: (value: string) => void
   placeholder?: string
   id?: string
   name?: string
@@ -20,6 +21,7 @@ interface BookSearchInputProps {
 
 export const BookSearchInput = ({
   onSelect,
+  onChange,
   placeholder = "Search for a book title...",
   id,
   name,
@@ -62,6 +64,7 @@ export const BookSearchInput = ({
   const handleSelect = (book: BookResult) => {
     onSelect(book)
     setSearchTerm(book.title)
+    if (onChange) onChange(book.title)
     setShowResults(false)
   }
 
@@ -73,6 +76,7 @@ export const BookSearchInput = ({
         value={searchTerm}
         onChange={(e) => {
           setSearchTerm(e.target.value)
+          if (onChange) onChange(e.target.value)
           setShowResults(true)
         }}
         onFocus={() => setShowResults(true)}

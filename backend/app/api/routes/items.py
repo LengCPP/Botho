@@ -693,7 +693,7 @@ def duplicate_item(
         item_type=source_item.item_type,
         image_url=source_item.image_url,
         extra_data=source_item.extra_data,
-        info=source_item.info,
+        info={}, # Physical info (grade, notes) should not be copied
         owner_id=current_user.id,
     )
     

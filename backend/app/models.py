@@ -421,7 +421,7 @@ class WorkMetadata(SQLModel, table=True):
     description: Optional[str] = Field(default=None, max_length=2000)
     category: Optional[str] = Field(default=None, max_length=255)
     image_url: Optional[str] = Field(default=None, max_length=512)
-    tags: list[str] = Field(default=[], sa_column=Column(JSONB))
+    tags: list[str] = Field(default=[], sa_column=Column(JSON))
     average_rating: float = Field(default=0.0)
     review_count: int = Field(default=0)
 

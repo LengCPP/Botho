@@ -1,6 +1,6 @@
 from typing import Any
 import uuid
-from sqlmodel import Session, select
+from sqlmodel import Session, select, or_, and_
 from app.models import User, UserPublic, ItemOwnerPublic, UserSettingsSchema, Loan, LoanPublic, LoanStatus, Friendship, FriendshipStatus
 
 def filter_user_privacy(user: User, current_user_id: Any = None, is_admin: bool = False, is_friend: bool = False) -> UserPublic:

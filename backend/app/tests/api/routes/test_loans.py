@@ -82,7 +82,17 @@ def test_loan_lifecycle(
     
     # 2. Owner creates an item
     item = create_random_item(db, owner_id=superuser.id)
-    
+
+    # NEW: Establish friendship so they can borrow from each other
+    from app.models import Friendship, FriendshipStatus
+    friendship = Friendship(
+        user_id=requester.id,
+        friend_id=superuser.id,
+        status=FriendshipStatus.ACCEPTED
+    )
+    db.add(friendship)
+    db.commit()
+
     # 3. Requester submits loan request
     start_date = datetime.now(timezone.utc) + timedelta(days=1)
     end_date = start_date + timedelta(days=7)

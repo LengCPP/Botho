@@ -267,6 +267,7 @@ const ItemCard = ({
         perspective="1000px"
         borderRadius="lg"
         position="relative"
+        data-testid="item-card"
       >
         {/* Dynamic Layered effect for grouped items (up to 3 total items visible) */}
         {items.slice(1, 3).map((layerItem, idx) => (

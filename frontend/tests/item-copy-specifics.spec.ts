@@ -4,7 +4,7 @@ test("Item Copy Specifics: Create, View, and Update", async ({ page }) => {
   const uniqueTitle = `Test Book ${Date.now()}`
 
   // 1. Login and Navigate
-  await page.goto("/")
+  await page.goto("/items")
 
   // 2. Create Item with Copy Specifics
   await page.getByRole("button", { name: /New Item/i }).click()
@@ -51,33 +51,40 @@ test("Item Copy Specifics: Create, View, and Update", async ({ page }) => {
   await page.getByRole("button", { name: "Save" }).click()
 
   // 4. Verify Item Creation
-  // Wait for dialog to close and item to appear
-  await expect(page.getByText(uniqueTitle)).toBeVisible()
+  // Ensure we are on the right page and view
+  await expect(page.getByRole("heading", { name: "My Items" })).toBeVisible()
+  
+  const itemsViewBtn = page.getByTitle("Item View")
+  if (await itemsViewBtn.isVisible()) {
+    await itemsViewBtn.click()
+    await page.waitForTimeout(1000)
+  }
+
+  // Wait for item to appear in the list
+  const cardTitle = page.getByText(uniqueTitle).first()
+  await cardTitle.waitFor({ state: "visible", timeout: 15000 })
 
   // 5. Interact with Card
-  const card = page
-    .locator(".chakra-card")
-    .filter({ hasText: uniqueTitle })
-    .first()
-  // Depending on structure, the card click flips it.
-  // The click handler is on the Front Face Card.Root.
-  // We need to target the front face specifically?
-  // The component has two Card.Roots absolute positioned.
-  // The front face has the title.
-  await card.click({ force: true }) // Force because of potential overlap/3d transforms
+  // Click the specific card containing our title
+  const ourCard = page.getByTestId("item-card").filter({ hasText: uniqueTitle }).first()
+  await ourCard.scrollIntoViewIfNeeded()
+  await ourCard.click({ force: true })
+  await page.waitForTimeout(1500) // Give more time for flip animation
 
   // 6. View Additional Info
-  // Wait for back face to be visible (transform) - simpler to check for content on back face
-  // The Back face has "General" or "Book" badge.
-  await expect(page.getByLabel("Additional Info")).toBeVisible()
-  await page.getByLabel("Additional Info").click()
+  const ourInfoBtn = ourCard.getByLabel("Additional Info")
+  await ourInfoBtn.click({ force: true })
+  await page.waitForTimeout(1000)
 
-  await expect(page.getByText("Copy Specifics")).toBeVisible()
-  await expect(page.getByText("9/10")).toBeVisible()
+  await expect(page.getByText(/Copy Specifics/i)).toBeVisible()
+  await expect(page.getByText("9.0/10")).toBeVisible()
   await expect(page.getByText("Like new, first edition.")).toBeVisible()
 
   // 7. Update Additional Info
-  await page.getByRole("button", { name: "Update Info" }).click()
+  // It's the only button with a pencil icon in that section
+  const updateInfoBtn = ourCard.locator('button').filter({ has: page.locator('svg') }).first()
+  await page.waitForTimeout(2000) 
+  await updateInfoBtn.click({ force: true })
 
   // Dialog opens with "Update Copy Specifics"
   await expect(
@@ -89,5 +96,39 @@ test("Item Copy Specifics: Create, View, and Update", async ({ page }) => {
 
   // 8. Verify Update
   // Dialog closes. We should still be on the back of the card in Info mode.
-  await expect(page.getByText("8/10")).toBeVisible()
+  await expect(page.getByText("8.0/10")).toBeVisible()
+
+  // 9. Verify Duplication does NOT copy physical specifics
+  // Close the back face by clicking title again or just go to ellipsis
+  await page.getByText(uniqueTitle).first().click()
+  
+  // Find ellipsis menu for our card (using existing ourCard variable)
+  // The trigger button has no text usually, just an icon.
+  // In ItemActionsMenu.tsx: <IconButton variant="ghost" color="inherit"><BsThreeDotsVertical /></IconButton>
+  // It doesn't have an explicit aria-label in the code I saw, 
+  // but Card might have some or we can find the button.
+  await ourCard.locator('button').filter({ has: page.locator('svg') }).last().click()
+  
+  // Click "I have another copy" (Duplicate)
+  await page.getByRole("menuitem", { name: /I have another copy/i }).click()
+  
+  // Verify toast
+  await expect(page.getByText("Another copy added to your collection!")).toBeVisible()
+  
+  // Now we should have 2 items in the group
+  await expect(ourCard.getByText("2")).toBeVisible()
+  
+  // Click next item in group to see the new copy
+  await ourCard.getByLabel("Next Owner").click()
+  
+  // Flip to back
+  await ourCard.click()
+  
+  // Open info
+  await ourCard.getByLabel("Additional Info").click()
+  
+  // The new copy should NOT have the 8.0/10 grade or the notes.
+  // It should show "N/A" for grade and "No specific notes provided."
+  await expect(page.getByText("N/A")).toBeVisible()
+  await expect(page.getByText("No specific notes provided.")).toBeVisible()
 })
