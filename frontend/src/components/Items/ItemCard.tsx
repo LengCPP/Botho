@@ -5,6 +5,7 @@ import {
   LoansService,
   ReadingLogService,
 } from "@/client"
+import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import { ItemActionsMenu } from "@/components/Common/ItemActionsMenu"
 import { useColorModeValue } from "@/components/ui/color-mode"
 import useAuth from "@/hooks/useAuth"
@@ -78,6 +79,7 @@ const ItemCard = ({
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false)
   const [isLoanModalOpen, setIsLoanModalOpen] = useState(false)
   const [isExtensionModalOpen, setIsExtensionModalOpen] = useState(false)
+  const [isReadingLogConfirmOpen, setIsReadingLogConfirmOpen] = useState(false)
   const [itemIndex, setItemIndex] = useState(0)
   const { user } = useAuth()
   const isMobile = useBreakpointValue({ base: true, md: false })
@@ -184,12 +186,15 @@ const ItemCard = ({
         })
         queryClient.invalidateQueries({ queryKey: ["reading-log"] })
       }
+      setIsReadingLogConfirmOpen(false)
     },
   })
 
   const handleReadingLogClick = (e: React.MouseEvent) => {
     e.stopPropagation()
-    readingLogMutation.mutate()
+    if (!readingLogEntry || readingLogEntry.status === "READING") {
+      setIsReadingLogConfirmOpen(true)
+    }
   }
 
   const handleFlip = (e: React.MouseEvent) => {
@@ -369,7 +374,7 @@ const ItemCard = ({
       <Box
         aspectRatio={isBook ? 2 / 3 : 3 / 4}
         width="100%"
-        maxW="400px"
+        maxW="380px"
         mx="auto"
         minW="160px"
         cursor="pointer"
@@ -498,6 +503,8 @@ const ItemCard = ({
                 onClick={handleReadingLogClick}
                 zIndex={10}
                 loading={readingLogMutation.isPending}
+                disabled={isFlipped}
+                pointerEvents={isFlipped ? "none" : "auto"}
               >
                 {readingLogEntry ? (
                   readingLogEntry.status === "READING" ? (
@@ -783,6 +790,19 @@ const ItemCard = ({
           onClose={() => setIsExtensionModalOpen(false)}
         />
       )}
+
+      <ConfirmationModal
+        isOpen={isReadingLogConfirmOpen}
+        onClose={() => setIsReadingLogConfirmOpen(false)}
+        onConfirm={() => readingLogMutation.mutate()}
+        title={readingLogEntry ? "Mark as Completed" : "Add to Reading List"}
+        message={
+          readingLogEntry
+            ? `Have you finished reading '${item.title}'?`
+            : `Do you want to add '${item.title}' to your reading log?`
+        }
+        isLoading={readingLogMutation.isPending}
+      />
     </>
   )
 }

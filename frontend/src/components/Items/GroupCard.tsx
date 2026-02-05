@@ -33,7 +33,7 @@ export function GroupCard({ name, type, groups, onOpen }: GroupCardProps) {
   return (
     <Card.Root
       width="100%"
-      maxW="400px"
+      maxW="380px"
       mx="auto"
       aspectRatio="1"
       variant="outline"
