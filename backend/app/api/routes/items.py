@@ -1,41 +1,45 @@
-import uuid
 import json
-from typing import Any, Annotated
+import uuid
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
-from sqlmodel import func, select, col, or_
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from sqlmodel import func, select
 
 from app.api.deps import CurrentUser, SessionDep
-from app.api.utils import filter_owner_privacy, check_item_availability
-from app.storage import upload_image, delete_image, upload_image_from_url
-from app.search import sync_item_to_search, delete_item_from_search, sync_work_metadata_to_search
+from app.api.utils import check_item_availability, filter_owner_privacy
 from app.core.config import settings
 from app.models import (
-    Item,
-    ItemPublic,
-    ItemsPublic,
-    ItemType,
-    Message,
+    CommunityItem,
+    CommunityMember,
+    CommunityMemberRole,
+    CommunityMemberStatus,
     Friendship,
     FriendshipStatus,
-    Loan,
-    LoanStatus,
-    CommunityMember,
-    CommunityMemberStatus,
-    CommunityMemberRole,
-    CommunityItem,
-    WorkMetadata,
-    WorkMetadataPublic,
-    WorkMetadataUpdate,
+    Item,
+    ItemConditionRating,
+    ItemConditionRatingCreate,
+    ItemConditionRatingPublic,
+    ItemPublic,
     ItemReview,
     ItemReviewCreate,
     ItemReviewPublic,
     ItemReviewsPublic,
     ItemReviewVote,
-    ItemConditionRating,
-    ItemConditionRatingCreate,
-    ItemConditionRatingPublic,
+    ItemsPublic,
+    ItemType,
+    Loan,
+    LoanStatus,
+    Message,
+    WorkMetadata,
+    WorkMetadataPublic,
+    WorkMetadataUpdate,
 )
+from app.search import (
+    delete_item_from_search,
+    sync_item_to_search,
+    sync_work_metadata_to_search,
+)
+from app.storage import delete_image, upload_image, upload_image_from_url
 
 router = APIRouter(prefix="/items", tags=["items"])
 
@@ -47,8 +51,8 @@ def get_work_metadata(session: SessionDep, author: str | None, title: str) -> Wo
 
 
 def ensure_work_metadata(
-    session: SessionDep, 
-    author: str | None, 
+    session: SessionDep,
+    author: str | None,
     title: str,
     isbn: str | None = None,
     description: str | None = None,
@@ -60,7 +64,7 @@ def ensure_work_metadata(
     meta = session.get(WorkMetadata, (author, title))
     if not meta:
         meta = WorkMetadata(
-            author=author, 
+            author=author,
             title=title,
             isbn=isbn,
             description=description,
@@ -92,7 +96,7 @@ def search_book_registry(session: SessionDep, current_user: CurrentUser, q: str,
     from app.search import client
     index = client.index("works")
     search_results = index.search(q, {"limit": limit})
-    
+
     works = []
     for hit in search_results["hits"]:
         works.append(WorkMetadataPublic(
@@ -127,7 +131,7 @@ def check_possession(session: SessionDep, user_id: uuid.UUID, item_id: uuid.UUID
         return False
     if item.owner_id == user_id:
         return True
-    
+
     # Check loans
     loan = session.exec(
         select(Loan).where(
@@ -143,21 +147,21 @@ def get_item_condition_data(session: SessionDep, item_id: uuid.UUID) -> dict:
     ratings = session.exec(
         select(ItemConditionRating).where(ItemConditionRating.item_id == item_id)
     ).all()
-    
+
     if not ratings:
         return {"average_grade": 0.0, "notes": []}
-    
+
     avg_grade = sum(r.grade for r in ratings) / len(ratings)
     notes = [{"user_id": r.user_id, "note": r.notes, "created_at": r.created_at} for r in ratings if r.notes]
-    
+
     return {"average_grade": avg_grade, "notes": notes}
 
 
 @router.get("/", response_model=ItemsPublic)
 def read_items(
-    session: SessionDep, 
-    current_user: CurrentUser, 
-    skip: int = 0, 
+    session: SessionDep,
+    current_user: CurrentUser,
+    skip: int = 0,
     limit: int = 100,
     owner_id: uuid.UUID | None = None,
     sort_by: str = "created_at",
@@ -168,7 +172,7 @@ def read_items(
     """
     Retrieve items. Filters by current user's owner_id by default.
     """
-    
+
     # Permission check and target owner selection
     if owner_id and owner_id != current_user.id:
         # Check if it's a community owner_id
@@ -179,7 +183,7 @@ def read_items(
                 CommunityMember.status == CommunityMemberStatus.ACCEPTED
             )
         ).first()
-        
+
         if not is_community:
             # Check if friend
             is_friend = session.exec(
@@ -202,7 +206,7 @@ def read_items(
         statement = statement.where(
             func.json_extract_path_text(Item.extra_data, 'category') == category
         )
-    
+
     if genre:
         statement = statement.where(
             func.json_extract_path_text(Item.extra_data, 'genre') == genre
@@ -216,30 +220,30 @@ def read_items(
     sort_column = Item.created_at
     if sort_by == "title":
         sort_column = Item.title
-        
+
     if sort_order == "desc":
         statement = statement.order_by(sort_column.desc())
     else:
         statement = statement.order_by(sort_column.asc())
 
     items = session.exec(statement.offset(skip).limit(limit)).all()
-    
+
     public_items = []
     for item in items:
         is_avail = check_item_availability(session, item.id)
-        
+
         owner_pub = None
         community_pub = None
-        
+
         if item.user_owner:
             owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser)
             owner_pub.is_available = is_avail
         elif item.community_owner:
             community_pub = item.community_owner
-        
+
         cond_data = get_item_condition_data(session, item.id)
         had_possession = check_possession(session, current_user.id, item.id)
-        
+
         item_pub = ItemPublic(
             id=item.id,
             owner_id=item.owner_id,
@@ -275,7 +279,7 @@ def read_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> 
     item = session.get(Item, id)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
-        
+
     # Permission check
     if item.owner_id != current_user.id and not current_user.is_superuser:
         if item.user_owner:
@@ -300,7 +304,7 @@ def read_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> 
                 raise HTTPException(status_code=403, detail="Not enough permissions (Not a member of owning community)")
 
     is_avail = check_item_availability(session, item.id)
-    
+
     owner_pub = None
     community_pub = None
     if item.user_owner:
@@ -308,10 +312,10 @@ def read_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> 
         owner_pub.is_available = is_avail
     elif item.community_owner:
         community_pub = item.community_owner
-    
+
     cond_data = get_item_condition_data(session, item.id)
     had_possession = check_possession(session, current_user.id, item.id)
-    
+
     item_pub = ItemPublic(
         id=item.id,
         owner_id=item.owner_id,
@@ -398,7 +402,7 @@ async def create_item(
                 stored_url = upload_image_from_url(image_url, folder="items")
                 if stored_url:
                     final_image_url = stored_url
-            except Exception as e:
+            except Exception:
                 pass
 
         # Determine owner
@@ -414,7 +418,7 @@ async def create_item(
                 CommunityMember.status == CommunityMemberStatus.ACCEPTED
             )
             is_admin = session.exec(statement).first() or current_user.is_superuser
-            
+
             if is_admin:
                 target_owner_id = community_owner_id
             else:
@@ -454,8 +458,8 @@ async def create_item(
         # Ensure WorkMetadata exists
         if final_author:
             ensure_work_metadata(
-                session, 
-                final_author, 
+                session,
+                final_author,
                 title,
                 isbn=parsed_extra.get("isbn"),
                 description=description,
@@ -466,7 +470,7 @@ async def create_item(
         session.commit()
         session.refresh(db_item)
         sync_item_to_search(db_item)
-        
+
         owner_pub = None
         community_pub = None
         if db_item.user_owner:
@@ -474,7 +478,7 @@ async def create_item(
             owner_pub.is_available = True
         elif db_item.community_owner:
             community_pub = db_item.community_owner
-        
+
         item_pub = ItemPublic(
             id=db_item.id,
             owner_id=db_item.owner_id,
@@ -523,7 +527,7 @@ async def update_item(
         db_item = session.get(Item, id)
         if not db_item:
             raise HTTPException(status_code=404, detail="Item not found")
-        
+
         # Permission check
         if db_item.user_owner:
             if db_item.owner_id != current_user.id and not current_user.is_superuser:
@@ -589,9 +593,9 @@ async def update_item(
         session.commit()
         session.refresh(db_item)
         sync_item_to_search(db_item)
-        
+
         is_avail = check_item_availability(session, db_item.id)
-        
+
         owner_pub = None
         community_pub = None
         if db_item.user_owner:
@@ -599,9 +603,9 @@ async def update_item(
             owner_pub.is_available = is_avail
         elif db_item.community_owner:
             community_pub = db_item.community_owner
-        
+
         cond_data = get_item_condition_data(session, db_item.id)
-        
+
         item_pub = ItemPublic(
             id=db_item.id,
             owner_id=db_item.owner_id,
@@ -645,7 +649,7 @@ def delete_item(
     db_item = session.get(Item, id)
     if not db_item:
         raise HTTPException(status_code=404, detail="Item not found")
-    
+
     # Permission check: User must be owner OR admin of owning community
     if db_item.user_owner:
         if db_item.owner_id != current_user.id and not current_user.is_superuser:
@@ -684,7 +688,7 @@ def duplicate_item(
     source_item = session.get(Item, id)
     if not source_item:
         raise HTTPException(status_code=404, detail="Item not found")
-    
+
     # Create copy
     new_item = Item(
         title=source_item.title,
@@ -696,15 +700,15 @@ def duplicate_item(
         info={}, # Physical info (grade, notes) should not be copied
         owner_id=current_user.id,
     )
-    
+
     session.add(new_item)
     session.commit()
     session.refresh(new_item)
     sync_item_to_search(new_item)
-    
+
     owner_pub = filter_owner_privacy(current_user, current_user.id, is_admin=current_user.is_superuser)
     owner_pub.is_available = True
-    
+
     return ItemPublic(
         id=new_item.id,
         owner_id=new_item.owner_id,
@@ -755,11 +759,11 @@ def update_work_metadata(
     if not meta:
         meta = WorkMetadata(author=author, title=title)
         session.add(meta)
-    
+
     update_data = meta_in.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(meta, key, value)
-    
+
     session.add(meta)
     session.commit()
     session.refresh(meta)
@@ -781,7 +785,7 @@ def create_review(
             ItemReview.user_id == current_user.id
         )
     ).first()
-    
+
     if existing:
         # Update existing
         existing.rating = review_in.rating
@@ -793,9 +797,9 @@ def create_review(
             user_id=current_user.id
         )
         session.add(review)
-    
+
     session.flush()
-    
+
     # Update WorkMetadata aggregate rating
     meta = ensure_work_metadata(session, review_in.author, review_in.title)
     if meta:
@@ -808,7 +812,7 @@ def create_review(
         meta.review_count = len(all_reviews)
         meta.average_rating = sum(r.rating for r in all_reviews) / len(all_reviews)
         session.add(meta)
-    
+
     session.commit()
     session.refresh(review)
     return review
@@ -825,10 +829,10 @@ def read_reviews(
         ItemReview.author == author,
         ItemReview.title == title
     ).order_by(ItemReview.created_at.desc())
-    
+
     count = session.exec(select(func.count()).select_from(statement.subquery())).one()
     reviews = session.exec(statement.offset(skip).limit(limit)).all()
-    
+
     public_reviews = []
     for r in reviews:
         # Check if user voted
@@ -838,13 +842,13 @@ def read_reviews(
                 ItemReviewVote.user_id == current_user.id
             )
         ).first()
-        
+
         r_public = ItemReviewPublic.model_validate(r)
         if vote:
             r_public.current_user_vote = vote.vote
-        
+
         public_reviews.append(r_public)
-        
+
     return ItemReviewsPublic(data=public_reviews, count=count)
 
 
@@ -889,7 +893,7 @@ def vote_review(
     score = session.exec(
         select(func.sum(ItemReviewVote.vote)).where(ItemReviewVote.review_id == review_id)
     ).one()
-    
+
     review.vote_score = score or 0
     session.add(review)
     session.commit()
@@ -907,17 +911,17 @@ def create_condition_rating(
     """
     if not check_possession(session, current_user.id, rating_in.item_id):
         raise HTTPException(
-            status_code=403, 
+            status_code=403,
             detail="You must have had possession of this item to rate its condition."
         )
-    
+
     existing = session.exec(
         select(ItemConditionRating).where(
             ItemConditionRating.item_id == rating_in.item_id,
             ItemConditionRating.user_id == current_user.id
         )
     ).first()
-    
+
     if existing:
         existing.grade = rating_in.grade
         existing.notes = rating_in.notes
@@ -928,7 +932,7 @@ def create_condition_rating(
             user_id=current_user.id
         )
         session.add(rating)
-    
+
     session.commit()
     session.refresh(rating)
     return rating

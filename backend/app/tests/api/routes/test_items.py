@@ -1,10 +1,10 @@
-import uuid
 from fastapi.testclient import TestClient
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from app import crud
 from app.core.config import settings
-from app.models import UserCreate, Item, User
+from app.models import Item, UserCreate
+
 
 def get_superuser_token_headers(client: TestClient) -> dict[str, str]:
     login_data = {
@@ -40,13 +40,13 @@ def test_create_item(
             is_superuser=True,
         )
         user = crud.create_user(session=db, user_create=user_in)
-    
+
     if not user.is_verified:
         user.is_verified = True
         db.add(user)
         db.commit()
         db.refresh(user)
-    
+
     headers = get_superuser_token_headers(client)
     data = {"title": "Foo", "description": "Bar", "item_type": "general"}
     response = client.post(
@@ -74,18 +74,18 @@ def test_read_item(
             is_superuser=True,
         )
         user = crud.create_user(session=db, user_create=user_in)
-    
+
     if not user.is_verified:
         user.is_verified = True
         db.add(user)
         db.commit()
         db.refresh(user)
-    
+
     item = Item(title="Test Item", description="Test Description", owner_id=user.id)
     db.add(item)
     db.commit()
     db.refresh(item)
-    
+
     headers = get_superuser_token_headers(client)
     response = client.get(
         f"{settings.API_V1_STR}/items/{item.id}",
@@ -107,7 +107,7 @@ def test_ownership_enforcement(
     user_a = crud.get_user_by_email(session=db, email=email_a)
     if not user_a:
         user_a = crud.create_user(session=db, user_create=UserCreate(email=email_a, password=password_a))
-    
+
     if not user_a.is_verified:
         user_a.is_verified = True
         db.add(user_a)
@@ -120,19 +120,19 @@ def test_ownership_enforcement(
     user_b = crud.get_user_by_email(session=db, email=email_b)
     if not user_b:
         user_b = crud.create_user(session=db, user_create=UserCreate(email=email_b, password=password_b))
-        
+
     if not user_b.is_verified:
         user_b.is_verified = True
         db.add(user_b)
         db.commit()
         db.refresh(user_b)
-        
+
     # User A creates an item
     item_a = Item(title="User A Item", owner_id=user_a.id)
     db.add(item_a)
     db.commit()
     db.refresh(item_a)
-    
+
     # User B tries to read User A's item (not friends)
     headers_b = get_user_token_headers(client, email_b, password_b)
     response = client.get(
@@ -140,14 +140,14 @@ def test_ownership_enforcement(
         headers=headers_b,
     )
     assert response.status_code == 403 # Forbidden
-    
+
     # User B tries to delete User A's item
     response = client.delete(
         f"{settings.API_V1_STR}/items/{item_a.id}",
         headers=headers_b,
     )
     assert response.status_code == 403
-    
+
     # User B reads items list (should not see User A's item)
     response = client.get(
         f"{settings.API_V1_STR}/items/",

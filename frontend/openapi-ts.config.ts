@@ -2,7 +2,7 @@ import { defineConfig } from "@hey-api/openapi-ts"
 
 export default defineConfig({
   client: "legacy/fetch",
-  input: "http://backend:8000/api/v1/openapi.json",
+  input: "./openapi.json",
   output: "./src/client",
   // exportSchemas: true,
   plugins: [

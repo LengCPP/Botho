@@ -31,7 +31,7 @@ Botho is a containerized monorepo with a FastAPI (Python) backend and a React (T
 
 ## 5. Development Workflow
 - **Docker-Centric:** All services run in Docker. Use `docker compose up -d`.
-- **Staging:** The staging environment is at `staging.rsc-xchange.app`.
+- **Staging:** The staging environment is at `demo.botho.app`.
 - **Testing:**
   - Backend: `bash backend/scripts/test.sh`.
   - Frontend: `npx playwright test`.

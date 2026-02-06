@@ -1,11 +1,19 @@
 import uuid
+
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from app import crud
 from app.core.config import settings
-from app.models import CommunityCreate, UserCreate, CommunityMemberRole, CommunityMemberStatus, CommunityMember
+from app.models import (
+    CommunityCreate,
+    CommunityMember,
+    CommunityMemberRole,
+    CommunityMemberStatus,
+    UserCreate,
+)
 from app.tests.utils.utils import random_email, random_lower_string
+
 
 def test_update_community_auth(
     client: TestClient, db: Session
@@ -18,7 +26,7 @@ def test_update_community_auth(
     user1.is_verified = True
     db.add(user1)
     db.commit()
-    
+
     # Login user 1
     login_data = {
         "username": email,
@@ -37,7 +45,7 @@ def test_update_community_auth(
     user2.is_verified = True
     db.add(user2)
     db.commit()
-    
+
     # Login user 2
     login_data2 = {
         "username": email2,
@@ -47,7 +55,7 @@ def test_update_community_auth(
     tokens2 = r.json()
     a_token2 = tokens2["access_token"]
     headers2 = {"Authorization": f"Bearer {a_token2}"}
-    
+
     # User 1 creates community
     community_in = CommunityCreate(name=random_lower_string(), description=random_lower_string())
     response = client.post(
@@ -57,7 +65,7 @@ def test_update_community_auth(
     )
     assert response.status_code == 200
     community_id = response.json()["id"]
-    
+
     # User 2 tries to update (should fail)
     data = {"name": "New Name"}
     response = client.patch(
@@ -66,17 +74,17 @@ def test_update_community_auth(
         json=data,
     )
     assert response.status_code == 400
-    
+
     # Make user 2 admin
     member = CommunityMember(
-        community_id=uuid.UUID(community_id), 
-        user_id=user2.id, 
+        community_id=uuid.UUID(community_id),
+        user_id=user2.id,
         role=CommunityMemberRole.ADMIN,
         status=CommunityMemberStatus.ACCEPTED
     )
     db.add(member)
     db.commit()
-    
+
     # User 2 tries to update (should succeed)
     response = client.patch(
         f"{settings.API_V1_STR}/communities/{community_id}",

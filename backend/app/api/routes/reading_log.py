@@ -2,18 +2,18 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from sqlmodel import select, func
+from sqlmodel import func, select
 
 from app.api.deps import CurrentUser, SessionDep
 from app.models import (
+    Message,
     ReadingLog,
     ReadingLogCreate,
-    ReadingLogUpdate,
     ReadingLogPublic,
     ReadingLogsPublic,
     ReadingLogStatus,
+    ReadingLogUpdate,
     WorkMetadata,
-    Message
 )
 
 router = APIRouter(prefix="/reading-log", tags=["reading-log"])
@@ -32,19 +32,19 @@ def read_reading_log(
     Retrieve reading log entries for the current user.
     """
     statement = select(ReadingLog).where(ReadingLog.user_id == current_user.id)
-    
+
     if status:
         statement = statement.where(ReadingLog.status == status)
     if author:
         statement = statement.where(ReadingLog.author == author)
     if title:
         statement = statement.where(ReadingLog.title == title)
-        
+
     statement = statement.order_by(ReadingLog.updated_at.desc())
-    
+
     count = session.exec(select(func.count()).select_from(statement.subquery())).one()
     logs = session.exec(statement.offset(skip).limit(limit)).all()
-    
+
     # Populate work_metadata if available
     public_logs = []
     for log in logs:
@@ -61,7 +61,7 @@ def read_reading_log(
                 work_metadata=meta
             )
         )
-        
+
     return ReadingLogsPublic(data=public_logs, count=count)
 
 @router.post("/", response_model=ReadingLogPublic)
@@ -79,7 +79,7 @@ def create_reading_log_entry(
             ReadingLog.title == log_in.title
         )
     ).first()
-    
+
     if existing:
         existing.status = log_in.status
         session.add(existing)
@@ -96,7 +96,7 @@ def create_reading_log_entry(
         session.add(log)
         session.commit()
         session.refresh(log)
-        
+
     meta = session.get(WorkMetadata, (log.author, log.title))
     return ReadingLogPublic(
         id=log.id,
@@ -121,12 +121,12 @@ def update_reading_log_entry(
         raise HTTPException(status_code=404, detail="Reading log entry not found")
     if log.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not enough permissions")
-        
+
     log.status = log_in.status
     session.add(log)
     session.commit()
     session.refresh(log)
-    
+
     meta = session.get(WorkMetadata, (log.author, log.title))
     return ReadingLogPublic(
         id=log.id,
@@ -151,7 +151,7 @@ def delete_reading_log_entry(
         raise HTTPException(status_code=404, detail="Reading log entry not found")
     if log.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not enough permissions")
-        
+
     session.delete(log)
     session.commit()
     return Message(message="Reading log entry deleted successfully")

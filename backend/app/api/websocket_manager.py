@@ -1,19 +1,20 @@
 import json
-import uuid
 import logging
-from typing import Dict, List, Optional
+import uuid
+
 from fastapi import WebSocket
-from sqlmodel import Session, select
-from app.push import send_push_notification
-from app.models import PushSubscription
 from pywebpush import WebPushException
+from sqlmodel import Session, select
+
+from app.models import PushSubscription
+from app.push import send_push_notification
 
 logger = logging.getLogger(__name__)
 
 class ConnectionManager:
     def __init__(self):
         # user_id -> list of websockets (a user can have multiple tabs open)
-        self.active_connections: Dict[uuid.UUID, List[WebSocket]] = {}
+        self.active_connections: dict[uuid.UUID, list[WebSocket]] = {}
 
     async def connect(self, websocket: WebSocket, user_id: uuid.UUID):
         await websocket.accept()
@@ -37,13 +38,13 @@ class ConnectionManager:
                     logger.error(f"Error sending websocket message: {e}")
 
     async def send_notification(
-        self, 
-        session: Session, 
-        user_id: uuid.UUID, 
-        title: str, 
-        message: str, 
+        self,
+        session: Session,
+        user_id: uuid.UUID,
+        title: str,
+        message: str,
         notification_type: str = "INFO",
-        link: Optional[str] = None
+        link: str | None = None
     ):
         """
         Send notification via WebSocket if connected, and always try Push Notification.
@@ -61,10 +62,10 @@ class ConnectionManager:
         subscriptions = session.exec(
             select(PushSubscription).where(PushSubscription.user_id == user_id)
         ).all()
-        
+
         for sub in subscriptions:
             try:
-                # We do this synchronously for now, but in a real app with many subs, 
+                # We do this synchronously for now, but in a real app with many subs,
                 # this should be a background task or Celery task.
                 send_push_notification(sub, title, message, link)
             except WebPushException as ex:

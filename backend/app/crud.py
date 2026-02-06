@@ -1,7 +1,7 @@
 import uuid
 from typing import Any
 
-from sqlmodel import Session, select, func
+from sqlmodel import Session, func, select
 
 from app.core.security import get_password_hash, verify_password
 from app.models import (
@@ -22,15 +22,13 @@ from app.models import (
     UserProfile,
     UserUpdate,
 )
-from app.utils import generate_unique_id
 from app.search import (
-    sync_book_to_search,
-    delete_book_from_search,
-    sync_item_to_search,
+    delete_community_from_search,
     delete_item_from_search,
     sync_community_to_search,
-    delete_community_from_search
+    sync_item_to_search,
 )
+from app.utils import generate_unique_id
 
 
 def create_notification(    *,
@@ -79,7 +77,7 @@ def update_user(*, session: Session, db_user: User, user_in: UserUpdate) -> Any:
     user_data = user_in.model_dump(exclude_unset=True)
     extra_data = {}
     if "password" in user_data:
-        password = user_data["password"]
+        password = user_data.pop("password")
         hashed_password = get_password_hash(password)
         extra_data["hashed_password"] = hashed_password
     db_user.sqlmodel_update(user_data, update=extra_data)
@@ -199,7 +197,7 @@ def leave_community(*, session: Session, community_id: uuid.UUID, user_id: uuid.
     membership = session.exec(statement).first()
     if membership:
         session.delete(membership)
-    
+
     session.commit()
 
 
@@ -244,12 +242,12 @@ def accept_friend_request(
 
 
 def create_book(*, session: Session, book_in: BookCreate, owner_id: uuid.UUID) -> Item:
-    from app.models import ItemType, Item
+    from app.models import Item, ItemType
     db_book = Item.model_validate(book_in, update={"item_type": ItemType.book, "owner_id": owner_id})
     session.add(db_book)
     session.commit()
     session.refresh(db_book)
-    
+
     sync_item_to_search(db_book)
     return db_book
 

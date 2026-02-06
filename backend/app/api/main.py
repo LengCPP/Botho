@@ -10,6 +10,7 @@ from app.api.routes import (
     notifications,
     private,
     reading_log,
+    reviews,
     search,
     storage,
     users,
@@ -32,6 +33,7 @@ api_router.include_router(
 )
 api_router.include_router(loans.router)
 api_router.include_router(reading_log.router)
+api_router.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
 
 
 if settings.ENVIRONMENT == "local":

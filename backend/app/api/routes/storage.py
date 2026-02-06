@@ -1,11 +1,13 @@
 import logging
 from typing import Any
-from fastapi import APIRouter, HTTPException, UploadFile, File
+
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
+
 from app.api.deps import CurrentUser
-from app.storage import upload_image, delete_image, minio_client
 from app.core.config import settings
 from app.models import Message
+from app.storage import delete_image, minio_client, upload_image
 
 router = APIRouter(prefix="/storage", tags=["storage"])
 logger = logging.getLogger(__name__)
@@ -40,14 +42,14 @@ async def get_image(folder: str, filename: str):
         object_name = f"{folder}/{filename}"
         # response is a urllib3.response.HTTPResponse object which is a stream
         response = minio_client.get_object(settings.MINIO_STORAGE_BUCKET, object_name)
-        
+
         # We should ideally set the correct media type
         media_type = "image/png"
         if filename.lower().endswith(".jpg") or filename.lower().endswith(".jpeg"):
             media_type = "image/jpeg"
         elif filename.lower().endswith(".gif"):
             media_type = "image/gif"
-            
+
         return StreamingResponse(response, media_type=media_type)
     except Exception as e:
         logger.error(f"Failed to get image {folder}/{filename}: {e}")

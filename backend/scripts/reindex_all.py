@@ -1,8 +1,14 @@
 import logging
+
 from sqlmodel import Session, select
+
 from app.core.db import engine
-from app.models import Item, Community, ItemType, WorkMetadata
-from app.search import sync_item_to_search, sync_community_to_search, sync_work_metadata_to_search
+from app.models import Community, Item, WorkMetadata
+from app.search import (
+    sync_community_to_search,
+    sync_item_to_search,
+    sync_work_metadata_to_search,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

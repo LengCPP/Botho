@@ -87,15 +87,15 @@ docker compose up -d
 - **MinIO Console**: [http://localhost:9001](http://localhost:9001)
 
 ### 4. Staging Environment
-The project uses a staging environment at **staging.rsc-xchange.app**.
+The project uses a staging environment at **demo.botho.app**.
 
 1. **Start Staging**:
    ```bash
    docker compose -f docker-compose.staging.yml up -d
    ```
 2. **Access**:
-   - App: [https://staging.rsc-xchange.app](https://staging.rsc-xchange.app)
-   - API: [https://api.staging.rsc-xchange.app](https://api.staging.yourdomain.com)
+   - App: [https://demo.botho.app](https://demo.botho.app)
+   - API: [https://api.demo.botho.app](https://api.demo.botho.app)
 3. **Database Migrations (Staging)**:
    ```bash
    docker compose -f docker-compose.staging.yml exec backend alembic upgrade head

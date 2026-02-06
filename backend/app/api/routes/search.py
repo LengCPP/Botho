@@ -1,22 +1,21 @@
-import uuid
 from typing import Any
 
 from fastapi import APIRouter
-from sqlmodel import col, func, select, or_
+from sqlmodel import col, or_, select
 
 from app.api.deps import CurrentUser, SessionDep
-from app.api.utils import filter_user_privacy, filter_owner_privacy
+from app.api.utils import filter_owner_privacy, filter_user_privacy
 from app.core.config import settings
 from app.models import (
     Community,
+    CommunityMember,
+    CommunityMemberStatus,
+    Friendship,
+    FriendshipStatus,
     Item,
     ItemPublic,
     SearchResults,
     User,
-    Friendship,
-    FriendshipStatus,
-    CommunityMember,
-    CommunityMemberStatus,
 )
 
 router = APIRouter(prefix="/search", tags=["search"])
@@ -66,27 +65,27 @@ def search(
         Friendship.status == FriendshipStatus.ACCEPTED
     )
     friend_ids = session.exec(friends_stmt).all()
-    
+
     friends_stmt_2 = select(Friendship.user_id).where(
         Friendship.friend_id == current_user.id,
         Friendship.status == FriendshipStatus.ACCEPTED
     )
     friend_ids_2 = session.exec(friends_stmt_2).all()
-    
+
     # Get community IDs
     comm_stmt = select(CommunityMember.community_id).where(
         CommunityMember.user_id == current_user.id,
         CommunityMember.status == CommunityMemberStatus.ACCEPTED
     )
     user_comm_ids = session.exec(comm_stmt).all()
-    
+
     accessible_owner_ids = set([current_user.id] + list(friend_ids) + list(friend_ids_2) + list(user_comm_ids))
 
     meili_items_raw = []
     try:
         if not meili_client:
             raise Exception("Meilisearch not configured")
-            
+
         item_index = meili_client.index("items")
         search_res = item_index.search(q, {
             "limit": limit * 2, # Fetch more to allow for filtering
@@ -104,11 +103,11 @@ def search(
                 .limit(limit)
             )
             meili_items_raw = session.exec(stmt).all()
-            
+
             # Sort back by meili relevance
             id_to_item = {str(item.id): item for item in meili_items_raw}
             meili_items_raw = [id_to_item[id_str] for id_str in item_ids if id_str in id_to_item][:limit]
-            
+
     except Exception:
         # Fallback to SQL
         item_statement = (
@@ -126,7 +125,7 @@ def search(
     from app.api.routes.items import check_item_availability
     for item in meili_items_raw:
         is_avail = check_item_availability(session, item.id)
-        
+
         owner_pub = None
         community_pub = None
         if item.user_owner:
@@ -134,9 +133,9 @@ def search(
             owner_pub.is_available = is_avail
         elif item.community_owner:
             community_pub = item.community_owner
-        
+
         # Manually construct ItemPublic
-        from app.api.routes.items import get_work_metadata, check_possession
+        from app.api.routes.items import check_possession, get_work_metadata
         item_pub = ItemPublic(
             id=item.id,
             owner_id=item.owner_id,

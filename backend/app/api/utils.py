@@ -1,7 +1,19 @@
-from typing import Any
 import uuid
-from sqlmodel import Session, select, or_, and_
-from app.models import User, UserPublic, ItemOwnerPublic, UserSettingsSchema, Loan, LoanPublic, LoanStatus, Friendship, FriendshipStatus
+from typing import Any
+
+from sqlmodel import Session, and_, or_, select
+
+from app.models import (
+    Friendship,
+    FriendshipStatus,
+    ItemOwnerPublic,
+    Loan,
+    LoanPublic,
+    LoanStatus,
+    User,
+    UserPublic,
+)
+
 
 def filter_user_privacy(user: User, current_user_id: Any = None, is_admin: bool = False, is_friend: bool = False) -> UserPublic:
     """
@@ -10,26 +22,26 @@ def filter_user_privacy(user: User, current_user_id: Any = None, is_admin: bool 
     """
     # If the user is the current user or an admin or a friend, don't filter anything
     is_me = current_user_id and str(user.id) == str(current_user_id)
-    
+
     settings = user.settings or {}
     show_contact = settings.get("show_contact_details", False)
     show_name = settings.get("show_full_name", False)
-    
+
     user_public = UserPublic.model_validate(user)
     user_public.show_contact_details = show_contact
-    
+
     if not is_me and not is_admin and not is_friend:
         if not show_contact:
             # Hide email
             user_public.email = "[Hidden]"
-            
+
         if not show_name:
             # Replace name with alias if available
             if user.profile and user.profile.alias:
                 user_public.full_name = user.profile.alias
             else:
                 user_public.full_name = "Private User"
-            
+
     return user_public
 
 def filter_owner_privacy(owner: User, current_user_id: Any = None, is_admin: bool = False, is_friend: bool = False) -> ItemOwnerPublic:
@@ -38,20 +50,20 @@ def filter_owner_privacy(owner: User, current_user_id: Any = None, is_admin: boo
     Superusers or friends bypass these filters.
     """
     is_me = current_user_id and str(owner.id) == str(current_user_id)
-    
+
     settings = owner.settings or {}
     show_contact = settings.get("show_contact_details", False)
     show_name = settings.get("show_full_name", False)
-    
+
     email = owner.email if (is_me or is_admin or is_friend or show_contact) else "[Hidden]"
-    
+
     if is_me or is_admin or is_friend or show_name:
         full_name = owner.full_name
     else:
         full_name = "Private User"
         if owner.profile and owner.profile.alias:
             full_name = owner.profile.alias
-            
+
     return ItemOwnerPublic(
         id=owner.id,
         full_name=full_name,
@@ -65,10 +77,10 @@ def filter_loan_privacy(loan: Loan, current_user_id: Any = None, is_admin: bool 
     Reveals details if they are friends or share a private community.
     """
     loan_public = LoanPublic.model_validate(loan)
-    
+
     reveal_requester = is_admin
     reveal_owner = is_admin
-    
+
     if session and loan.owner_id and loan.requester_id:
         # Check if current user is the owner and needs to see requester details for a decision
         is_owner = current_user_id and str(loan.owner_id) == str(current_user_id)
@@ -85,14 +97,14 @@ def filter_loan_privacy(loan: Loan, current_user_id: Any = None, is_admin: bool 
                 )
             )
         ).first() is not None
-        
+
         if is_friend:
             reveal_requester = True
             reveal_owner = True
         else:
             # Check shared private community
             from app.models import Community, CommunityMember, CommunityMemberStatus
-            
+
             shared_private_comm = session.exec(
                 select(Community)
                 .join(CommunityMember, Community.id == CommunityMember.community_id)
@@ -108,17 +120,17 @@ def filter_loan_privacy(loan: Loan, current_user_id: Any = None, is_admin: bool 
                     )
                 )
             ).first() is not None
-            
+
             if shared_private_comm:
                 reveal_requester = True
                 reveal_owner = True
 
     if loan.owner:
         loan_public.owner = filter_user_privacy(loan.owner, current_user_id, is_admin=reveal_owner)
-    
+
     if loan.requester:
         loan_public.requester = filter_user_privacy(loan.requester, current_user_id, is_admin=reveal_requester)
-        
+
     return loan_public
 
 def check_item_availability(session: Session, item_id: uuid.UUID) -> bool:

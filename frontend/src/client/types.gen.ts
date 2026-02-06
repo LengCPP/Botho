@@ -357,6 +357,10 @@ export type UserPublic = {
     interests?: Array<InterestPublic>;
     friendship_status?: (FriendshipStatus | null);
     show_contact_details?: boolean;
+    honor_score?: number;
+    reliability_rate?: number;
+    is_delinquent?: boolean;
+    ai_honor_summary?: (string | null);
 };
 
 export type UserRegister = {
@@ -364,6 +368,44 @@ export type UserRegister = {
     password: string;
     full_name?: (string | null);
 };
+
+export type UserReportCardPublic = {
+    user: UserPublic;
+    reviews: Array<UserReviewPublic>;
+    metrics: UserReputationSchema;
+};
+
+export type UserReputationSchema = {
+    honor_score: number;
+    reliability_rate: number;
+    is_delinquent: boolean;
+    ai_honor_summary: (string | null);
+    review_count: number;
+};
+
+export type UserReviewCreate = {
+    loan_id: string;
+    rating: number;
+    comment?: (string | null);
+};
+
+export type UserReviewDisputeCreate = {
+    reason: string;
+};
+
+export type UserReviewPublic = {
+    id: string;
+    reviewer_id: string;
+    reviewee_id: string;
+    loan_id: string;
+    rating: number;
+    comment: (string | null);
+    role_reviewed: UserRoleReviewed;
+    created_at: string;
+    reviewer_name?: (string | null);
+};
+
+export type UserRoleReviewed = 'BORROWER' | 'OWNER';
 
 export type UserSettingsSchema = {
     autocomplete_enabled?: boolean;
@@ -383,6 +425,10 @@ export type UserUpdate = {
     is_active?: (boolean | null);
     is_superuser?: (boolean | null);
     full_name?: (string | null);
+    honor_score?: (number | null);
+    reliability_rate?: (number | null);
+    is_delinquent?: (boolean | null);
+    ai_honor_summary?: (string | null);
 };
 
 export type UserUpdateMe = {
@@ -902,6 +948,33 @@ export type ReadingLogDeleteReadingLogEntryData = {
 
 export type ReadingLogDeleteReadingLogEntryResponse = (Message);
 
+export type ReviewsReadMyReviewsData = {
+    limit?: number;
+    skip?: number;
+};
+
+export type ReviewsReadMyReviewsResponse = (Array<UserReviewPublic>);
+
+export type ReviewsDisputeReviewData = {
+    requestBody: UserReviewDisputeCreate;
+    reviewId: string;
+};
+
+export type ReviewsDisputeReviewResponse = (UserReviewPublic);
+
+export type ReviewsResolveDisputeData = {
+    action: string;
+    reviewId: string;
+};
+
+export type ReviewsResolveDisputeResponse = (Message);
+
+export type ReviewsCreateReviewData = {
+    requestBody: UserReviewCreate;
+};
+
+export type ReviewsCreateReviewResponse = (UserReviewPublic);
+
 export type SearchSearchData = {
     limit?: number;
     q: string;
@@ -1002,6 +1075,14 @@ export type UsersDeleteUserData = {
 };
 
 export type UsersDeleteUserResponse = (Message);
+
+export type UsersReadUserReputationMeResponse = (UserReputationSchema);
+
+export type UsersReadUserReportCardData = {
+    userId: string;
+};
+
+export type UsersReadUserReportCardResponse = (UserReportCardPublic);
 
 export type UtilsTestEmailData = {
     emailTo: string;

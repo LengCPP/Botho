@@ -1,14 +1,11 @@
-from datetime import datetime, timezone
-from enum import Enum
 import uuid
-from typing import Optional
+from datetime import datetime
+from enum import Enum
+from typing import Any, Optional
 
 from pydantic import EmailStr, field_validator
-from sqlalchemy import Column, JSON, DateTime, func, and_
-from sqlalchemy.orm import foreign
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import JSON, Column, DateTime, func
 from sqlmodel import Field, Relationship, SQLModel
-
 
 # Enums
 
@@ -59,6 +56,11 @@ class ReadingLogStatus(str, Enum):
     READING = "READING"
     COMPLETED = "COMPLETED"
     DROPPED = "DROPPED"
+
+
+class UserRoleReviewed(str, Enum):
+    BORROWER = "BORROWER"
+    OWNER = "OWNER"
 
 
 # Link Models
@@ -124,9 +126,9 @@ class UserSettingsSchema(SQLModel):
 
 class UserProfile(SQLModel, table=True):
     user_id: uuid.UUID = Field(foreign_key="user.id", primary_key=True, ondelete="CASCADE")
-    bio: Optional[str] = Field(default=None, max_length=500)
-    alias: Optional[str] = Field(default=None, max_length=255)
-    image_url: Optional[str] = Field(default=None, max_length=512)
+    bio: str | None = Field(default=None, max_length=500)
+    alias: str | None = Field(default=None, max_length=255)
+    image_url: str | None = Field(default=None, max_length=512)
 
 
 class Notification(SQLModel, table=True):
@@ -136,8 +138,8 @@ class Notification(SQLModel, table=True):
     message: str = Field(max_length=512)
     type: NotificationType = Field(default=NotificationType.INFO)
     is_read: bool = Field(default=False)
-    link: Optional[str] = Field(default=None, max_length=512)
-    created_at: Optional[datetime] = Field(
+    link: str | None = Field(default=None, max_length=512)
+    created_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
@@ -151,7 +153,7 @@ class PushSubscription(SQLModel, table=True):
     endpoint: str = Field(unique=True, index=True)
     p256dh: str
     auth: str
-    created_at: Optional[datetime] = Field(
+    created_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
@@ -168,17 +170,17 @@ class PushSubscriptionCreate(SQLModel):
 class Loan(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     item_id: uuid.UUID = Field(foreign_key="item.id", ondelete="CASCADE")
-    owner_id: Optional[uuid.UUID] = Field(default=None, foreign_key="user.id", ondelete="CASCADE")
-    community_id: Optional[uuid.UUID] = Field(default=None, foreign_key="community.id", ondelete="CASCADE")
+    owner_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="CASCADE")
+    community_id: uuid.UUID | None = Field(default=None, foreign_key="community.id", ondelete="CASCADE")
     requester_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
     status: LoanStatus = Field(default=LoanStatus.PENDING)
     start_date: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
     end_date: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
-    pending_extension_date: Optional[datetime] = Field(
+    pending_extension_date: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), nullable=True)
     )
-    created_at: Optional[datetime] = Field(
+    created_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
@@ -197,7 +199,7 @@ class Loan(SQLModel, table=True):
 class Interest(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     name: str = Field(unique=True, index=True)
-    category: Optional[str] = None
+    category: str | None = None
     users: list["User"] = Relationship(back_populates="interests", link_model=UserInterest)
     communities: list["Community"] = Relationship(back_populates="interests", link_model=CommunityInterest)
 
@@ -208,8 +210,8 @@ class UserBase(SQLModel):
     is_active: bool = True
     is_superuser: bool = False
     is_verified: bool = False
-    full_name: Optional[str] = Field(default=None, max_length=255)
-    public_id: Optional[str] = Field(default=None, unique=True, index=True, max_length=10)
+    full_name: str | None = Field(default=None, max_length=255)
+    public_id: str | None = Field(default=None, unique=True, index=True, max_length=10)
 
     @field_validator("email", mode="before")
     @classmethod
@@ -225,7 +227,7 @@ class UserCreate(SQLModel):
     password: str = Field(min_length=8, max_length=40)
     is_active: bool = True
     is_superuser: bool = False
-    full_name: Optional[str] = Field(default=None, max_length=255)
+    full_name: str | None = Field(default=None, max_length=255)
 
     @field_validator("email", mode="before")
     @classmethod
@@ -236,7 +238,7 @@ class UserCreate(SQLModel):
 
     @field_validator("full_name", mode="before")
     @classmethod
-    def validate_full_name(cls, v: Optional[str]) -> Optional[str]:
+    def validate_full_name(cls, v: str | None) -> str | None:
         if isinstance(v, str):
             v = v.strip()
             if not v:
@@ -247,7 +249,7 @@ class UserCreate(SQLModel):
 class UserRegister(SQLModel):
     email: EmailStr = Field(max_length=255)
     password: str = Field(min_length=8, max_length=40)
-    full_name: Optional[str] = Field(default=None, max_length=255)
+    full_name: str | None = Field(default=None, max_length=255)
 
     @field_validator("email", mode="before")
     @classmethod
@@ -258,7 +260,7 @@ class UserRegister(SQLModel):
 
     @field_validator("full_name", mode="before")
     @classmethod
-    def validate_full_name(cls, v: Optional[str]) -> Optional[str]:
+    def validate_full_name(cls, v: str | None) -> str | None:
         if isinstance(v, str):
             v = v.strip()
             if not v:
@@ -268,22 +270,27 @@ class UserRegister(SQLModel):
 
 # Properties to receive via API on update, all are optional
 class UserUpdate(SQLModel):
-    email: Optional[EmailStr] = Field(default=None, max_length=255)
-    password: Optional[str] = Field(default=None, min_length=8, max_length=40)
-    is_active: Optional[bool] = None
-    is_superuser: Optional[bool] = None
-    full_name: Optional[str] = Field(default=None, max_length=255)
+    email: EmailStr | None = Field(default=None, max_length=255)
+    password: str | None = Field(default=None, min_length=8, max_length=40)
+    is_active: bool | None = None
+    is_superuser: bool | None = None
+    full_name: str | None = Field(default=None, max_length=255)
+    honor_score: float | None = None
+    reliability_rate: float | None = None
+    is_delinquent: bool | None = None
+    ai_honor_summary: str | None = None
+    # ai_improvement_tips: Any = None
 
     @field_validator("email", mode="before")
     @classmethod
-    def validate_email(cls, v: Optional[EmailStr]) -> Optional[str]:
+    def validate_email(cls, v: EmailStr | None) -> str | None:
         if isinstance(v, str):
             return v.lower().strip()
         return v
 
     @field_validator("full_name", mode="before")
     @classmethod
-    def validate_full_name(cls, v: Optional[str]) -> Optional[str]:
+    def validate_full_name(cls, v: str | None) -> str | None:
         if isinstance(v, str):
             v = v.strip()
             if not v:
@@ -292,18 +299,18 @@ class UserUpdate(SQLModel):
 
 
 class UserUpdateMe(SQLModel):
-    full_name: Optional[str] = Field(default=None, max_length=255)
-    email: Optional[EmailStr] = Field(default=None, max_length=255)
+    full_name: str | None = Field(default=None, max_length=255)
+    email: EmailStr | None = Field(default=None, max_length=255)
 
 
 class UserProfileUpdate(SQLModel):
-    bio: Optional[str] = Field(default=None, max_length=500)
-    alias: Optional[str] = Field(default=None, max_length=255)
-    interest_ids: Optional[list[uuid.UUID]] = None
+    bio: str | None = Field(default=None, max_length=500)
+    alias: str | None = Field(default=None, max_length=255)
+    interest_ids: list[uuid.UUID] | None = None
 
     @field_validator("bio", mode="before")
     @classmethod
-    def validate_bio(cls, v: Optional[str]) -> Optional[str]:
+    def validate_bio(cls, v: str | None) -> str | None:
         if isinstance(v, str):
             v = v.strip()
         return v
@@ -316,9 +323,14 @@ class UpdatePassword(SQLModel):
 
 class User(UserBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    public_id: Optional[str] = Field(default=None, unique=True, index=True, max_length=10)
+    public_id: str | None = Field(default=None, unique=True, index=True, max_length=10)
     hashed_password: str
     has_set_password: bool = Field(default=True)
+    honor_score: float = Field(default=0.0)
+    reliability_rate: float = Field(default=0.0)
+    is_delinquent: bool = Field(default=False)
+    ai_honor_summary: str | None = Field(default=None, sa_column=Column(JSON))
+    ai_improvement_tips: Any = Field(default=[], sa_column=Column(JSON))
     items: list["Item"] = Relationship(
         sa_relationship_kwargs={
             "primaryjoin": "foreign(Item.owner_id)==User.id",
@@ -328,8 +340,8 @@ class User(UserBase, table=True):
     communities: list["Community"] = Relationship(
         back_populates="members", link_model=CommunityMember
     )
-    settings: Optional[dict] = Field(default={}, sa_column=Column(JSON))
-    profile: Optional[UserProfile] = Relationship(
+    settings: dict[str, Any] | None = Field(default={}, sa_column=Column(JSON))
+    profile: UserProfile | None = Relationship(
         sa_relationship_kwargs={"uselist": False, "cascade": "all, delete-orphan"}
     )
     interests: list["Interest"] = Relationship(back_populates="users", link_model=UserInterest)
@@ -343,11 +355,17 @@ class User(UserBase, table=True):
         back_populates="requester",
         sa_relationship_kwargs={"foreign_keys": "Loan.requester_id"}
     )
+    reviews_received: list["UserReview"] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "UserReview.reviewee_id"}
+    )
+    reviews_given: list["UserReview"] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "UserReview.reviewer_id"}
+    )
 
 
 class CommunityBase(SQLModel):
     name: str = Field(min_length=1, max_length=255, unique=True, index=True)
-    description: Optional[str] = Field(default=None, max_length=255)
+    description: str | None = Field(default=None, max_length=255)
     requires_approval: bool = Field(default=False)
     is_private: bool = Field(default=False)
 
@@ -357,10 +375,10 @@ class CommunityCreate(CommunityBase):
 
 
 class CommunityUpdate(SQLModel):
-    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    description: Optional[str] = Field(default=None, max_length=255)
-    requires_approval: Optional[bool] = Field(default=None)
-    is_private: Optional[bool] = Field(default=None)
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=255)
+    requires_approval: bool | None = Field(default=None)
+    is_private: bool | None = Field(default=None)
 
 
 class Community(CommunityBase, table=True):
@@ -391,7 +409,7 @@ class CommunityAnnouncement(SQLModel, table=True):
     author_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
     title: str = Field(max_length=255)
     content: str = Field(max_length=5000)
-    created_at: Optional[datetime] = Field(
+    created_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
@@ -405,7 +423,7 @@ class CommunityMessage(SQLModel, table=True):
     community_id: uuid.UUID = Field(foreign_key="community.id", ondelete="CASCADE")
     author_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
     content: str = Field(max_length=2000)
-    created_at: Optional[datetime] = Field(
+    created_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
@@ -417,10 +435,10 @@ class CommunityMessage(SQLModel, table=True):
 class WorkMetadata(SQLModel, table=True):
     author: str = Field(primary_key=True, max_length=255)
     title: str = Field(primary_key=True, max_length=255)
-    isbn: Optional[str] = Field(default=None, index=True)
-    description: Optional[str] = Field(default=None, max_length=2000)
-    category: Optional[str] = Field(default=None, max_length=255)
-    image_url: Optional[str] = Field(default=None, max_length=512)
+    isbn: str | None = Field(default=None, index=True)
+    description: str | None = Field(default=None, max_length=2000)
+    category: str | None = Field(default=None, max_length=255)
+    image_url: str | None = Field(default=None, max_length=512)
     tags: list[str] = Field(default=[], sa_column=Column(JSON))
     average_rating: float = Field(default=0.0)
     review_count: int = Field(default=0)
@@ -432,8 +450,8 @@ class ItemReview(SQLModel, table=True):
     title: str = Field(index=True, max_length=255)
     user_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
     rating: int = Field(ge=1, le=5)
-    comment: Optional[str] = Field(default=None, max_length=2000)
-    created_at: Optional[datetime] = Field(
+    comment: str | None = Field(default=None, max_length=2000)
+    created_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
@@ -455,8 +473,8 @@ class ItemConditionRating(SQLModel, table=True):
     item_id: uuid.UUID = Field(foreign_key="item.id", ondelete="CASCADE", index=True)
     user_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
     grade: int = Field(ge=1, le=10)
-    notes: Optional[str] = Field(default=None, max_length=1000)
-    created_at: Optional[datetime] = Field(
+    notes: str | None = Field(default=None, max_length=1000)
+    created_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
@@ -467,7 +485,7 @@ class ItemConditionRating(SQLModel, table=True):
 class ItemConditionRatingCreate(SQLModel):
     item_id: uuid.UUID
     grade: int = Field(ge=1, le=10)
-    notes: Optional[str] = Field(default=None, max_length=1000)
+    notes: str | None = Field(default=None, max_length=1000)
 
 
 class ItemConditionRatingPublic(SQLModel):
@@ -475,19 +493,19 @@ class ItemConditionRatingPublic(SQLModel):
     item_id: uuid.UUID
     user_id: uuid.UUID
     grade: int
-    notes: Optional[str]
+    notes: str | None
     created_at: datetime
     user: "UserPublic"
 
 
 class ItemBase(SQLModel):
     title: str = Field(min_length=0, max_length=255)
-    description: Optional[str] = Field(default=None, max_length=1600)
-    author: Optional[str] = Field(default=None, max_length=255)
+    description: str | None = Field(default=None, max_length=1600)
+    author: str | None = Field(default=None, max_length=255)
     item_type: ItemType = Field(default=ItemType.general)
-    image_url: Optional[str] = Field(default=None, max_length=512)
-    extra_data: Optional[dict] = Field(default={}, sa_column=Column(JSON))
-    info: Optional[dict] = Field(default={}, sa_column=Column(JSON)) # physical_description, grade (1-10)
+    image_url: str | None = Field(default=None, max_length=512)
+    extra_data: dict[str, Any] | None = Field(default={}, sa_column=Column(JSON))
+    info: dict[str, Any] | None = Field(default={}, sa_column=Column(JSON)) # physical_description, grade (1-10)
 
 
 class Item(ItemBase, table=True):
@@ -495,7 +513,7 @@ class Item(ItemBase, table=True):
     owner_id: uuid.UUID = Field(index=True, nullable=False)
     title: str = Field(max_length=255, index=True)
     count: int = Field(default=1)
-    created_at: Optional[datetime] = Field(
+    created_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
@@ -519,21 +537,21 @@ class Item(ItemBase, table=True):
 class InterestPublic(SQLModel):
     id: uuid.UUID
     name: str
-    category: Optional[str]
+    category: str | None
 
 
 class UserProfilePublic(SQLModel):
-    bio: Optional[str]
-    alias: Optional[str]
-    image_url: Optional[str]
+    bio: str | None
+    alias: str | None
+    image_url: str | None
 
 
 class CommunityPublic(CommunityBase):
     id: uuid.UUID
     created_by: uuid.UUID
-    current_user_role: Optional[CommunityMemberRole] = None
-    current_user_status: Optional[CommunityMemberStatus] = None
-    notifications_enabled: Optional[bool] = None
+    current_user_role: CommunityMemberRole | None = None
+    current_user_status: CommunityMemberStatus | None = None
+    notifications_enabled: bool | None = None
 
 
 class CommunityAnnouncementBase(SQLModel):
@@ -585,23 +603,29 @@ class CommunitiesPublic(SQLModel):
 
 
 class UserPublic(UserBase):
+    model_config = {"arbitrary_types_allowed": True}
     id: uuid.UUID
     public_id: str
     has_set_password: bool = True
     communities: list["CommunityPublic"] = []
-    community_role: Optional[CommunityMemberRole] = None
-    community_status: Optional[CommunityMemberStatus] = None
-    profile: Optional[UserProfilePublic] = None
-    settings: Optional[UserSettingsSchema] = None
+    community_role: CommunityMemberRole | None = None
+    community_status: CommunityMemberStatus | None = None
+    profile: UserProfilePublic | None = None
+    settings: UserSettingsSchema | None = None
     interests: list["InterestPublic"] = []
-    friendship_status: Optional[FriendshipStatus] = None
+    friendship_status: FriendshipStatus | None = None
     show_contact_details: bool = False
+    honor_score: float = 0.0
+    reliability_rate: float = 0.0
+    is_delinquent: bool = False
+    ai_honor_summary: str | None = None
+    # ai_improvement_tips: Any = None
 
 
 class CommunityMemberUpdate(SQLModel):
-    role: Optional[CommunityMemberRole] = Field(default=None)
-    status: Optional[CommunityMemberStatus] = Field(default=None)
-    notifications_enabled: Optional[bool] = Field(default=None)
+    role: CommunityMemberRole | None = Field(default=None)
+    status: CommunityMemberStatus | None = Field(default=None)
+    notifications_enabled: bool | None = Field(default=None)
 
 
 class FriendshipPublic(SQLModel):
@@ -624,18 +648,18 @@ class BookCreate(ItemCreate):
 
 
 class ItemUpdate(SQLModel):
-    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    description: Optional[str] = Field(default=None, max_length=1600)
-    author: Optional[str] = Field(default=None, max_length=255)
-    item_type: Optional[ItemType] = None
-    image_url: Optional[str] = None
-    extra_data: Optional[dict] = None
-    info: Optional[dict] = None
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=1600)
+    author: str | None = Field(default=None, max_length=255)
+    item_type: ItemType | None = None
+    image_url: str | None = None
+    extra_data: dict | None = None
+    info: dict | None = None
 
 
 class ItemOwnerPublic(SQLModel):
     id: uuid.UUID
-    full_name: Optional[str]
+    full_name: str | None
     email: str
     is_available: bool = True
     show_contact_details: bool = False
@@ -644,17 +668,17 @@ class ItemOwnerPublic(SQLModel):
 class WorkMetadataPublic(SQLModel):
     author: str
     title: str
-    isbn: Optional[str] = None
-    description: Optional[str] = None
-    category: Optional[str] = None
-    image_url: Optional[str] = None
+    isbn: str | None = None
+    description: str | None = None
+    category: str | None = None
+    image_url: str | None = None
     tags: list[str] = []
     average_rating: float
     review_count: int
 
 
 class WorkMetadataUpdate(SQLModel):
-    tags: Optional[list[str]] = None
+    tags: list[str] | None = None
 
 
 class ItemPublic(ItemBase):
@@ -662,13 +686,13 @@ class ItemPublic(ItemBase):
     owner_id: uuid.UUID
     count: int
     created_at: datetime
-    owner: Optional[ItemOwnerPublic] = None
-    community_owner: Optional[CommunityPublic] = None
+    owner: ItemOwnerPublic | None = None
+    community_owner: CommunityPublic | None = None
     communities: list["CommunityPublic"] = []
     is_available: bool = True
-    added_by_id: Optional[uuid.UUID] = None
+    added_by_id: uuid.UUID | None = None
     is_donation_pending: bool = False
-    work_metadata: Optional[WorkMetadataPublic] = None
+    work_metadata: WorkMetadataPublic | None = None
     had_possession: bool = False
 
 
@@ -690,7 +714,7 @@ class ItemReviewCreate(SQLModel):
     author: str = Field(max_length=255)
     title: str = Field(max_length=255)
     rating: int = Field(ge=1, le=5)
-    comment: Optional[str] = Field(default=None, max_length=2000)
+    comment: str | None = Field(default=None, max_length=2000)
 
 
 class ItemReviewPublic(SQLModel):
@@ -699,11 +723,11 @@ class ItemReviewPublic(SQLModel):
     title: str
     user_id: uuid.UUID
     rating: int
-    comment: Optional[str]
+    comment: str | None
     created_at: datetime
     user: "UserPublic"
     vote_score: int = 0
-    current_user_vote: Optional[int] = None
+    current_user_vote: int | None = None
 
 
 class ItemReviewsPublic(SQLModel):
@@ -713,7 +737,7 @@ class ItemReviewsPublic(SQLModel):
 
 class LoanCreate(SQLModel):
     item_id: uuid.UUID
-    community_id: Optional[uuid.UUID] = None
+    community_id: uuid.UUID | None = None
     start_date: datetime
     end_date: datetime
 
@@ -721,8 +745,8 @@ class LoanCreate(SQLModel):
 class LoanPublic(SQLModel):
     id: uuid.UUID
     item_id: uuid.UUID
-    owner_id: Optional[uuid.UUID]
-    community_id: Optional[uuid.UUID]
+    owner_id: uuid.UUID | None
+    community_id: uuid.UUID | None
     requester_id: uuid.UUID
     status: LoanStatus
     start_date: datetime
@@ -745,7 +769,7 @@ class NotificationPublic(SQLModel):
     message: str
     type: NotificationType
     is_read: bool
-    link: Optional[str]
+    link: str | None
     created_at: datetime
 
 
@@ -771,7 +795,7 @@ class Token(SQLModel):
 
 
 class TokenPayload(SQLModel):
-    sub: Optional[str] = None
+    sub: str | None = None
 
 
 class NewPassword(SQLModel):
@@ -790,7 +814,7 @@ class ReadingLog(SQLModel, table=True):
     updated_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     )
-    
+
     user: "User" = Relationship()
 
 
@@ -805,6 +829,7 @@ class ReadingLogUpdate(SQLModel):
 
 
 class ReadingLogPublic(SQLModel):
+    model_config = {"arbitrary_types_allowed": True}
     id: uuid.UUID
     user_id: uuid.UUID
     author: str
@@ -816,5 +841,91 @@ class ReadingLogPublic(SQLModel):
 
 
 class ReadingLogsPublic(SQLModel):
+
+
     data: list["ReadingLogPublic"]
+
+
     count: int
+
+
+
+
+
+
+
+
+# Reputation Models
+
+
+class UserReview(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    loan_id: uuid.UUID = Field(foreign_key="loan.id", ondelete="CASCADE")
+    reviewer_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
+    reviewee_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
+    rating: int = Field(ge=1, le=5)
+    comment: str | None = Field(default=None, max_length=2000)
+    is_disputed: bool = Field(default=False)
+    dispute_reason: str | None = Field(default=None, max_length=1000)
+    role_reviewed: UserRoleReviewed
+    created_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    )
+
+    reviewer: "User" = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "UserReview.reviewer_id"}
+    )
+    reviewee: "User" = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "UserReview.reviewee_id"}
+    )
+    loan: "Loan" = Relationship()
+
+
+class UserReviewCreate(SQLModel):
+    loan_id: uuid.UUID
+    rating: int = Field(ge=1, le=5)
+    comment: str | None = Field(default=None, max_length=2000)
+
+
+class UserReviewDisputeCreate(SQLModel):
+    reason: str = Field(min_length=10, max_length=1000)
+
+
+class UserReviewPublic(SQLModel):
+    model_config = {"arbitrary_types_allowed": True}
+    id: uuid.UUID
+    reviewer_id: uuid.UUID
+    reviewee_id: uuid.UUID
+    loan_id: uuid.UUID
+    rating: int
+    comment: str | None
+    role_reviewed: UserRoleReviewed
+    created_at: datetime
+    reviewer_name: str | None = None
+
+
+class UserReputationSchema(SQLModel):
+    model_config = {"arbitrary_types_allowed": True}
+    honor_score: float
+    reliability_rate: float
+    is_delinquent: bool
+    ai_honor_summary: str | None
+    # ai_improvement_tips: Any
+    review_count: int
+
+
+class UserReportCardPublic(SQLModel):
+    model_config = {"arbitrary_types_allowed": True}
+    user: "UserPublic"
+    reviews: list[UserReviewPublic]
+    metrics: UserReputationSchema
+
+
+
+
+
+
+
+
+

@@ -152,7 +152,7 @@ services:
       - traefik-public
       - default
     volumes:
-      - rsc-xchange_app-minio-data-staging:/data
+      - botho-minio-data-demo:/data
     env_file:
       - .env
     environment:
@@ -293,9 +293,9 @@ volumes:
   app-db-data-staging:
   app-minio-data-staging:
   app-meilisearch-data-staging:
-  rsc-xchange_app-minio-data-staging:
+  botho-minio-data-demo:
     external: true
-  rsc-xchange_app-minio-data:
+  botho-minio-data:
     external: true
 
 networks:

@@ -21,7 +21,7 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
         headers: {
-          Host: "api.staging.rsc-xchange.app",
+          Host: "api.demo.botho.app",
         },
       },
       "/docs": {
@@ -29,7 +29,7 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
         headers: {
-          Host: "api.staging.rsc-xchange.app",
+          Host: "api.demo.botho.app",
         },
       },
       "/openapi.json": {
@@ -37,7 +37,7 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
         headers: {
-          Host: "api.staging.rsc-xchange.app",
+          Host: "api.demo.botho.app",
         },
       },
     },

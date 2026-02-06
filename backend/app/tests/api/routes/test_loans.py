@@ -1,12 +1,14 @@
 import uuid
 from datetime import datetime, timedelta, timezone
+
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from app import crud
 from app.core.config import settings
-from app.models import Item, Loan, LoanStatus, ItemType, UserCreate, User
+from app.models import Item, ItemType, LoanStatus, UserCreate
 from app.tests.utils.utils import random_email, random_lower_string
+
 
 def get_superuser_token_headers(client: TestClient, db: Session) -> dict[str, str]:
     user = crud.get_user_by_email(session=db, email=settings.FIRST_SUPERUSER)
@@ -17,7 +19,7 @@ def get_superuser_token_headers(client: TestClient, db: Session) -> dict[str, st
             is_superuser=True,
         )
         user = crud.create_user(session=db, user_create=user_in)
-    
+
     if not user.is_verified:
         user.is_verified = True
         db.add(user)
@@ -63,9 +65,9 @@ def test_loan_lifecycle(
         db.add(superuser)
         db.commit()
         db.refresh(superuser)
-    
+
     superuser_headers = get_superuser_token_headers(client, db)
-    
+
     user_email = random_email()
     user_password = random_lower_string()
     user_data = {"email": user_email, "password": user_password}
@@ -75,11 +77,11 @@ def test_loan_lifecycle(
     db.add(requester)
     db.commit()
     db.refresh(requester)
-    
+
     login_data = {"username": user_email, "password": user_password}
     r = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data)
     requester_headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
-    
+
     # 2. Owner creates an item
     item = create_random_item(db, owner_id=superuser.id)
 
@@ -104,22 +106,22 @@ def test_loan_lifecycle(
     response = client.post(f"{settings.API_V1_STR}/loans/request", headers=requester_headers, json=loan_data)
     assert response.status_code == 200
     loan_id = response.json()["id"]
-    
+
     # 4. Owner accepts loan request
     response = client.patch(f"{settings.API_V1_STR}/loans/{loan_id}/respond?accept=true", headers=superuser_headers)
     assert response.status_code == 200
     assert response.json()["status"] == LoanStatus.ACCEPTED
-    
+
     # 5. Requester ratifies loan
     response = client.patch(f"{settings.API_V1_STR}/loans/{loan_id}/ratify", headers=requester_headers)
     assert response.status_code == 200
     assert response.json()["status"] == LoanStatus.ACTIVE
-    
+
     # 6. Requester signals return
     response = client.patch(f"{settings.API_V1_STR}/loans/{loan_id}/return-signal", headers=requester_headers)
     assert response.status_code == 200
     assert response.json()["status"] == LoanStatus.RETURN_PENDING
-    
+
     # 7. Owner confirms return
     response = client.patch(f"{settings.API_V1_STR}/loans/{loan_id}/return", headers=superuser_headers)
     assert response.status_code == 200

@@ -5,8 +5,9 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
 
-from app.main import app
 from app.api.deps import get_db
+from app.main import app
+
 
 @pytest.fixture(name="db")
 def session_fixture() -> Generator[Session, None, None]:

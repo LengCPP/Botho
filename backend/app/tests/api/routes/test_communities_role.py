@@ -1,11 +1,13 @@
 import random
 import string
+
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from app import crud
 from app.core.config import settings
-from app.models import CommunityCreate, UserCreate, CommunityMemberRole
+from app.models import CommunityCreate, CommunityMemberRole, UserCreate
+
 
 def random_lower_string() -> str:
     return "".join(random.choices(string.ascii_lowercase, k=32))
@@ -24,7 +26,7 @@ def test_update_member_role(
     user1.is_verified = True
     db.add(user1)
     db.commit()
-    
+
     login_data1 = {"username": email1, "password": password1}
     r1 = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data1)
     headers1 = {"Authorization": f"Bearer {r1.json()['access_token']}"}
@@ -37,11 +39,11 @@ def test_update_member_role(
     user2.is_verified = True
     db.add(user2)
     db.commit()
-    
+
     login_data2 = {"username": email2, "password": password2}
     r2 = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data2)
     headers2 = {"Authorization": f"Bearer {r2.json()['access_token']}"}
-    
+
     # User 1 creates community
     community_in = CommunityCreate(name=random_lower_string(), description=random_lower_string())
     response = client.post(
@@ -50,10 +52,10 @@ def test_update_member_role(
         json=community_in.model_dump(),
     )
     community_id = response.json()["id"]
-    
+
     # User 2 joins community
     client.post(f"{settings.API_V1_STR}/communities/{community_id}/join", headers=headers2)
-    
+
     # User 1 promotes User 2 to admin
     data = {"role": CommunityMemberRole.ADMIN}
     response = client.patch(
@@ -65,7 +67,7 @@ def test_update_member_role(
     content = response.json()
     assert content["email"] == "[Hidden]"
     assert content["community_role"] == CommunityMemberRole.ADMIN
-    
+
     # User 2 tries to promote themselves back to member (should succeed because they are admin now)
     data = {"role": CommunityMemberRole.MEMBER}
     response = client.patch(

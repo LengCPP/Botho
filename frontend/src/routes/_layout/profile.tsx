@@ -1,18 +1,21 @@
 import {
+  Box,
   Container,
   Flex,
   Heading,
   IconButton,
   Separator,
+  Tabs,
   VStack,
 } from "@chakra-ui/react"
 import { createFileRoute } from "@tanstack/react-router"
 import { useState } from "react"
 import { BsThreeDotsVertical } from "react-icons/bs"
-import { FiEdit2, FiShare2 } from "react-icons/fi"
+import { FiAward, FiEdit2, FiShare2, FiUser } from "react-icons/fi"
 
 import type { ApiError } from "@/client"
 import EditProfileModal from "@/components/UserSettings/EditProfileModal"
+import ReputationDashboard from "@/components/UserSettings/ReputationDashboard"
 import UserInformation from "@/components/UserSettings/UserInformation"
 import UserProfilePicture from "@/components/UserSettings/UserProfilePicture"
 import {
@@ -73,11 +76,30 @@ function Profile() {
         </MenuRoot>
       </Flex>
 
-      <VStack align="stretch" gap={8} maxW="3xl">
-        <UserProfilePicture user={currentUser as UserPublicExtended} />
-        <Separator />
-        <UserInformation user={currentUser as UserPublicExtended} />
-      </VStack>
+      <Tabs.Root defaultValue="info" variant="plain" width="full">
+        <Tabs.List mb={8}>
+          <Tabs.Trigger value="info">
+            <FiUser /> Overview
+          </Tabs.Trigger>
+          <Tabs.Trigger value="reputation">
+            <FiAward /> Reputation
+          </Tabs.Trigger>
+        </Tabs.List>
+
+        <Tabs.Content value="info">
+          <VStack align="stretch" gap={8} maxW="3xl">
+            <UserProfilePicture user={currentUser as UserPublicExtended} />
+            <Separator />
+            <UserInformation user={currentUser as UserPublicExtended} />
+          </VStack>
+        </Tabs.Content>
+
+        <Tabs.Content value="reputation">
+          <Box maxW="3xl">
+            <ReputationDashboard />
+          </Box>
+        </Tabs.Content>
+      </Tabs.Root>
 
       <EditProfileModal
         user={currentUser as any}

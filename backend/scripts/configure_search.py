@@ -1,9 +1,11 @@
 import meilisearch
+
 from app.core.config import settings
+
 
 def configure_meilisearch():
     client = meilisearch.Client(settings.MEILI_URL, settings.MEILI_MASTER_KEY)
-    
+
     # Configure Items index
     print("Configuring 'items' index...")
     items_index = client.index("items")
@@ -30,7 +32,7 @@ def configure_meilisearch():
             "exactness"
         ]
     })
-    
+
     # Configure Communities index
     print("Configuring 'communities' index...")
     communities_index = client.index("communities")
@@ -66,7 +68,7 @@ def configure_meilisearch():
             }
         }
     })
-    
+
     print("Meilisearch configuration complete.")
 
 if __name__ == "__main__":

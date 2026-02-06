@@ -41,7 +41,7 @@ def send_email(
     html_content: str = "",
 ) -> None:
     assert settings.emails_enabled, "no provided configuration for email variables"
-    
+
     # Use Mailtrap SDK if SMTP_HOST is a mailtrap address and we have a token
     if settings.SMTP_HOST and "mailtrap" in settings.SMTP_HOST and settings.SMTP_PASSWORD:
         try:
@@ -140,11 +140,11 @@ def generate_new_account_email(
 
 
 def generate_donation_notification_email(
-    *, 
-    email_to: str, 
-    donor_name: str, 
-    item_title: str, 
-    community_name: str, 
+    *,
+    email_to: str,
+    donor_name: str,
+    item_title: str,
+    community_name: str,
     community_id: uuid.UUID
 ) -> EmailData:
     project_name = settings.PROJECT_NAME
@@ -225,4 +225,3 @@ def generate_unique_id(prefix: str, session: Session, model: type) -> str:
 
     raise ValueError(f"Failed to generate unique ID after {max_attempts} attempts")
 
-    

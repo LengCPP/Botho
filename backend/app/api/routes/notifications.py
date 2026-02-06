@@ -2,10 +2,16 @@ import uuid
 from typing import Any
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    HTTPException,
+    Query,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from jwt.exceptions import InvalidTokenError
 from pydantic import ValidationError
-from sqlmodel import select, func
+from sqlmodel import func, select
 
 from app.api.deps import CurrentUser, SessionDep
 from app.api.websocket_manager import notification_manager
@@ -16,10 +22,10 @@ from app.models import (
     Notification,
     NotificationPublic,
     NotificationsPublic,
-    TokenPayload,
-    User,
     PushSubscription,
     PushSubscriptionCreate,
+    TokenPayload,
+    User,
 )
 
 router = APIRouter()
@@ -56,7 +62,7 @@ def read_notifications(
         .where(Notification.recipient_id == current_user.id)
     )
     count = session.exec(count_statement).one()
-    
+
     unread_count_statement = (
         select(func.count())
         .select_from(Notification)
@@ -151,7 +157,7 @@ def subscribe_push(
             PushSubscription.endpoint == subscription.endpoint
         )
     ).first()
-    
+
     if existing:
         # If it exists but for another user, update it
         if existing.user_id != current_user.id:
@@ -162,7 +168,7 @@ def subscribe_push(
             session.commit()
             return Message(message="Subscription updated for current user")
         return Message(message="Already subscribed")
-    
+
     db_subscription = PushSubscription(
         user_id=current_user.id,
         endpoint=subscription.endpoint,
@@ -194,7 +200,8 @@ def unsubscribe_push(
 
 
 import asyncio
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+
+from fastapi import APIRouter, Query
 from starlette.websockets import WebSocketState
 
 # ... rest of imports ...
@@ -204,9 +211,10 @@ async def websocket_endpoint(
     websocket: WebSocket,
     token: str = Query(...),
 ):
-    from app.core.db import engine
     from sqlmodel import Session
-    
+
+    from app.core.db import engine
+
     with Session(engine) as session:
         try:
             user = await get_current_user_ws(session=session, token=token)

@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { CommunitiesReadCommunitiesData, CommunitiesReadCommunitiesResponse, CommunitiesCreateCommunityData, CommunitiesCreateCommunityResponse, CommunitiesReadCommunityData, CommunitiesReadCommunityResponse, CommunitiesUpdateCommunityData, CommunitiesUpdateCommunityResponse, CommunitiesDeleteCommunityData, CommunitiesDeleteCommunityResponse, CommunitiesJoinCommunityData, CommunitiesJoinCommunityResponse, CommunitiesLeaveCommunityData, CommunitiesLeaveCommunityResponse, CommunitiesReadCommunityMembersData, CommunitiesReadCommunityMembersResponse, CommunitiesUpdateCommunityMemberRoleData, CommunitiesUpdateCommunityMemberRoleResponse, CommunitiesUpdateCommunityNotificationsData, CommunitiesUpdateCommunityNotificationsResponse, CommunitiesReadCommunityItemsData, CommunitiesReadCommunityItemsResponse, CommunitiesAddItemToCommunityData, CommunitiesAddItemToCommunityResponse, CommunitiesRemoveItemFromCommunityData, CommunitiesRemoveItemFromCommunityResponse, CommunitiesInitiateDonationData, CommunitiesInitiateDonationResponse, CommunitiesRatifyDonationData, CommunitiesRatifyDonationResponse, CommunitiesReadCommunityAnnouncementsData, CommunitiesReadCommunityAnnouncementsResponse, CommunitiesCreateCommunityAnnouncementData, CommunitiesCreateCommunityAnnouncementResponse, CommunitiesReadCommunityMessagesData, CommunitiesReadCommunityMessagesResponse, CommunitiesCreateCommunityMessageData, CommunitiesCreateCommunityMessageResponse, CommunitiesUpdateCommunityMessageData, CommunitiesUpdateCommunityMessageResponse, CommunitiesDeleteCommunityMessageData, CommunitiesDeleteCommunityMessageResponse, CommunitiesReadCommunityLoansData, CommunitiesReadCommunityLoansResponse, FriendsSearchUserByIdData, FriendsSearchUserByIdResponse, FriendsReadFriendsData, FriendsReadFriendsResponse, FriendsReadFriendRequestsData, FriendsReadFriendRequestsResponse, FriendsReadSentFriendRequestsData, FriendsReadSentFriendRequestsResponse, FriendsCreateFriendRequestData, FriendsCreateFriendRequestResponse, FriendsAcceptFriendRequestData, FriendsAcceptFriendRequestResponse, FriendsRemoveFriendData, FriendsRemoveFriendResponse, InterestsReadInterestsData, InterestsReadInterestsResponse, ItemsSearchBookRegistryData, ItemsSearchBookRegistryResponse, ItemsLookupBookRegistryData, ItemsLookupBookRegistryResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, ItemsDuplicateItemData, ItemsDuplicateItemResponse, ItemsReadWorkMetadataData, ItemsReadWorkMetadataResponse, ItemsUpdateWorkMetadataData, ItemsUpdateWorkMetadataResponse, ItemsCreateReviewData, ItemsCreateReviewResponse, ItemsReadReviewsData, ItemsReadReviewsResponse, ItemsVoteReviewData, ItemsVoteReviewResponse, ItemsCreateConditionRatingData, ItemsCreateConditionRatingResponse, ItemsReadItemConditionRatingsData, ItemsReadItemConditionRatingsResponse, LoansCreateLoanRequestData, LoansCreateLoanRequestResponse, LoansReadIncomingLoanRequestsData, LoansReadIncomingLoanRequestsResponse, LoansReadOutgoingLoanRequestsData, LoansReadOutgoingLoanRequestsResponse, LoansRespondToLoanRequestData, LoansRespondToLoanRequestResponse, LoansCancelLoanData, LoansCancelLoanResponse, LoansRatifyLoanData, LoansRatifyLoanResponse, LoansSignalReturnData, LoansSignalReturnResponse, LoansReturnLoanData, LoansReturnLoanResponse, LoansCreateExtensionRequestData, LoansCreateExtensionRequestResponse, LoansRespondToExtensionRequestData, LoansRespondToExtensionRequestResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginVerifyEmailData, LoginVerifyEmailResponse, LoginResendVerificationEmailData, LoginResendVerificationEmailResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, LoginLoginGoogleInitResponse, LoginLoginGoogleCallbackData, LoginLoginGoogleCallbackResponse, NotificationsReadNotificationsData, NotificationsReadNotificationsResponse, NotificationsMarkNotificationAsReadData, NotificationsMarkNotificationAsReadResponse, NotificationsMarkAllNotificationsAsReadResponse, NotificationsDeleteNotificationData, NotificationsDeleteNotificationResponse, NotificationsGetVapidPublicKeyResponse, NotificationsSubscribePushData, NotificationsSubscribePushResponse, NotificationsUnsubscribePushData, NotificationsUnsubscribePushResponse, ReadingLogReadReadingLogData, ReadingLogReadReadingLogResponse, ReadingLogCreateReadingLogEntryData, ReadingLogCreateReadingLogEntryResponse, ReadingLogUpdateReadingLogEntryData, ReadingLogUpdateReadingLogEntryResponse, ReadingLogDeleteReadingLogEntryData, ReadingLogDeleteReadingLogEntryResponse, SearchSearchData, SearchSearchResponse, StorageUploadData, StorageUploadResponse, StorageGetImageData, StorageGetImageResponse, StorageDeleteData, StorageDeleteResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersUpdateUserProfileData, UsersUpdateUserProfileResponse, UsersUploadUserProfilePictureData, UsersUploadUserProfilePictureResponse, UsersReadUserSettingsMeResponse, UsersUpdateUserSettingsData, UsersUpdateUserSettingsResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { CommunitiesReadCommunitiesData, CommunitiesReadCommunitiesResponse, CommunitiesCreateCommunityData, CommunitiesCreateCommunityResponse, CommunitiesReadCommunityData, CommunitiesReadCommunityResponse, CommunitiesUpdateCommunityData, CommunitiesUpdateCommunityResponse, CommunitiesDeleteCommunityData, CommunitiesDeleteCommunityResponse, CommunitiesJoinCommunityData, CommunitiesJoinCommunityResponse, CommunitiesLeaveCommunityData, CommunitiesLeaveCommunityResponse, CommunitiesReadCommunityMembersData, CommunitiesReadCommunityMembersResponse, CommunitiesUpdateCommunityMemberRoleData, CommunitiesUpdateCommunityMemberRoleResponse, CommunitiesUpdateCommunityNotificationsData, CommunitiesUpdateCommunityNotificationsResponse, CommunitiesReadCommunityItemsData, CommunitiesReadCommunityItemsResponse, CommunitiesAddItemToCommunityData, CommunitiesAddItemToCommunityResponse, CommunitiesRemoveItemFromCommunityData, CommunitiesRemoveItemFromCommunityResponse, CommunitiesInitiateDonationData, CommunitiesInitiateDonationResponse, CommunitiesRatifyDonationData, CommunitiesRatifyDonationResponse, CommunitiesReadCommunityAnnouncementsData, CommunitiesReadCommunityAnnouncementsResponse, CommunitiesCreateCommunityAnnouncementData, CommunitiesCreateCommunityAnnouncementResponse, CommunitiesReadCommunityMessagesData, CommunitiesReadCommunityMessagesResponse, CommunitiesCreateCommunityMessageData, CommunitiesCreateCommunityMessageResponse, CommunitiesUpdateCommunityMessageData, CommunitiesUpdateCommunityMessageResponse, CommunitiesDeleteCommunityMessageData, CommunitiesDeleteCommunityMessageResponse, CommunitiesReadCommunityLoansData, CommunitiesReadCommunityLoansResponse, FriendsSearchUserByIdData, FriendsSearchUserByIdResponse, FriendsReadFriendsData, FriendsReadFriendsResponse, FriendsReadFriendRequestsData, FriendsReadFriendRequestsResponse, FriendsReadSentFriendRequestsData, FriendsReadSentFriendRequestsResponse, FriendsCreateFriendRequestData, FriendsCreateFriendRequestResponse, FriendsAcceptFriendRequestData, FriendsAcceptFriendRequestResponse, FriendsRemoveFriendData, FriendsRemoveFriendResponse, InterestsReadInterestsData, InterestsReadInterestsResponse, ItemsSearchBookRegistryData, ItemsSearchBookRegistryResponse, ItemsLookupBookRegistryData, ItemsLookupBookRegistryResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, ItemsDuplicateItemData, ItemsDuplicateItemResponse, ItemsReadWorkMetadataData, ItemsReadWorkMetadataResponse, ItemsUpdateWorkMetadataData, ItemsUpdateWorkMetadataResponse, ItemsCreateReviewData, ItemsCreateReviewResponse, ItemsReadReviewsData, ItemsReadReviewsResponse, ItemsVoteReviewData, ItemsVoteReviewResponse, ItemsCreateConditionRatingData, ItemsCreateConditionRatingResponse, ItemsReadItemConditionRatingsData, ItemsReadItemConditionRatingsResponse, LoansCreateLoanRequestData, LoansCreateLoanRequestResponse, LoansReadIncomingLoanRequestsData, LoansReadIncomingLoanRequestsResponse, LoansReadOutgoingLoanRequestsData, LoansReadOutgoingLoanRequestsResponse, LoansRespondToLoanRequestData, LoansRespondToLoanRequestResponse, LoansCancelLoanData, LoansCancelLoanResponse, LoansRatifyLoanData, LoansRatifyLoanResponse, LoansSignalReturnData, LoansSignalReturnResponse, LoansReturnLoanData, LoansReturnLoanResponse, LoansCreateExtensionRequestData, LoansCreateExtensionRequestResponse, LoansRespondToExtensionRequestData, LoansRespondToExtensionRequestResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginVerifyEmailData, LoginVerifyEmailResponse, LoginResendVerificationEmailData, LoginResendVerificationEmailResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, LoginLoginGoogleInitResponse, LoginLoginGoogleCallbackData, LoginLoginGoogleCallbackResponse, NotificationsReadNotificationsData, NotificationsReadNotificationsResponse, NotificationsMarkNotificationAsReadData, NotificationsMarkNotificationAsReadResponse, NotificationsMarkAllNotificationsAsReadResponse, NotificationsDeleteNotificationData, NotificationsDeleteNotificationResponse, NotificationsGetVapidPublicKeyResponse, NotificationsSubscribePushData, NotificationsSubscribePushResponse, NotificationsUnsubscribePushData, NotificationsUnsubscribePushResponse, ReadingLogReadReadingLogData, ReadingLogReadReadingLogResponse, ReadingLogCreateReadingLogEntryData, ReadingLogCreateReadingLogEntryResponse, ReadingLogUpdateReadingLogEntryData, ReadingLogUpdateReadingLogEntryResponse, ReadingLogDeleteReadingLogEntryData, ReadingLogDeleteReadingLogEntryResponse, ReviewsReadMyReviewsData, ReviewsReadMyReviewsResponse, ReviewsDisputeReviewData, ReviewsDisputeReviewResponse, ReviewsResolveDisputeData, ReviewsResolveDisputeResponse, ReviewsCreateReviewData, ReviewsCreateReviewResponse, SearchSearchData, SearchSearchResponse, StorageUploadData, StorageUploadResponse, StorageGetImageData, StorageGetImageResponse, StorageDeleteData, StorageDeleteResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersUpdateUserProfileData, UsersUpdateUserProfileResponse, UsersUploadUserProfilePictureData, UsersUploadUserProfilePictureResponse, UsersReadUserSettingsMeResponse, UsersUpdateUserSettingsData, UsersUpdateUserSettingsResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UsersReadUserReputationMeResponse, UsersReadUserReportCardData, UsersReadUserReportCardResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
 
 export class CommunitiesService {
     /**
@@ -1719,6 +1719,103 @@ export class ReadingLogService {
     
 }
 
+export class ReviewsService {
+    /**
+     * Read My Reviews
+     * Retrieve reviews received by the current user.
+     * Reviewer identity is hidden (anonymized) in the response.
+     * @param data The data for the request.
+     * @param data.skip
+     * @param data.limit
+     * @returns UserReviewPublic Successful Response
+     * @throws ApiError
+     */
+    public static readMyReviews(data: ReviewsReadMyReviewsData = {}): CancelablePromise<ReviewsReadMyReviewsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/reviews/me',
+            query: {
+                skip: data.skip,
+                limit: data.limit
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Dispute Review
+     * Dispute a review.
+     * @param data The data for the request.
+     * @param data.reviewId
+     * @param data.requestBody
+     * @returns UserReviewPublic Successful Response
+     * @throws ApiError
+     */
+    public static disputeReview(data: ReviewsDisputeReviewData): CancelablePromise<ReviewsDisputeReviewResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/reviews/{review_id}/dispute',
+            path: {
+                review_id: data.reviewId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Resolve Dispute
+     * Resolve a review dispute (Admin only).
+     * Action can be 'delete' (removes review) or 'dismiss' (keeps review, clears dispute).
+     * @param data The data for the request.
+     * @param data.reviewId
+     * @param data.action
+     * @returns Message Successful Response
+     * @throws ApiError
+     */
+    public static resolveDispute(data: ReviewsResolveDisputeData): CancelablePromise<ReviewsResolveDisputeResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/reviews/{review_id}/resolve',
+            path: {
+                review_id: data.reviewId
+            },
+            query: {
+                action: data.action
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Create Review
+     * Create a new user review for a completed loan.
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns UserReviewPublic Successful Response
+     * @throws ApiError
+     */
+    public static createReview(data: ReviewsCreateReviewData): CancelablePromise<ReviewsCreateReviewResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/reviews/',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+}
+
 export class SearchService {
     /**
      * Search
@@ -2077,6 +2174,41 @@ export class UsersService {
         return __request(OpenAPI, {
             method: 'DELETE',
             url: '/api/v1/users/{user_id}',
+            path: {
+                user_id: data.userId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Read User Reputation Me
+     * Get current user's reputation summary (AI synthesized).
+     * @returns UserReputationSchema Successful Response
+     * @throws ApiError
+     */
+    public static readUserReputationMe(): CancelablePromise<UsersReadUserReputationMeResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/users/me/reputation'
+        });
+    }
+    
+    /**
+     * Read User Report Card
+     * Get a user's full report card (Raw comments).
+     * Only accessible by Admins or if the user is requesting a loan from the current user.
+     * @param data The data for the request.
+     * @param data.userId
+     * @returns UserReportCardPublic Successful Response
+     * @throws ApiError
+     */
+    public static readUserReportCard(data: UsersReadUserReportCardData): CancelablePromise<UsersReadUserReportCardResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/users/{user_id}/report-card',
             path: {
                 user_id: data.userId
             },

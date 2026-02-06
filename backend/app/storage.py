@@ -1,8 +1,10 @@
 import logging
 import uuid
 from io import BytesIO
+
 import httpx
 from minio import Minio
+
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -26,18 +28,18 @@ def upload_image(file_data: bytes, file_name: str, folder: str = "item-images") 
         # Generate a safer filename if none provided
         if not file_name:
             file_name = f"{uuid.uuid4()}.png"
-            
+
         file_path = f"{folder}/{file_name}"
         data = BytesIO(file_data)
-        
+
         minio_client.put_object(
             settings.MINIO_STORAGE_BUCKET,
             file_path,
             data,
             len(file_data),
-            content_type="image/png" 
+            content_type="image/png"
         )
-        
+
         return f"/api/v1/storage/image/{file_path}"
     except Exception as e:
         logger.error(f"Minio upload failed: {e}")
@@ -51,14 +53,14 @@ def upload_image_from_url(url: str, folder: str = "item-images") -> str | None:
         with httpx.Client(follow_redirects=True) as client:
             response = client.get(url)
             response.raise_for_status()
-            
+
             # Extract extension from URL or default to png
             ext = "png"
             if ".jpg" in url.lower() or ".jpeg" in url.lower():
                 ext = "jpg"
             elif ".gif" in url.lower():
                 ext = "gif"
-                
+
             file_name = f"{uuid.uuid4()}.{ext}"
             return upload_image(response.content, file_name, folder=folder)
     except Exception as e:
@@ -72,7 +74,7 @@ def delete_image(file_path: str) -> bool:
     try:
         if "/api/v1/storage/image/" in file_path:
             file_path = file_path.split("/api/v1/storage/image/")[-1]
-            
+
         minio_client.remove_object(settings.MINIO_STORAGE_BUCKET, file_path)
         return True
     except Exception as e:

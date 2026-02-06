@@ -2,13 +2,16 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from sqlmodel import func, select, or_
+from sqlmodel import func, or_, select
 
 from app import crud
 from app.api.deps import CurrentUser, SessionDep
-from app.notifications import notify_user
-from app.api.websocket_manager import notification_manager
-from app.utils import send_email, generate_donation_notification_email
+from app.api.utils import (
+    check_item_availability,
+    filter_loan_privacy,
+    filter_owner_privacy,
+    filter_user_privacy,
+)
 from app.models import (
     CommunitiesPublic,
     Community,
@@ -31,7 +34,6 @@ from app.models import (
     Friendship,
     FriendshipStatus,
     Item,
-    ItemOwnerPublic,
     ItemPublic,
     ItemsPublic,
     Loan,
@@ -42,11 +44,11 @@ from app.models import (
     User,
     UserPublic,
     UsersPublic,
-    ItemType,
     WorkMetadata,
 )
-from app.api.utils import filter_user_privacy, filter_owner_privacy, filter_loan_privacy, check_item_availability
+from app.notifications import notify_user
 from app.search import delete_community_from_search, sync_community_to_search
+from app.utils import generate_donation_notification_email, send_email
 
 router = APIRouter()
 
@@ -88,10 +90,10 @@ def read_communities(
             Community.id.in_(user_memberships)
         )
     )
-    
+
     count_statement = select(func.count()).select_from(statement.subquery())
     count = session.exec(count_statement).one()
-    
+
     communities = session.exec(statement.offset(skip).limit(limit)).all()
 
     # Populate current_user_role, current_user_status and notifications_enabled
@@ -108,7 +110,7 @@ def read_communities(
         ).all()
         membership_map = {
             m.community_id: {
-                "role": m.role, 
+                "role": m.role,
                 "status": m.status,
                 "notif": m.notifications_enabled
             } for m in memberships
@@ -244,7 +246,7 @@ async def join_community(
         CommunityMember.user_id == current_user.id,
     )
     membership = session.exec(statement).first()
-    
+
     if membership:
         if membership.status == CommunityMemberStatus.PENDING:
             raise HTTPException(status_code=400, detail="Join request already pending")
@@ -313,11 +315,11 @@ def leave_community(
 
 @router.get("/{id}/members", response_model=UsersPublic)
 def read_community_members(
-    *, 
-    session: SessionDep, 
-    current_user: CurrentUser, 
-    id: uuid.UUID, 
-    skip: int = 0, 
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    skip: int = 0,
     limit: int = 100,
     status: CommunityMemberStatus | None = None
 ) -> Any:
@@ -372,7 +374,7 @@ def read_community_members(
 
     # Reveal details if Closed community AND current user is an accepted member (or superuser)
     reveal_details = community.requires_approval and (
-        current_user.is_superuser or 
+        current_user.is_superuser or
         (my_membership and my_membership.status == CommunityMemberStatus.ACCEPTED)
     )
 
@@ -380,10 +382,10 @@ def read_community_members(
     for user, membership in results:
         f_status = friendship_map.get(user.id)
         is_friend = f_status == FriendshipStatus.ACCEPTED
-        
+
         user_public = filter_user_privacy(
-            user, 
-            current_user.id, 
+            user,
+            current_user.id,
             is_admin=current_user.is_superuser or reveal_details,
             is_friend=is_friend
         )
@@ -423,11 +425,11 @@ async def update_community_member_role(
         CommunityMember.user_id == current_user.id
     )
     my_membership = session.exec(my_membership_stmt).first()
-    
+
     # Permission check: ADMIN or MODERATOR (for specific tasks)
     is_admin = (my_membership and my_membership.role == CommunityMemberRole.ADMIN) or current_user.is_superuser
     is_moderator = (my_membership and my_membership.role == CommunityMemberRole.MODERATOR)
-    
+
     if not is_admin and not is_moderator:
         raise HTTPException(status_code=400, detail="Not enough permissions")
 
@@ -540,7 +542,7 @@ def read_community_items(
         .join(CommunityItem, Item.id == CommunityItem.item_id)
         .where(CommunityItem.community_id == id)
     )
-    
+
     # Query for exclusively community-owned items
     owned_stmt = (
         select(Item)
@@ -548,7 +550,7 @@ def read_community_items(
             Item.owner_id == id
         )
     )
-    
+
     # Combine using OR
     statement = select(Item).where(
         or_(
@@ -559,9 +561,9 @@ def read_community_items(
 
     count_stmt = select(func.count()).select_from(statement.subquery())
     count = session.exec(count_stmt).one()
-    
+
     items = session.exec(statement.offset(skip).limit(limit)).all()
-    
+
     # Get all CommunityItem meta for pooled items in this batch
     item_ids = [item.id for item in items]
     comm_items = session.exec(
@@ -571,12 +573,12 @@ def read_community_items(
         )
     ).all()
     comm_item_map = {ci.item_id: ci for ci in comm_items}
-    
+
     items_public = []
     for item in items:
         # Check availability
         is_avail = check_item_availability(session, item.id)
-        
+
         owner_pub = None
         community_pub = None
         if item.user_owner:
@@ -584,14 +586,14 @@ def read_community_items(
             owner_pub.is_available = is_avail
         elif item.community_owner:
             community_pub = item.community_owner
-            
+
         cond_data = {
             "average_grade": 0.0,
             "notes": []
         }
         # We could import get_item_condition_data from items.py but for now let's keep it simple
         # or just use a default since it's Optional
-            
+
         item_pub = ItemPublic(
             id=item.id,
             owner_id=item.owner_id,
@@ -616,7 +618,7 @@ def read_community_items(
         if comm_item:
             item_pub.added_by_id = comm_item.added_by
             item_pub.is_donation_pending = comm_item.is_donation_pending
-            
+
         items_public.append(item_pub)
 
     return ItemsPublic(data=items_public, count=count)
@@ -661,8 +663,8 @@ def add_item_to_community(
         raise HTTPException(status_code=400, detail="Item already in community pool")
 
     comm_item = CommunityItem(
-        community_id=id, 
-        item_id=item_id, 
+        community_id=id,
+        item_id=item_id,
         added_by=current_user.id
     )
     session.add(comm_item)
@@ -693,14 +695,14 @@ async def initiate_donation(
     comm_item = session.exec(statement).first()
     if not comm_item:
         raise HTTPException(status_code=404, detail="Item not found in community")
-    
+
     if comm_item.added_by != current_user.id:
         raise HTTPException(status_code=403, detail="Only the person who pooled the item can donate it")
 
     comm_item.is_donation_pending = True
     session.add(comm_item)
     session.commit()
-    
+
     # Notify admins only
     admin_statement = (
         select(CommunityMember, User)
@@ -712,9 +714,9 @@ async def initiate_donation(
         )
     )
     staff_results = session.exec(admin_statement).all()
-    
+
     donor_name = current_user.full_name or current_user.email
-    
+
     for member, user in staff_results:
         await notify_user(
             session=session,
@@ -724,7 +726,7 @@ async def initiate_donation(
             type=NotificationType.INFO,
             link=f"/communities/{id}"
         )
-        
+
         # Send email notification
         email_data = generate_donation_notification_email(
             email_to=user.email,
@@ -738,7 +740,7 @@ async def initiate_donation(
             subject=email_data.subject,
             html_content=email_data.html_content
         )
-    
+
     return Message(message="Donation request sent to admins")
 
 
@@ -777,7 +779,7 @@ async def ratify_donation(
         admin_count = get_community_admin_count(session, id)
         if admin_count > 1:
             raise HTTPException(
-                status_code=403, 
+                status_code=403,
                 detail="You cannot ratify your own donation when other admins are present"
             )
 
@@ -789,10 +791,10 @@ async def ratify_donation(
 
     # Change ownership to the community
     item.owner_id = id
-    
+
     # Update comm_item status
     comm_item.is_donation_pending = False
-    
+
     # Update active/pending loans to reflect new ownership (Community is now the lender)
     loans_stmt = select(Loan).where(
         Loan.item_id == item_id,
@@ -817,7 +819,7 @@ async def ratify_donation(
         type=NotificationType.SUCCESS,
         link=f"/communities/{id}"
     )
-    
+
     return Message(message="Donation ratified! The community now owns this item.")
 
 
@@ -1081,7 +1083,7 @@ def delete_community_message(
 
     # Permission check
     is_author = message.author_id == current_user.id
-    
+
     my_membership_stmt = select(CommunityMember).where(
         CommunityMember.community_id == id,
         CommunityMember.user_id == current_user.id
@@ -1131,6 +1133,6 @@ def read_community_loans(
     )
     loans = session.exec(statement.offset(skip).limit(limit)).all()
     return LoansPublic(
-        data=[filter_loan_privacy(l, current_user.id, is_admin=current_user.is_superuser) for l in loans], 
+        data=[filter_loan_privacy(l, current_user.id, is_admin=current_user.is_superuser) for l in loans],
         count=count
     )

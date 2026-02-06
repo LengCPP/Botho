@@ -1,6 +1,8 @@
 import json
 import logging
-from pywebpush import webpush, WebPushException
+
+from pywebpush import WebPushException, webpush
+
 from app.core.config import settings
 from app.models import PushSubscription
 
@@ -38,6 +40,6 @@ def send_push_notification(subscription: PushSubscription, title: str, message: 
         )
     except WebPushException as ex:
         logger.error(f"WebPush error: {ex}")
-        # If subscription is no longer valid (404 Not Found or 410 Gone), 
+        # If subscription is no longer valid (404 Not Found or 410 Gone),
         # it should be handled by the caller (e.g. remove from DB)
         raise ex

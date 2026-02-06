@@ -14,7 +14,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { format } from "date-fns"
 import { useState } from "react"
 import { FaEllipsisV, FaRegTrashAlt } from "react-icons/fa"
-import { FiBookOpen, FiCheckCircle, FiInfo, FiMaximize2, FiXCircle } from "react-icons/fi"
+import {
+  FiBookOpen,
+  FiCheckCircle,
+  FiInfo,
+  FiMaximize2,
+  FiXCircle,
+} from "react-icons/fi"
 
 import {
   type ReadingLogPublic,
@@ -119,20 +125,41 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
         <Table.Root variant="line" interactive size="sm" width="full">
           <Table.Header>
             <Table.Row bg={useColorModeValue("main.100", "gray.800")}>
-              <Table.ColumnHeader py={2} color={useColorModeValue("gray.800", "gray.100")}>Book</Table.ColumnHeader>
-              <Table.ColumnHeader py={2} color={useColorModeValue("gray.800", "gray.100")}>Date</Table.ColumnHeader>
-              <Table.ColumnHeader py={2} textAlign="left" color={useColorModeValue("gray.800", "gray.100")}>
+              <Table.ColumnHeader
+                py={2}
+                color={useColorModeValue("gray.800", "gray.100")}
+              >
+                Book
+              </Table.ColumnHeader>
+              <Table.ColumnHeader
+                py={2}
+                color={useColorModeValue("gray.800", "gray.100")}
+              >
+                Date
+              </Table.ColumnHeader>
+              <Table.ColumnHeader
+                py={2}
+                textAlign="left"
+                color={useColorModeValue("gray.800", "gray.100")}
+              >
                 Actions
               </Table.ColumnHeader>
             </Table.Row>
           </Table.Header>
           <Table.Body>
             {logs.data.map((log) => (
-              <Table.Row key={log.id} _hover={{ bg: useColorModeValue("main.100/50", "gray.800/50") }}>
+              <Table.Row
+                key={log.id}
+                _hover={{ bg: useColorModeValue("main.100/50", "gray.800/50") }}
+              >
                 <Table.Cell py={2}>
                   <HStack gap={3} width="full">
                     <Image
-                      src={log.work_metadata?.image_url ? getImageUrl(log.work_metadata.image_url) : undefined}
+                      src={
+                        log.work_metadata?.image_url
+                          ? getImageUrl(log.work_metadata.image_url)
+                          : undefined
+                      }
                       fallback={
                         <Flex
                           w="35px"
@@ -154,7 +181,12 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
                       boxShadow="xs"
                     />
                     <VStack align="start" gap={0} minW="0">
-                      <Text fontWeight="bold" fontSize="sm" lineClamp={1} color={useColorModeValue("gray.800", "gray.100")}>
+                      <Text
+                        fontWeight="bold"
+                        fontSize="sm"
+                        lineClamp={1}
+                        color={useColorModeValue("gray.800", "gray.100")}
+                      >
                         {log.title}
                       </Text>
                       <Text fontSize="2xs" color={mutedTextColor} lineClamp={1}>
@@ -190,19 +222,35 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
                 <Table.Cell py={2}>
                   <VStack align="start" gap={0}>
                     <HStack gap={1}>
-                      <Text fontSize="3xs" fontWeight="bold" color="ui.primary" textTransform="uppercase">
+                      <Text
+                        fontSize="3xs"
+                        fontWeight="bold"
+                        color="ui.primary"
+                        textTransform="uppercase"
+                      >
                         Start:
                       </Text>
-                      <Text fontSize="2xs" color={useColorModeValue("gray.700", "gray.200")}>
+                      <Text
+                        fontSize="2xs"
+                        color={useColorModeValue("gray.700", "gray.200")}
+                      >
                         {format(new Date(log.created_at), "MMM d, yy")}
                       </Text>
                     </HStack>
                     {(status === "COMPLETED" || status === "DROPPED") && (
                       <HStack gap={1}>
-                        <Text fontSize="3xs" fontWeight="bold" color="ui.primary" textTransform="uppercase">
+                        <Text
+                          fontSize="3xs"
+                          fontWeight="bold"
+                          color="ui.primary"
+                          textTransform="uppercase"
+                        >
                           {status === "COMPLETED" ? "End:" : "Drop:"}
                         </Text>
-                        <Text fontSize="2xs" color={useColorModeValue("gray.700", "gray.200")}>
+                        <Text
+                          fontSize="2xs"
+                          color={useColorModeValue("gray.700", "gray.200")}
+                        >
                           {format(new Date(log.updated_at), "MMM d, yy")}
                         </Text>
                       </HStack>
@@ -212,12 +260,19 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
                 <Table.Cell py={3} textAlign="left">
                   <MenuRoot>
                     <MenuTrigger asChild>
-                      <IconButton variant="ghost" size="sm" aria-label="Actions">
+                      <IconButton
+                        variant="ghost"
+                        size="sm"
+                        aria-label="Actions"
+                      >
                         <FaEllipsisV />
                       </IconButton>
                     </MenuTrigger>
                     <MenuContent>
-                      <MenuItem onClick={() => handleOpenInfo(log)} value="info">
+                      <MenuItem
+                        onClick={() => handleOpenInfo(log)}
+                        value="info"
+                      >
                         <FiBookOpen style={{ marginRight: "8px" }} /> Review /
                         Info
                       </MenuItem>

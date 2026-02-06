@@ -1,3 +1,6 @@
+import asyncio
+from contextlib import asynccontextmanager
+
 import sentry_sdk
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
@@ -5,6 +8,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from app.api.main import api_router
 from app.core.config import settings
+from app.tasks import check_overdue_loans
 
 
 def custom_generate_unique_id(route: APIRoute) -> str:
@@ -14,10 +18,19 @@ def custom_generate_unique_id(route: APIRoute) -> str:
 if settings.SENTRY_DSN and settings.ENVIRONMENT != "local":
     sentry_sdk.init(dsn=str(settings.SENTRY_DSN), enable_tracing=True)
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start background tasks
+    task = asyncio.create_task(check_overdue_loans())
+    yield
+    # Cleanup if needed
+    task.cancel()
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     generate_unique_id_function=custom_generate_unique_id,
+    lifespan=lifespan,
 )
 
 # Set all CORS enabled origins

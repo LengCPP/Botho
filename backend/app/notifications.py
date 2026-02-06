@@ -1,12 +1,13 @@
-import uuid
-from typing import Optional
-from sqlmodel import Session, select
-from app import crud
-from app.models import NotificationType, PushSubscription
-from app.api.websocket_manager import notification_manager
-from app.push import send_push_notification
-from pywebpush import WebPushException
 import logging
+import uuid
+
+from pywebpush import WebPushException
+from sqlmodel import Session, select
+
+from app import crud
+from app.api.websocket_manager import notification_manager
+from app.models import NotificationType, PushSubscription
+from app.push import send_push_notification
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ async def notify_user(
     title: str,
     message: str,
     type: NotificationType = NotificationType.INFO,
-    link: Optional[str] = None,
+    link: str | None = None,
 ):
     """
     1. Create DB notification.
@@ -44,7 +45,7 @@ async def notify_user(
     subscriptions = session.exec(
         select(PushSubscription).where(PushSubscription.user_id == recipient_id)
     ).all()
-    
+
     for sub in subscriptions:
         try:
             send_push_notification(sub, title, message, link)

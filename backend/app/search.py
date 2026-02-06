@@ -1,7 +1,9 @@
 import uuid
+
 import meilisearch
+
 from app.core.config import settings
-from app.models import Item, Community, WorkMetadata
+from app.models import Community, Item, WorkMetadata
 
 client = meilisearch.Client(settings.MEILI_URL, settings.MEILI_MASTER_KEY)
 

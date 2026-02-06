@@ -2,15 +2,13 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from sqlmodel import func, select, or_
+from sqlmodel import func, or_, select
 
 from app import crud
 from app.api.deps import CurrentUser, SessionDep
-from app.notifications import notify_user
 from app.api.utils import filter_user_privacy
 from app.models import (
     Friendship,
-    FriendshipPublic,
     FriendshipStatus,
     Message,
     NotificationType,
@@ -18,6 +16,7 @@ from app.models import (
     UserPublic,
     UsersPublic,
 )
+from app.notifications import notify_user
 
 router = APIRouter()
 
@@ -31,17 +30,17 @@ def search_user_by_id(
     Strictly expects the format 'u-xxxxxxx'.
     """
     search_id = public_id.lower().strip()
-    
+
     if not search_id.startswith("u-"):
         raise HTTPException(status_code=400, detail="Invalid ID format. Must start with 'u-'")
-        
+
     user = session.exec(
         select(User).where(User.public_id == search_id)
     ).first()
-    
+
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     # Check if already friends
     statement = select(Friendship).where(
         Friendship.user_id == current_user.id,
@@ -49,15 +48,15 @@ def search_user_by_id(
     )
     friendship = session.exec(statement).first()
     is_friend = friendship.status == FriendshipStatus.ACCEPTED if friendship else False
-    
+
     user_public = filter_user_privacy(
-        user, 
-        current_user.id, 
+        user,
+        current_user.id,
         is_admin=current_user.is_superuser,
         is_friend=is_friend
     )
     user_public.friendship_status = friendship.status if friendship else None
-    
+
     return user_public
 
 
@@ -84,12 +83,12 @@ def read_friends(
             Friendship.status == FriendshipStatus.ACCEPTED,
         )
     )
-    
+
     count = session.exec(count_statement).one()
     friends = session.exec(statement.offset(skip).limit(limit)).all()
 
     return UsersPublic(
-        data=[filter_user_privacy(f, current_user.id, is_admin=current_user.is_superuser, is_friend=True) for f in friends], 
+        data=[filter_user_privacy(f, current_user.id, is_admin=current_user.is_superuser, is_friend=True) for f in friends],
         count=count
     )
 
@@ -117,12 +116,12 @@ def read_friend_requests(
             Friendship.status == FriendshipStatus.PENDING,
         )
     )
-    
+
     count = session.exec(count_statement).one()
     users = session.exec(statement.offset(skip).limit(limit)).all()
 
     return UsersPublic(
-        data=[filter_user_privacy(u, current_user.id, is_admin=current_user.is_superuser) for u in users], 
+        data=[filter_user_privacy(u, current_user.id, is_admin=current_user.is_superuser) for u in users],
         count=count
     )
 
@@ -150,12 +149,12 @@ def read_sent_friend_requests(
             Friendship.status == FriendshipStatus.PENDING,
         )
     )
-    
+
     count = session.exec(count_statement).one()
     users = session.exec(statement.offset(skip).limit(limit)).all()
 
     return UsersPublic(
-        data=[filter_user_privacy(u, current_user.id, is_admin=current_user.is_superuser) for u in users], 
+        data=[filter_user_privacy(u, current_user.id, is_admin=current_user.is_superuser) for u in users],
         count=count
     )
 
@@ -169,7 +168,7 @@ async def create_friend_request(
     """
     if current_user.id == friend_id:
         raise HTTPException(status_code=400, detail="Cannot friend yourself")
-    
+
     # Check if already friends or request exists
     statement = select(Friendship).where(
         Friendship.user_id == current_user.id,
@@ -178,7 +177,7 @@ async def create_friend_request(
     existing = session.exec(statement).first()
     if existing:
         raise HTTPException(status_code=400, detail="Friendship already exists or request pending")
-    
+
     crud.create_friend_request(session=session, user_id=current_user.id, friend_id=friend_id)
 
     # Notify friend
@@ -204,7 +203,7 @@ async def accept_friend_request(
     friendship = crud.accept_friend_request(session=session, user_id=friend_id, friend_id=current_user.id)
     if not friendship:
         raise HTTPException(status_code=404, detail="Friend request not found")
-    
+
     # Notify sender that request was accepted
     await notify_user(
         session=session,
@@ -234,9 +233,9 @@ def remove_friend(
     friendships = session.exec(statement).all()
     if not friendships:
         raise HTTPException(status_code=404, detail="Friendship not found")
-    
+
     for f in friendships:
         session.delete(f)
     session.commit()
-    
+
     return Message(message="Friend removed")

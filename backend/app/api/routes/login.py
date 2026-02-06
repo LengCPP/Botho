@@ -1,13 +1,12 @@
 import logging
-import httpx
 import secrets
 from datetime import timedelta
 from typing import Annotated, Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel
 
 from app import crud
 from app.api.deps import CurrentUser, SessionDep, get_current_active_superuser
@@ -15,7 +14,7 @@ from app.api.utils import filter_user_privacy
 from app.core import security
 from app.core.config import settings
 from app.core.security import get_password_hash
-from app.models import Message, NewPassword, Token, UserPublic, UserCreate
+from app.models import Message, NewPassword, Token, UserCreate, UserPublic
 from app.utils import (
     generate_password_reset_token,
     generate_reset_password_email,
@@ -57,7 +56,7 @@ def login_access_token(
             html_content=email_data.html_content,
         )
         raise HTTPException(status_code=403, detail="User not verified")
-        
+
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     return Token(
         access_token=security.create_access_token(
@@ -135,12 +134,12 @@ def verify_email(token: str, session: SessionDep) -> Token:
             status_code=404,
             detail="The user with this email does not exist in the system.",
         )
-    
+
     if not user.is_verified:
         user.is_verified = True
         session.add(user)
         session.commit()
-    
+
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     return Token(
         access_token=security.create_access_token(
@@ -162,7 +161,7 @@ def resend_verification_email(email: str, session: SessionDep) -> Message:
         )
     if user.is_verified:
          return Message(message="Email already verified")
-         
+
     verification_token = generate_password_reset_token(email=email, expires_delta=timedelta(minutes=1))
     email_data = generate_verification_email(
         email_to=user.email, email=email, token=verification_token
@@ -208,18 +207,18 @@ def login_google_init():
     """
     if not settings.GOOGLE_CLIENT_ID:
         raise HTTPException(status_code=500, detail="Google Client ID not configured")
-        
+
     redirect_uri = f"{settings.API_V1_STR}/auth/google/callback"
-    # Construct absolute URL if needed, but relative usually works if on same domain. 
+    # Construct absolute URL if needed, but relative usually works if on same domain.
     # Better to use absolute for OAuth redirects.
     # Assuming the API is accessible via the same host as the request or configured domain.
-    # For simplicity, we'll try to use a hardcoded base or infer it. 
+    # For simplicity, we'll try to use a hardcoded base or infer it.
     # But strictly, we should direct the user to Google.
-    
+
     # We need the full URL for the redirect_uri that Google will call back
     base_url = f"https://{settings.DOMAIN}"
     callback_url = f"{base_url}{settings.API_V1_STR}/auth/google/callback"
-    
+
     google_auth_url = (
         "https://accounts.google.com/o/oauth2/v2/auth"
         f"?client_id={settings.GOOGLE_CLIENT_ID}"
@@ -227,7 +226,7 @@ def login_google_init():
         f"&scope=openid%20email%20profile"
         f"&redirect_uri={callback_url}"
     )
-    
+
     return RedirectResponse(google_auth_url)
 
 
@@ -240,12 +239,12 @@ async def login_google_callback(
     """
     if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
         raise HTTPException(status_code=500, detail="Google credentials not configured")
-        
+
     if settings.ENVIRONMENT == "local":
         base_url = "http://localhost:8000"
     else:
         base_url = f"https://{settings.DOMAIN}"
-        
+
     callback_url = f"{base_url}{settings.API_V1_STR}/auth/google/callback"
 
     # Exchange code for token
@@ -257,17 +256,17 @@ async def login_google_callback(
         "grant_type": "authorization_code",
         "redirect_uri": callback_url,
     }
-    
+
     async with httpx.AsyncClient() as client:
         token_response = await client.post(token_url, data=data)
         if token_response.status_code != 200:
             logger.error(f"Google Token Exchange Failed: {token_response.text}")
             raise HTTPException(status_code=400, detail="Failed to get Google token")
-            
+
         token_json = token_response.json()
         id_token = token_json.get("id_token")
         access_token = token_json.get("access_token")
-        
+
         # Get user info
         user_info_response = await client.get(
             "https://www.googleapis.com/oauth2/v3/userinfo",
@@ -275,15 +274,15 @@ async def login_google_callback(
         )
         if user_info_response.status_code != 200:
             raise HTTPException(status_code=400, detail="Failed to get user info from Google")
-            
+
         user_info = user_info_response.json()
 
     email = user_info.get("email")
     if not email:
         raise HTTPException(status_code=400, detail="Google token missing email")
-    
+
     full_name = user_info.get("name")
-    
+
     user = crud.get_user_by_email(session=session, email=email)
     is_new_user = False
     if not user:
@@ -305,12 +304,12 @@ async def login_google_callback(
         logger.info(f"Created new user via Google: {email}")
     elif not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
-    
+
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     token = security.create_access_token(
         user.id, expires_delta=access_token_expires
     )
-    
+
     # Redirect to frontend with token
     # Using settings.FRONTEND_HOST
     frontend_redirect_url = f"{settings.FRONTEND_HOST}/login?token={token}"
