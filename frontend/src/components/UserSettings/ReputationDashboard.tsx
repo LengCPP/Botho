@@ -122,7 +122,9 @@ const ReputationDashboard = () => {
 
         <Box mt={4} pt={4} borderTopWidth="1px" borderColor={borderColor}>
           <Text fontSize="xs" color="gray.500">
-            <strong>How to improve:</strong> Fulfill loan requests promptly, return items on time, and earn positive reviews to boost your Honor Score.
+            <strong>How to improve:</strong> Fulfill loan requests promptly,
+            return items on time, and earn positive reviews to boost your Honor
+            Score.
           </Text>
         </Box>
       </Box>

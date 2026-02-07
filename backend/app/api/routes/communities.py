@@ -2,7 +2,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from sqlmodel import func, or_, select
+from sqlmodel import col, func, or_, select
 
 from app import crud
 from app.api.deps import CurrentUser, SessionDep
@@ -519,11 +519,18 @@ def update_community_notifications(
 
 @router.get("/{id}/items", response_model=ItemsPublic)
 def read_community_items(
-    *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, skip: int = 0, limit: int = 100
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    skip: int = 0,
+    limit: int = 100,
+    q: str | None = None,
 ) -> Any:
     """
     Get items belonging to a community.
     Includes both pooled items (via CommunityItem) and exclusively community-owned items.
+    Supports searching via 'q' using Meilisearch.
     """
     community = session.get(Community, id)
     if not community:
@@ -539,33 +546,78 @@ def read_community_items(
     if not membership and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Must be a member to view community items")
 
-    # Query for pooled items
-    pooled_stmt = (
-        select(Item)
-        .join(CommunityItem, Item.id == CommunityItem.item_id)
-        .where(CommunityItem.community_id == id)
-    )
-
-    # Query for exclusively community-owned items
-    owned_stmt = (
-        select(Item)
-        .where(
-            Item.owner_id == id
+    if q:
+        from app.search import client as meili_client
+        try:
+            index = meili_client.index("items")
+            # Filter: item belongs to community (owned or pooled)
+            # Meilisearch 'pooled_in' is an array, we check if community ID is in it
+            filter_expr = f'(owner_id = "{id}" OR pooled_in = "{id}")'
+            
+            search_params = {
+                "limit": limit,
+                "offset": skip,
+                "filter": filter_expr
+            }
+            
+            search_results = index.search(q, search_params)
+            item_ids = [uuid.UUID(hit["id"]) for hit in search_results["hits"]]
+            
+            if not item_ids:
+                return ItemsPublic(data=[], count=0)
+                
+            # Fetch from DB preserving order
+            items = session.exec(select(Item).where(Item.id.in_(item_ids))).all()
+            item_map = {item.id: item for item in items}
+            items = [item_map[iid] for iid in item_ids if iid in item_map]
+            count = search_results["estimatedTotalHits"]
+        except Exception:
+            # Fallback to SQL
+            q_filter = or_(
+                col(Item.title).ilike(f"%{q}%"),
+                col(Item.description).ilike(f"%{q}%"),
+                col(Item.author).ilike(f"%{q}%")
+            )
+            statement = select(Item).where(
+                q_filter,
+                or_(
+                    Item.id.in_(
+                        select(CommunityItem.item_id).where(CommunityItem.community_id == id)
+                    ),
+                    Item.owner_id == id
+                )
+            )
+            count_stmt = select(func.count()).select_from(statement.subquery())
+            count = session.exec(count_stmt).one()
+            items = session.exec(statement.offset(skip).limit(limit)).all()
+    else:
+        # Query for pooled items
+        pooled_stmt = (
+            select(Item)
+            .join(CommunityItem, Item.id == CommunityItem.item_id)
+            .where(CommunityItem.community_id == id)
         )
-    )
 
-    # Combine using OR
-    statement = select(Item).where(
-        or_(
-            Item.id.in_(pooled_stmt.with_only_columns(Item.id)),
-            Item.owner_id == id
+        # Query for exclusively community-owned items
+        owned_stmt = (
+            select(Item)
+            .where(
+                Item.owner_id == id
+            )
         )
-    )
 
-    count_stmt = select(func.count()).select_from(statement.subquery())
-    count = session.exec(count_stmt).one()
+        # Combine using OR
+        statement = select(Item).where(
+            or_(
+                Item.id.in_(pooled_stmt.with_only_columns(Item.id)),
+                Item.owner_id == id
+            )
+        )
 
-    items = session.exec(statement.offset(skip).limit(limit)).all()
+        count_stmt = select(func.count()).select_from(statement.subquery())
+        count = session.exec(count_stmt).one()
+
+        items = session.exec(statement.offset(skip).limit(limit)).all()
 
     # Get all CommunityItem meta for pooled items in this batch
     item_ids = [item.id for item in items]
@@ -625,6 +677,7 @@ def read_community_items(
         items_public.append(item_pub)
 
     return ItemsPublic(data=items_public, count=count)
+
 
 
 @router.post("/{id}/items/{item_id}", response_model=Message)

@@ -24,12 +24,12 @@ import {
 } from "react-icons/fi"
 
 import { type ItemPublic, type LoanPublic, LoansService } from "@/client"
+import ReviewModal from "@/components/Common/ReviewModal"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
 import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
 import { LoanCard } from "@/components/Items/LoanCard"
-import ReviewModal from "@/components/Common/ReviewModal"
 import useAuth from "@/hooks/useAuth"
 
 export const Route = createFileRoute("/_layout/loans")({
@@ -42,7 +42,8 @@ function LoansPage() {
   const [sortBy, setSortBy] = useState("created_at")
   const [sortOrder, setSortOrder] = useState("desc")
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
-  const [selectedLoanForReview, setSelectedLoanForReview] = useState<LoanPublic | null>(null)
+  const [selectedLoanForReview, setSelectedLoanForReview] =
+    useState<LoanPublic | null>(null)
 
   const { data: incoming, isLoading: isLoadingIn } = useQuery({
     queryKey: ["loans", "incoming"],
@@ -296,7 +297,9 @@ function LoansPage() {
                         key={loan.id}
                         loan={loan}
                         type={
-                          loan.requester_id === user?.id ? "outgoing" : "incoming"
+                          loan.requester_id === user?.id
+                            ? "outgoing"
+                            : "incoming"
                         }
                         onReview={(l) => setSelectedLoanForReview(l)}
                       />

@@ -3,7 +3,7 @@ import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from sqlmodel import func, select
+from sqlmodel import col, func, or_, select
 
 from app.api.deps import CurrentUser, SessionDep
 from app.api.utils import (
@@ -14,6 +14,7 @@ from app.api.utils import (
 )
 from app.core.config import settings
 from app.models import (
+    Community,
     CommunityItem,
     CommunityMember,
     CommunityMemberRole,
@@ -373,14 +374,17 @@ def read_items(
     category: str | None = None,
     genre: str | None = None,
     item_type: ItemType | None = None,
-    enable_feed: bool = False
+    enable_feed: bool = False,
+    q: str | None = None,
 ) -> Any:
     """
     Retrieve items. Filters by current user's owner_id by default, unless enable_feed is True.
+    Supports searching via 'q' using Meilisearch.
     """
 
     target_owner_id = None
     feed_mode = False
+    allowed_community_ids = []
 
     # Permission check and target owner selection
     if owner_id:
@@ -417,7 +421,6 @@ def read_items(
     else:
         target_owner_id = current_user.id
 
-    # Filter items
     if feed_mode:
         # Get IDs of communities user is in
         my_community_ids = session.exec(
@@ -433,44 +436,113 @@ def read_items(
         ).all()
         
         allowed_community_ids = list(set(my_community_ids + public_community_ids))
-        
-        statement = select(Item).where(
-            or_(
-                Item.owner_id.in_(allowed_community_ids),
-                Item.community_owner.has(Community.id.in_(allowed_community_ids))
+
+    # Use Meilisearch if q is provided
+    if q:
+        from app.search import client as meili_client
+        try:
+            index = meili_client.index("items")
+            filters = []
+            if target_owner_id:
+                filters.append(f'owner_id = "{target_owner_id}"')
+            if category:
+                filters.append(f"category = '{category}'")
+            if genre:
+                filters.append(f"genre = '{genre}'")
+            if item_type:
+                filters.append(f'item_type = "{item_type.value}"')
+            if feed_mode:
+                if allowed_community_ids:
+                    allowed_ids_str = "[" + ", ".join([f'"{cid}"' for cid in allowed_community_ids]) + "]"
+                    filters.append(f"(owner_id IN {allowed_ids_str} OR pooled_in IN {allowed_ids_str})")
+                else:
+                    return ItemsPublic(data=[], count=0)
+
+            search_params = {
+                "limit": limit,
+                "offset": skip,
+                "filter": " AND ".join(filters) if filters else None
+            }
+            
+            search_results = index.search(q, search_params)
+            item_ids = [uuid.UUID(hit["id"]) for hit in search_results["hits"]]
+            
+            if not item_ids:
+                return ItemsPublic(data=[], count=0)
+
+            # Fetch from DB preserving order
+            items = session.exec(select(Item).where(Item.id.in_(item_ids))).all()
+            item_map = {item.id: item for item in items}
+            items = [item_map[iid] for iid in item_ids if iid in item_map]
+            count = search_results["estimatedTotalHits"]
+        except Exception:
+            # Fallback to SQL if Meilisearch fails
+            q_filter = or_(
+                col(Item.title).ilike(f"%{q}%"),
+                col(Item.description).ilike(f"%{q}%"),
+                col(Item.author).ilike(f"%{q}%")
             )
-        )
+            if feed_mode:
+                statement = select(Item).where(
+                    q_filter,
+                    or_(
+                        Item.owner_id.in_(allowed_community_ids),
+                        Item.community_owner.has(Community.id.in_(allowed_community_ids))
+                    )
+                )
+            else:
+                statement = select(Item).where(q_filter, Item.owner_id == target_owner_id)
+
+            if category:
+                statement = statement.where(func.json_extract_path_text(Item.extra_data, 'category') == category)
+            if genre:
+                statement = statement.where(func.json_extract_path_text(Item.extra_data, 'genre') == genre)
+            if item_type:
+                statement = statement.where(Item.item_type == item_type)
+
+            count_stmt = select(func.count()).select_from(statement.subquery())
+            count = session.exec(count_stmt).one()
+            items = session.exec(statement.offset(skip).limit(limit)).all()
     else:
-        statement = select(Item).where(Item.owner_id == target_owner_id)
+        # Standard SQL filtering
+        if feed_mode:
+            statement = select(Item).where(
+                or_(
+                    Item.owner_id.in_(allowed_community_ids),
+                    Item.community_owner.has(Community.id.in_(allowed_community_ids))
+                )
+            )
+        else:
+            statement = select(Item).where(Item.owner_id == target_owner_id)
 
-    if category:
-        statement = statement.where(
-            func.json_extract_path_text(Item.extra_data, 'category') == category
-        )
+        if category:
+            statement = statement.where(
+                func.json_extract_path_text(Item.extra_data, 'category') == category
+            )
 
-    if genre:
-        statement = statement.where(
-            func.json_extract_path_text(Item.extra_data, 'genre') == genre
-        )
+        if genre:
+            statement = statement.where(
+                func.json_extract_path_text(Item.extra_data, 'genre') == genre
+            )
 
-    if item_type:
-        statement = statement.where(Item.item_type == item_type)
+        if item_type:
+            statement = statement.where(Item.item_type == item_type)
 
-    # Count total
-    count_stmt = select(func.count()).select_from(statement.subquery())
-    count = session.exec(count_stmt).one()
+        # Count total
+        count_stmt = select(func.count()).select_from(statement.subquery())
+        count = session.exec(count_stmt).one()
 
-    # Apply sorting
-    sort_column = Item.created_at
-    if sort_by == "title":
-        sort_column = Item.title
+        # Apply sorting
+        sort_column = Item.created_at
+        if sort_by == "title":
+            sort_column = Item.title
 
-    if sort_order == "desc":
-        statement = statement.order_by(sort_column.desc())
-    else:
-        statement = statement.order_by(sort_column.asc())
+        if sort_order == "desc":
+            statement = statement.order_by(sort_column.desc())
+        else:
+            statement = statement.order_by(sort_column.asc())
 
-    items = session.exec(statement.offset(skip).limit(limit)).all()
+        items = session.exec(statement.offset(skip).limit(limit)).all()
 
     public_items = []
     for item in items:

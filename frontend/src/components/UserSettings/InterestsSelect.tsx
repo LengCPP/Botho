@@ -51,7 +51,10 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+      if (
+        wrapperRef.current &&
+        !wrapperRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false)
       }
     }
@@ -61,10 +64,7 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
     }
   }, [])
 
-  const {
-    data: interests = [],
-    isLoading,
-  } = useQuery({
+  const { data: interests = [], isLoading } = useQuery({
     queryKey: ["interests", debouncedSearchTerm],
     queryFn: () => InterestsService.readInterests({ q: debouncedSearchTerm }),
     enabled: isOpen,
@@ -171,7 +171,7 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
           onKeyDown={handleKeyDown}
           autoComplete="off"
         />
-        
+
         {isOpen && (
           <Box
             position="absolute"

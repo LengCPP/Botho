@@ -1,4 +1,4 @@
-import { LoansService, type LoanPublic } from "@/client"
+import { type LoanPublic, LoansService } from "@/client"
 import {
   Box,
   Flex,
@@ -60,7 +60,9 @@ export const LoanCalendar = () => {
   const days = eachDayOfInterval({ start: monthStart, end: monthEnd })
 
   const getLoansForDate = (date: Date) => {
-    return activeLoans.filter((loan) => isSameDay(parseISO(loan.end_date), date))
+    return activeLoans.filter((loan) =>
+      isSameDay(parseISO(loan.end_date), date),
+    )
   }
 
   return (
@@ -72,7 +74,13 @@ export const LoanCalendar = () => {
       overflow="hidden"
     >
       {/* Header */}
-      <Flex p={4} justify="space-between" align="center" borderBottomWidth="1px" borderColor="border.subtle">
+      <Flex
+        p={4}
+        justify="space-between"
+        align="center"
+        borderBottomWidth="1px"
+        borderColor="border.subtle"
+      >
         <Heading size="sm">{format(currentDate, "MMMM yyyy")}</Heading>
         <Flex gap={2}>
           <IconButton
@@ -97,7 +105,13 @@ export const LoanCalendar = () => {
       {/* Days Header */}
       <Grid templateColumns="repeat(7, 1fr)" bg="bg.muted" py={2}>
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-          <Text key={day} textAlign="center" fontSize="xs" color="fg.muted" fontWeight="bold">
+          <Text
+            key={day}
+            textAlign="center"
+            fontSize="xs"
+            color="fg.muted"
+            fontWeight="bold"
+          >
             {day}
           </Text>
         ))}
@@ -108,7 +122,7 @@ export const LoanCalendar = () => {
         {emptyDays.map((_, i) => (
           <Box key={`empty-${i}`} p={2} />
         ))}
-        
+
         {days.map((day) => {
           const loansDue = getLoansForDate(day)
           const hasLoans = loansDue.length > 0
@@ -157,11 +171,13 @@ export const LoanCalendar = () => {
                   <PopoverContent>
                     <PopoverArrow />
                     <PopoverBody fontSize="xs">
-                      <Text fontWeight="bold" mb={2}>Due on {format(day, "MMM d")}:</Text>
+                      <Text fontWeight="bold" mb={2}>
+                        Due on {format(day, "MMM d")}:
+                      </Text>
                       <VStack align="start" gap={1}>
                         {loansDue.map((loan) => (
                           <Text key={loan.id} lineClamp={1}>
-                             • {loan.item.title}
+                            • {loan.item.title}
                           </Text>
                         ))}
                       </VStack>
@@ -173,10 +189,12 @@ export const LoanCalendar = () => {
           )
         })}
       </Grid>
-      
+
       {activeLoans.length === 0 && !isLoading && (
         <Box p={4} textAlign="center">
-           <Text fontSize="xs" color="fg.muted">No active loans.</Text>
+          <Text fontSize="xs" color="fg.muted">
+            No active loans.
+          </Text>
         </Box>
       )}
     </Box>

@@ -1,7 +1,9 @@
-import { SearchService, type SearchResults } from "@/client"
+import { type SearchResults, SearchService } from "@/client"
 import UserCard from "@/components/Common/UserCard"
 import CommunityCard from "@/components/Communities/CommunityCard"
 import ItemCard from "@/components/Items/ItemCard"
+import { InputGroup } from "@/components/ui/input-group"
+import useAuth from "@/hooks/useAuth"
 import { groupItems } from "@/utils"
 import {
   Badge,
@@ -22,13 +24,15 @@ import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { useEffect, useRef, useState } from "react"
 import { FiBook, FiSearch, FiUsers } from "react-icons/fi"
-import { InputGroup } from "@/components/ui/input-group"
 
 interface QuickSearchProps {
   placeholder?: string
 }
 
-export const QuickSearch = ({ placeholder = "Quick Search..." }: QuickSearchProps) => {
+export const QuickSearch = ({
+  placeholder = "Quick Search...",
+}: QuickSearchProps) => {
+  const { user: currentUser } = useAuth()
   const [searchTerm, setSearchTerm] = useState("")
   const [debouncedTerm, setDebouncedTerm] = useState("")
   const [showResults, setShowResults] = useState(false)
@@ -105,14 +109,27 @@ export const QuickSearch = ({ placeholder = "Quick Search..." }: QuickSearchProp
             </Flex>
           ) : !hasResults ? (
             <Box p={6} textAlign="center">
-              <Text color="fg.muted">No results found for "{debouncedTerm}"</Text>
+              <Text color="fg.muted">
+                No results found for "{debouncedTerm}"
+              </Text>
             </Box>
           ) : (
-            <Stack gap={0} divider={<Box borderBottomWidth="1px" borderColor="border.subtle" />}>
+            <Stack
+              gap={0}
+              divider={
+                <Box borderBottomWidth="1px" borderColor="border.subtle" />
+              }
+            >
               {/* Users */}
               {results.users.length > 0 && (
                 <Box p={4}>
-                  <Heading size="xs" mb={3} color="fg.muted" textTransform="uppercase" letterSpacing="wider">
+                  <Heading
+                    size="xs"
+                    mb={3}
+                    color="fg.muted"
+                    textTransform="uppercase"
+                    letterSpacing="wider"
+                  >
                     Users
                   </Heading>
                   <Stack gap={2}>
@@ -124,12 +141,22 @@ export const QuickSearch = ({ placeholder = "Quick Search..." }: QuickSearchProp
                         onClick={() => setShowResults(false)}
                         style={{ textDecoration: "none" }}
                       >
-                        <HStack p={2} hover={{ bg: "bg.muted" }} borderRadius="md">
-                           {/* Simple User Row */}
-                           <Box>
-                             <Text fontWeight="medium">{user.full_name || user.email}</Text>
-                             {user.alias && <Text fontSize="xs" color="fg.muted">@{user.alias}</Text>}
-                           </Box>
+                        <HStack
+                          p={2}
+                          hover={{ bg: "bg.muted" }}
+                          borderRadius="md"
+                        >
+                          {/* Simple User Row */}
+                          <Box>
+                            <Text fontWeight="medium">
+                              {user.full_name || user.email}
+                            </Text>
+                            {user.alias && (
+                              <Text fontSize="xs" color="fg.muted">
+                                @{user.alias}
+                              </Text>
+                            )}
+                          </Box>
                         </HStack>
                       </Link>
                     ))}
@@ -140,26 +167,64 @@ export const QuickSearch = ({ placeholder = "Quick Search..." }: QuickSearchProp
               {/* Items */}
               {results.items.length > 0 && (
                 <Box p={4}>
-                  <Heading size="xs" mb={3} color="fg.muted" textTransform="uppercase" letterSpacing="wider">
+                  <Heading
+                    size="xs"
+                    mb={3}
+                    color="fg.muted"
+                    textTransform="uppercase"
+                    letterSpacing="wider"
+                  >
                     Items
                   </Heading>
                   <Stack gap={2}>
-                     {results.items.map(item => (
+                    {results.items.map((item) => {
+                      let to = "/items"
+                      let params: any = {}
+                      const isOwner = item.owner_id === currentUser?.id
+
+                      if (item.community_owner) {
+                        to = "/communities/$communityId"
+                        params = { communityId: item.community_owner.id }
+                      } else if (isOwner) {
+                        to = "/items" // Or /profile, but items is the main list
+                        params = {}
+                      } else {
+                        to = "/users/$userId"
+                        params = { userId: item.owner_id }
+                      }
+
+                      return (
                         <Link
-                            key={item.id}
-                            to="/items/$itemId"
-                            params={{ itemId: item.id }}
-                            onClick={() => setShowResults(false)}
+                          key={item.id}
+                          to={to}
+                          params={params}
+                          onClick={() => setShowResults(false)}
                         >
-                            <HStack p={2} _hover={{ bg: "bg.muted" }} borderRadius="md">
-                                <Icon as={FiBook} color="ui.main" />
-                                <Box>
-                                    <Text fontWeight="medium" lineClamp={1}>{item.title}</Text>
-                                    <Text fontSize="xs" color="fg.muted" lineClamp={1}>by {item.author}</Text>
-                                </Box>
-                            </HStack>
+                          <HStack
+                            p={2}
+                            _hover={{ bg: "bg.muted" }}
+                            borderRadius="md"
+                          >
+                            <Icon as={FiBook} color="ui.main" />
+                            <Box>
+                              <Text fontWeight="medium" lineClamp={1}>
+                                {item.title}
+                              </Text>
+                              <Text
+                                fontSize="xs"
+                                color="fg.muted"
+                                lineClamp={1}
+                              >
+                                by {item.author || "Unknown"}
+                                {item.community_owner
+                                  ? ` (in ${item.community_owner.name})`
+                                  : ""}
+                              </Text>
+                            </Box>
+                          </HStack>
                         </Link>
-                     ))}
+                      )
+                    })}
                   </Stack>
                 </Box>
               )}
@@ -167,7 +232,13 @@ export const QuickSearch = ({ placeholder = "Quick Search..." }: QuickSearchProp
               {/* Communities */}
               {results.communities.length > 0 && (
                 <Box p={4}>
-                  <Heading size="xs" mb={3} color="fg.muted" textTransform="uppercase" letterSpacing="wider">
+                  <Heading
+                    size="xs"
+                    mb={3}
+                    color="fg.muted"
+                    textTransform="uppercase"
+                    letterSpacing="wider"
+                  >
                     Communities
                   </Heading>
                   <Stack gap={2}>
@@ -178,10 +249,14 @@ export const QuickSearch = ({ placeholder = "Quick Search..." }: QuickSearchProp
                         params={{ communityId: community.id }}
                         onClick={() => setShowResults(false)}
                       >
-                         <HStack p={2} _hover={{ bg: "bg.muted" }} borderRadius="md">
-                             <Icon as={FiUsers} color="purple.500" />
-                             <Text fontWeight="medium">{community.name}</Text>
-                         </HStack>
+                        <HStack
+                          p={2}
+                          _hover={{ bg: "bg.muted" }}
+                          borderRadius="md"
+                        >
+                          <Icon as={FiUsers} color="purple.500" />
+                          <Text fontWeight="medium">{community.name}</Text>
+                        </HStack>
                       </Link>
                     ))}
                   </Stack>

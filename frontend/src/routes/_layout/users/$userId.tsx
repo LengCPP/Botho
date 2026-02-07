@@ -79,6 +79,7 @@ function UserProfilePage() {
   const [sortOrder, setSortOrder] = useState("desc")
   const [category, setCategory] = useState<string | undefined>(undefined)
   const [genre, setGenre] = useState<string | undefined>(undefined)
+  const [q, setQ] = useState("")
 
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
   const isMobile = useBreakpointValue({ base: true, md: false })
@@ -103,7 +104,7 @@ function UserProfilePage() {
     queryKey: [
       "items",
       userId,
-      { excludeCollections: true, sortBy, sortOrder, category, genre },
+      { excludeCollections: true, sortBy, sortOrder, category, genre, q },
     ],
     queryFn: () =>
       ItemsService.readItems({
@@ -113,6 +114,7 @@ function UserProfilePage() {
         sortOrder,
         category,
         genre,
+        q,
       }),
     enabled: canSeeAll,
   })
@@ -288,6 +290,8 @@ function UserProfilePage() {
             </Heading>
 
             <ItemsViewOptions
+              q={q}
+              onChangeQ={setQ}
               viewMode={viewMode}
               onChangeViewMode={setViewMode}
               displayType={displayType}

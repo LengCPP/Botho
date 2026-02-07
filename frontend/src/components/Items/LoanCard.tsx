@@ -1,6 +1,5 @@
 import BorrowerReportCard from "@/components/Common/BorrowerReportCard"
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
-import { Link as RouterLink } from "@tanstack/react-router"
 import {
   Badge,
   Box,
@@ -13,6 +12,7 @@ import {
   VStack,
 } from "@chakra-ui/react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { Link as RouterLink } from "@tanstack/react-router"
 import { format } from "date-fns"
 import { useState } from "react"
 import { FiCheckCircle, FiStar, FiXCircle } from "react-icons/fi"
@@ -115,64 +115,64 @@ export function LoanCard({
             <Text fontWeight="bold" fontSize="lg">
               {loan.item.title}
             </Text>
-          {type === "incoming" ? (
-            <Box>
-              <Text fontSize="xs" color="fg.muted" as="span">
-                Borrower:{" "}
-              </Text>
-              {loan.requester ? (
-                <Box display="inline-block" verticalAlign="top">
-                  <Link
-                    asChild
-                    colorPalette="blue"
-                    fontWeight="medium"
-                    fontSize="xs"
-                  >
-                    <RouterLink to={`/users/${loan.requester.id}`}>
-                      {loan.requester.full_name ||
-                        loan.requester.email ||
-                        "Unknown"}
+            {type === "incoming" ? (
+              <Box>
+                <Text fontSize="xs" color="fg.muted" as="span">
+                  Borrower:{" "}
+                </Text>
+                {loan.requester ? (
+                  <Box display="inline-block" verticalAlign="top">
+                    <Link
+                      asChild
+                      colorPalette="blue"
+                      fontWeight="medium"
+                      fontSize="xs"
+                    >
+                      <RouterLink to={`/users/${loan.requester.id}`}>
+                        {loan.requester.full_name ||
+                          loan.requester.email ||
+                          "Unknown"}
+                      </RouterLink>
+                    </Link>
+                    {loan.requester.email &&
+                      loan.requester.email !== "[Hidden]" &&
+                      loan.requester.full_name && (
+                        <Text
+                          fontSize="xs"
+                          color="gray.500"
+                          lineHeight="shorter"
+                          display="block"
+                        >
+                          {loan.requester.email}
+                        </Text>
+                      )}
+                  </Box>
+                ) : (
+                  <Text fontSize="xs" color="fg.muted" as="span">
+                    Unknown
+                  </Text>
+                )}
+                {isSelfRequested && (
+                  <Text fontSize="xs" color="fg.muted" as="span">
+                    {" "}
+                    (You)
+                  </Text>
+                )}
+              </Box>
+            ) : (
+              <Text fontSize="xs" color="fg.muted">
+                Owner:{" "}
+                {loan.owner ? (
+                  <Link asChild colorPalette="blue" fontWeight="medium">
+                    <RouterLink to={`/users/${loan.owner.id}`}>
+                      {loan.owner.full_name || loan.owner.email || "Owner"}
                     </RouterLink>
                   </Link>
-                  {loan.requester.email &&
-                    loan.requester.email !== "[Hidden]" &&
-                    loan.requester.full_name && (
-                      <Text
-                        fontSize="xs"
-                        color="gray.500"
-                        lineHeight="shorter"
-                        display="block"
-                      >
-                        {loan.requester.email}
-                      </Text>
-                    )}
-                </Box>
-              ) : (
-                <Text fontSize="xs" color="fg.muted" as="span">
-                  Unknown
-                </Text>
-              )}
-              {isSelfRequested && (
-                <Text fontSize="xs" color="fg.muted" as="span">
-                  {" "}
-                  (You)
-                </Text>
-              )}
-            </Box>
-          ) : (
-            <Text fontSize="xs" color="fg.muted">
-              Owner:{" "}
-              {loan.owner ? (
-                <Link asChild colorPalette="blue" fontWeight="medium">
-                  <RouterLink to={`/users/${loan.owner.id}`}>
-                    {loan.owner.full_name || loan.owner.email || "Owner"}
-                  </RouterLink>
-                </Link>
-              ) : (
-                loan.community?.name || "Community"
-              )}
-            </Text>
-          )}
+                ) : (
+                  loan.community?.name || "Community"
+                )}
+              </Text>
+            )}
           </VStack>
           <VStack align="end" gap={2}>
             <Badge
@@ -183,7 +183,8 @@ export function LoanCard({
                     ? "accent"
                     : loan.status === "ACCEPTED"
                       ? "main"
-                      : loan.status === "REJECTED" || loan.status === "CANCELLED"
+                      : loan.status === "REJECTED" ||
+                          loan.status === "CANCELLED"
                         ? "red"
                         : loan.status === "RETURN_PENDING"
                           ? "orange"

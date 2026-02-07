@@ -41,6 +41,7 @@ import {
   FiLogOut,
   FiMessageSquare,
   FiPlus,
+  FiSearch,
   FiSend,
   FiSettings,
   FiShare2,
@@ -78,6 +79,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Field } from "@/components/ui/field"
+import { InputGroup } from "@/components/ui/input-group"
 import {
   MenuContent,
   MenuItem,
@@ -436,6 +438,7 @@ function CommunityBoard() {
     "subject" | "genre" | "category" | "author" | "ownership"
   >("subject")
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
+  const [q, setQ] = useState("")
   const isMobile = useBreakpointValue({ base: true, md: false })
 
   const { data: community, isLoading: isLoadingCommunity } = useQuery({
@@ -483,8 +486,9 @@ function CommunityBoard() {
   })
 
   const { data: communityItems, isLoading: isLoadingItems } = useQuery({
-    queryKey: ["communityItems", communityId],
-    queryFn: () => CommunitiesService.readCommunityItems({ id: communityId }),
+    queryKey: ["communityItems", communityId, q],
+    queryFn: () =>
+      CommunitiesService.readCommunityItems({ id: communityId, q }),
     enabled: !!isMember,
   })
 
@@ -968,6 +972,18 @@ function CommunityBoard() {
               )}
               <Flex justify="space-between" align="center" wrap="wrap" gap={4}>
                 <HStack gap={2}>
+                  {/* Search Input */}
+                  <Box width={{ base: "full", sm: "200px", md: "250px" }}>
+                    <InputGroup flex="1" startElement={<FiSearch />}>
+                      <Input
+                        placeholder="Find in community..."
+                        size="sm"
+                        variant="subtle"
+                        value={q}
+                        onChange={(e) => setQ(e.target.value)}
+                      />
+                    </InputGroup>
+                  </Box>
                   {/* Organize Button */}
                   {displayType === "collections" && !selectedGroup && (
                     <Popover.Root>

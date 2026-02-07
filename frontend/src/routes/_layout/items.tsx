@@ -67,6 +67,7 @@ const itemsSearchSchema = z.object({
   organize_by: z
     .enum(["subject", "genre", "category", "author"])
     .catch("subject"),
+  q: z.string().optional(),
 })
 
 function getItemsQueryOptions({
@@ -77,6 +78,7 @@ function getItemsQueryOptions({
   ownerId,
   category,
   genre,
+  q,
 }: {
   page: number
   sort_by: string
@@ -85,6 +87,7 @@ function getItemsQueryOptions({
   ownerId?: string
   category?: string
   genre?: string
+  q?: string
 }) {
   return {
     queryFn: () =>
@@ -96,6 +99,7 @@ function getItemsQueryOptions({
         ownerId: ownerId,
         category: category,
         genre: genre,
+        q: q,
       }),
     queryKey: [
       "items",
@@ -107,6 +111,7 @@ function getItemsQueryOptions({
         ownerId,
         category,
         genre,
+        q,
       },
     ],
   }
@@ -130,6 +135,7 @@ function ItemsTable() {
     display_type,
     subject,
     organize_by,
+    q,
   } = Route.useSearch()
   const { user } = useAuth()
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
@@ -144,6 +150,7 @@ function ItemsTable() {
       ownerId: user?.id,
       category,
       genre,
+      q,
     }),
     placeholderData: (prevData) => prevData,
     enabled: !!user,
@@ -208,7 +215,7 @@ function ItemsTable() {
   }
 
   if (items.length === 0 && page === 1) {
-    if (hasAnyItems) {
+    if (hasAnyItems || q) {
       return (
         <Box mt={8}>
           <Text color="gray.500">No items match your filters.</Text>
@@ -359,6 +366,7 @@ function Items() {
     view_mode,
     display_type,
     organize_by,
+    q,
   } = Route.useSearch()
 
   const updateSearch = (newParams: any) => {
@@ -379,6 +387,8 @@ function Items() {
         >
           <Heading size="lg">My Items</Heading>
           <ItemsViewOptions
+            q={q}
+            onChangeQ={(val) => updateSearch({ q: val })}
             viewMode={view_mode}
             onChangeViewMode={(mode) => updateSearch({ view_mode: mode })}
             displayType={display_type}

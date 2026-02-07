@@ -1,15 +1,7 @@
-import { type ItemPublic } from "@/client"
+import type { ItemPublic } from "@/client"
 import useAuth from "@/hooks/useAuth"
 import { getImageUrl } from "@/utils"
-import {
-  Badge,
-  Box,
-  Flex,
-  HStack,
-  Image,
-  Text,
-  VStack,
-} from "@chakra-ui/react"
+import { Badge, Box, Flex, HStack, Image, Text, VStack } from "@chakra-ui/react"
 import { Link } from "@tanstack/react-router"
 import { FiBook, FiUser } from "react-icons/fi"
 
@@ -18,7 +10,10 @@ interface ItemListItemProps {
   linkToOwner?: boolean
 }
 
-export const ItemListItem = ({ item: itemProp, linkToOwner = false }: ItemListItemProps) => {
+export const ItemListItem = ({
+  item: itemProp,
+  linkToOwner = false,
+}: ItemListItemProps) => {
   const { user } = useAuth()
   const items = Array.isArray(itemProp) ? itemProp : [itemProp]
   const item = items[0]
@@ -26,7 +21,7 @@ export const ItemListItem = ({ item: itemProp, linkToOwner = false }: ItemListIt
   const count = items.length
 
   const isOwner = item.owner_id === user?.id
-  
+
   // Logic for destination
   // If linkToOwner is true:
   //   - If community owner: /communities/$communityId
@@ -34,7 +29,7 @@ export const ItemListItem = ({ item: itemProp, linkToOwner = false }: ItemListIt
   //   - If user owner (other): /users/$userId
   // Else:
   //   - /items/$itemId
-  
+
   let to = "/items/$itemId"
   let params: any = { itemId: item.id }
 
@@ -119,24 +114,31 @@ export const ItemListItem = ({ item: itemProp, linkToOwner = false }: ItemListIt
             <Text fontWeight="bold" fontSize="sm" lineClamp={1}>
               {item.title}
             </Text>
-            <Badge size="sm" variant="subtle" colorPalette={isBook ? "blue" : "gray"}>
+            <Badge
+              size="sm"
+              variant="subtle"
+              colorPalette={isBook ? "blue" : "gray"}
+            >
               {item.item_type || "General"}
             </Badge>
           </HStack>
-          
+
           <Text fontSize="xs" color="fg.muted" lineClamp={1}>
             {item.author ? `by ${item.author}` : "Unknown Author"}
           </Text>
 
           <HStack gap={2} fontSize="xs" color="fg.subtle">
-             <HStack gap={1}>
-                <FiUser />
-                <Text>
-                  {item.owner?.full_name || item.owner?.email || item.community_owner?.name || "Unknown"}
-                </Text>
-             </HStack>
-             <Text>•</Text>
-             <Text>{new Date(item.created_at).toLocaleDateString()}</Text>
+            <HStack gap={1}>
+              <FiUser />
+              <Text>
+                {item.owner?.full_name ||
+                  item.owner?.email ||
+                  item.community_owner?.name ||
+                  "Unknown"}
+              </Text>
+            </HStack>
+            <Text>•</Text>
+            <Text>{new Date(item.created_at).toLocaleDateString()}</Text>
           </HStack>
         </VStack>
       </Flex>

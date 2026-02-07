@@ -173,7 +173,9 @@ const EditProfileModal = ({ user, isOpen, onClose }: EditProfileModalProps) => {
             <Heading size="xs">Interests</Heading>
             <InterestsSelect
               selectedIds={selectedInterests}
-              onChange={(ids) => setValue("interest_ids", ids, { shouldDirty: true })}
+              onChange={(ids) =>
+                setValue("interest_ids", ids, { shouldDirty: true })
+              }
             />
           </VStack>
         </DialogBody>

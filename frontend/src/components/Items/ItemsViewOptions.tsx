@@ -3,6 +3,7 @@ import {
   Button,
   Flex,
   HStack,
+  Input,
   Popover,
   Portal,
   Separator,
@@ -18,8 +19,11 @@ import {
   FaSortAmountDown,
   FaThLarge,
 } from "react-icons/fa"
+import { FiSearch } from "react-icons/fi"
 
 import { useColorModeValue } from "@/components/ui/color-mode"
+import { InputGroup } from "@/components/ui/input-group"
+
 import {
   MenuContent,
   MenuItemGroup,
@@ -55,12 +59,16 @@ interface ItemsViewOptionsProps {
   organizeBy?: string
   onChangeOrganizeBy?: (val: string) => void
 
+  q?: string
+  onChangeQ?: (val: string) => void
+
   // Feature flags to enable/disable specific controls
   showDisplayToggle?: boolean
   showViewToggle?: boolean
   showFilter?: boolean
   showSort?: boolean
   showLimit?: boolean
+  showSearch?: boolean
 
   // Customization
   organizeOptions?: readonly string[]
@@ -83,11 +91,14 @@ export function ItemsViewOptions({
   onChangeGenre,
   organizeBy,
   onChangeOrganizeBy,
+  q,
+  onChangeQ,
   showDisplayToggle = false,
   showViewToggle = true,
   showFilter = false,
   showSort = true,
   showLimit = true,
+  showSearch = true,
   organizeOptions = ["subject", "genre", "category", "author"],
 }: ItemsViewOptionsProps) {
   const selectBg = useColorModeValue("white", "gray.800")
@@ -106,6 +117,21 @@ export function ItemsViewOptions({
 
   return (
     <Flex gap={2} align="center" wrap="wrap">
+      {/* Search Input */}
+      {showSearch && onChangeQ && (
+        <Box width={{ base: "full", sm: "200px", md: "250px" }}>
+          <InputGroup flex="1" startElement={<FiSearch />}>
+            <Input
+              placeholder="Find in catalogue..."
+              size="sm"
+              variant="subtle"
+              value={q || ""}
+              onChange={(e) => onChangeQ(e.target.value)}
+            />
+          </InputGroup>
+        </Box>
+      )}
+
       {/* Display Type Toggle (Items vs Collections) */}
       {showDisplayToggle && onChangeDisplayType && (
         <HStack

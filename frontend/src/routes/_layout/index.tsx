@@ -12,15 +12,11 @@ import {
   VStack,
 } from "@chakra-ui/react"
 import { useQuery } from "@tanstack/react-query"
-import { createFileRoute, Link } from "@tanstack/react-router"
+import { Link, createFileRoute } from "@tanstack/react-router"
 import { useState } from "react"
 import { FiBook, FiPlus, FiUserPlus } from "react-icons/fi"
 
-import {
-  CommunitiesService,
-  DashboardService,
-  ItemsService,
-} from "@/client"
+import { CommunitiesService, DashboardService, ItemsService } from "@/client"
 import CommunityCard from "@/components/Communities/CommunityCard"
 import { LoanCalendar } from "@/components/Dashboard/LoanCalendar"
 import { QuickSearch } from "@/components/Dashboard/QuickSearch"
@@ -45,7 +41,7 @@ export const Route = createFileRoute("/_layout/")({
 function Dashboard() {
   const { user: currentUser } = useAuth()
   const [isNewArrivalsModalOpen, setIsNewArrivalsModalOpen] = useState(false)
-  
+
   const cardBg = useColorModeValue("white", "gray.700")
 
   // --- Queries ---
@@ -82,44 +78,80 @@ function Dashboard() {
     <>
       <Container maxW="full">
         <Box pt={8} m={4}>
-          <Flex justify="space-between" align="center" mb={6} wrap="wrap" gap={4}>
+          <Flex
+            justify="space-between"
+            align="center"
+            mb={6}
+            wrap="wrap"
+            gap={4}
+          >
             <Box>
               <Text fontSize="2xl" fontWeight="bold">
                 Hi, {currentUser?.full_name || currentUser?.email} 👋🏼
               </Text>
-              <Text color="gray.500">Here's what's happening in your library.</Text>
+              <Text color="gray.500">
+                Here's what's happening in your library.
+              </Text>
             </Box>
             <Flex gap={3}>
-              <Button leftIcon={<FiPlus />} colorScheme="ui" as={Link} to="/items">
+              <Button
+                leftIcon={<FiPlus />}
+                colorScheme="ui"
+                as={Link}
+                to="/items"
+              >
                 Add Item
               </Button>
-              <Button leftIcon={<FiUserPlus />} variant="outline" as={Link} to="/search">
+              <Button
+                leftIcon={<FiUserPlus />}
+                variant="outline"
+                as={Link}
+                to="/search"
+              >
                 Find Friends
               </Button>
             </Flex>
           </Flex>
-          
+
           {/* Quick Search */}
           <Box mb={8} maxW="600px">
-             <QuickSearch placeholder="Search books, people, communities..." />
+            <QuickSearch placeholder="Search books, people, communities..." />
           </Box>
 
           {/* Stats Row */}
           <SimpleGrid columns={{ base: 1, md: 3 }} gap={6} mb={10}>
-            <Box p={5} shadow="md" rounded="lg" bg={cardBg} borderLeft="4px solid" borderColor="ui.main">
+            <Box
+              p={5}
+              shadow="md"
+              rounded="lg"
+              bg={cardBg}
+              borderLeft="4px solid"
+              borderColor="ui.main"
+            >
               <Box>
-                <Text fontSize="sm" color="gray.500">Honor Score</Text>
+                <Text fontSize="sm" color="gray.500">
+                  Honor Score
+                </Text>
                 <Flex align="baseline" gap={2}>
                   <Text fontSize="3xl" fontWeight="bold">
                     {isLoadingStats ? "-" : stats?.honor_score.toFixed(1)}
                   </Text>
-                  <Text fontSize="sm" color="gray.400">/ 100</Text>
+                  <Text fontSize="sm" color="gray.400">
+                    / 100
+                  </Text>
                 </Flex>
-                <Box w="100%" h="2" bg="gray.200" borderRadius="full" mt={3} overflow="hidden">
-                  <Box 
-                    h="100%" 
-                    bg="green.500" 
-                    width={`${stats?.honor_score || 0}%`} 
+                <Box
+                  w="100%"
+                  h="2"
+                  bg="gray.200"
+                  borderRadius="full"
+                  mt={3}
+                  overflow="hidden"
+                >
+                  <Box
+                    h="100%"
+                    bg="green.500"
+                    width={`${stats?.honor_score || 0}%`}
                     borderRadius="full"
                   />
                 </Box>
@@ -128,7 +160,9 @@ function Dashboard() {
 
             <Box p={5} shadow="md" rounded="lg" bg={cardBg}>
               <Box>
-                <Text fontSize="sm" color="gray.500">Active Loans</Text>
+                <Text fontSize="sm" color="gray.500">
+                  Active Loans
+                </Text>
                 <Text fontSize="3xl" fontWeight="bold">
                   {isLoadingStats ? "-" : stats?.active_loans_count}
                 </Text>
@@ -140,8 +174,16 @@ function Dashboard() {
 
             <Box p={5} shadow="md" rounded="lg" bg={cardBg}>
               <Box>
-                <Text fontSize="sm" color="gray.500">Pending Actions</Text>
-                <Text fontSize="3xl" fontWeight="bold" color={stats?.pending_actions_count ? "orange.500" : "inherit"}>
+                <Text fontSize="sm" color="gray.500">
+                  Pending Actions
+                </Text>
+                <Text
+                  fontSize="3xl"
+                  fontWeight="bold"
+                  color={
+                    stats?.pending_actions_count ? "orange.500" : "inherit"
+                  }
+                >
                   {isLoadingStats ? "-" : stats?.pending_actions_count}
                 </Text>
                 <Text fontSize="sm" color="gray.500" mt={1}>
@@ -159,47 +201,61 @@ function Dashboard() {
               <Box>
                 <Flex justify="space-between" align="center" mb={4}>
                   <Heading size="md" display="flex" alignItems="center" gap={2}>
-                     <Icon as={FiBook} /> New Arrivals
+                    <Icon as={FiBook} /> New Arrivals
                   </Heading>
                 </Flex>
-                
+
                 {isLoadingActivity ? (
                   <Spinner />
                 ) : newArrivals.length === 0 ? (
                   <Box p={6} bg={cardBg} rounded="lg" textAlign="center">
-                    <Text color="gray.500">No new items from your network recently.</Text>
-                    <Button as={Link} to="/communities" size="sm" mt={4} variant="link" color="ui.main">
+                    <Text color="gray.500">
+                      No new items from your network recently.
+                    </Text>
+                    <Button
+                      as={Link}
+                      to="/communities"
+                      size="sm"
+                      mt={4}
+                      variant="link"
+                      color="ui.main"
+                    >
                       Join a Community
                     </Button>
                   </Box>
                 ) : (
-                   <VStack align="stretch" gap={3}>
-                      {displayedArrivals.map((group: any) => (
-                        <ItemListItem key={group[0].id} item={group} />
-                      ))}
-                      
-                      {hasMoreArrivals && (
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => setIsNewArrivalsModalOpen(true)}
-                          alignSelf="center"
-                          color="ui.main"
-                        >
-                          Show More ({newArrivals.length - 3})
-                        </Button>
-                      )}
-                   </VStack>
+                  <VStack align="stretch" gap={3}>
+                    {displayedArrivals.map((group: any) => (
+                      <ItemListItem key={group[0].id} item={group} />
+                    ))}
+
+                    {hasMoreArrivals && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setIsNewArrivalsModalOpen(true)}
+                        alignSelf="center"
+                        color="ui.main"
+                      >
+                        Show More ({newArrivals.length - 3})
+                      </Button>
+                    )}
+                  </VStack>
                 )}
               </Box>
 
               {/* Recommended Books (Grid View) */}
               <Box>
-                <Heading size="md" mb={4}>Recommended For You</Heading>
+                <Heading size="md" mb={4}>
+                  Recommended For You
+                </Heading>
                 {isLoadingBooks ? (
                   <Spinner />
                 ) : books?.data.length === 0 ? (
-                  <Text color="gray.500">Start rating books or join communities to get recommendations!</Text>
+                  <Text color="gray.500">
+                    Start rating books or join communities to get
+                    recommendations!
+                  </Text>
                 ) : (
                   <SimpleGrid columns={{ base: 2, sm: 3, md: 4 }} gap={4}>
                     {groupItems(books?.data || []).map((group: any) => (
@@ -214,41 +270,63 @@ function Dashboard() {
             <VStack align="stretch" gap={8}>
               {/* Loan Calendar */}
               <Box>
-                  <Heading size="sm" mb={4}>Loan Schedule</Heading>
-                  <LoanCalendar />
+                <Heading size="sm" mb={4}>
+                  Loan Schedule
+                </Heading>
+                <LoanCalendar />
               </Box>
 
               {/* Communities Widget */}
               <Box>
                 <Flex justify="space-between" align="center" mb={4}>
                   <Heading size="sm">Your Communities</Heading>
-                  <Link to="/communities" style={{ fontSize: "0.875rem", color: "gray" }}>View All</Link>
+                  <Link
+                    to="/communities"
+                    style={{ fontSize: "0.875rem", color: "gray" }}
+                  >
+                    View All
+                  </Link>
                 </Flex>
                 <VStack align="stretch" gap={3}>
-                   {communities?.data.slice(0, 3).map((community: any) => (
-                     <CommunityCard key={community.id} community={community} />
-                   ))}
+                  {communities?.data.slice(0, 3).map((community: any) => (
+                    <CommunityCard key={community.id} community={community} />
+                  ))}
                 </VStack>
               </Box>
-              
+
               {/* Quick Tips / Gamification */}
               <Box p={5} bg="blue.50" _dark={{ bg: "blue.900" }} rounded="lg">
-                  <Heading size="sm" mb={2} color="blue.600" _dark={{ color: "blue.200" }}>Did you know?</Heading>
-                  <Text fontSize="sm" mb={4}>
-                      A complete profile and high Honor Score help build trust with other members.
-                  </Text>
-                  <Button size="sm" colorScheme="blue" variant="outline" w="full" as={Link} to="/profile">
-                      Edit Profile
-                  </Button>
+                <Heading
+                  size="sm"
+                  mb={2}
+                  color="blue.600"
+                  _dark={{ color: "blue.200" }}
+                >
+                  Did you know?
+                </Heading>
+                <Text fontSize="sm" mb={4}>
+                  A complete profile and high Honor Score help build trust with
+                  other members.
+                </Text>
+                <Button
+                  size="sm"
+                  colorScheme="blue"
+                  variant="outline"
+                  w="full"
+                  as={Link}
+                  to="/profile"
+                >
+                  Edit Profile
+                </Button>
               </Box>
             </VStack>
           </Grid>
         </Box>
       </Container>
-      
+
       {/* New Arrivals Modal */}
-      <DialogRoot 
-        open={isNewArrivalsModalOpen} 
+      <DialogRoot
+        open={isNewArrivalsModalOpen}
         onOpenChange={(e) => setIsNewArrivalsModalOpen(e.open)}
         size="lg"
         scrollBehavior="inside"
@@ -260,10 +338,10 @@ function Dashboard() {
           <DialogBody>
             <VStack align="stretch" gap={3}>
               {newArrivals.map((group: any) => (
-                <ItemListItem 
-                  key={group[0].id} 
-                  item={group} 
-                  linkToOwner={true} 
+                <ItemListItem
+                  key={group[0].id}
+                  item={group}
+                  linkToOwner={true}
                 />
               ))}
             </VStack>

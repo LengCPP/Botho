@@ -1,4 +1,3 @@
-import { Link as RouterLink } from "@tanstack/react-router"
 import { UsersService } from "@/client"
 import { useColorModeValue } from "@/components/ui/color-mode"
 import {
@@ -16,6 +15,7 @@ import {
   VStack,
 } from "@chakra-ui/react"
 import { useQuery } from "@tanstack/react-query"
+import { Link as RouterLink } from "@tanstack/react-router"
 import { format } from "date-fns"
 import {
   FiCheckCircle,
@@ -167,7 +167,11 @@ const BorrowerReportCard = ({ userId }: BorrowerReportCardProps) => {
                         </Text>
                       </HStack>
                       {review.condition_notes && (
-                        <Text fontSize="3xs" color="gray.500" fontStyle="italic">
+                        <Text
+                          fontSize="3xs"
+                          color="gray.500"
+                          fontStyle="italic"
+                        >
                           "{review.condition_notes}"
                         </Text>
                       )}
