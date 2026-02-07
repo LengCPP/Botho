@@ -201,7 +201,63 @@ def recommend_items(
         .join(UserInterest)
         .where(UserInterest.user_id == current_user.id)
     ).all()
-    search_query = " ".join(interests) if interests else ""
+
+    # 2.1 Get Past Loans (Subjects/History)
+    # Fetch last 20 items borrowed by the user
+    loan_items_stmt = (
+        select(Item.author, Item.title)
+        .join(Loan, Loan.item_id == Item.id)
+        .where(Loan.requester_id == current_user.id)
+        .order_by(Loan.created_at.desc())
+        .limit(20)
+    )
+    loan_items = session.exec(loan_items_stmt).all()
+
+    # 2.2 Get Highly Rated Items
+    # Fetch items rated 4 or 5 by the user
+    rated_items_stmt = (
+        select(ItemReview.author, ItemReview.title)
+        .where(ItemReview.user_id == current_user.id, ItemReview.rating >= 4)
+        .limit(20)
+    )
+    rated_items = session.exec(rated_items_stmt).all()
+
+    # Collect unique work identifiers
+    work_keys = set()
+    for author, title in loan_items:
+        if author and title:
+            work_keys.add((author, title))
+    for author, title in rated_items:
+        if author and title:
+            work_keys.add((author, title))
+
+    # Fetch metadata tags/categories for these works
+    extra_keywords = set()
+    if work_keys:
+        # Construct OR condition for composite primary key
+        # (WorkMetadata.author == a AND WorkMetadata.title == t) OR ...
+        # SQLModel/SQLAlchemy composite IN clause is tricky across DBs, 
+        # but we can iterate or use tuple_ (if supported by backend DB, Postgres supports it).
+        from sqlalchemy import tuple_
+        
+        works_stmt = select(WorkMetadata).where(
+            tuple_(WorkMetadata.author, WorkMetadata.title).in_(work_keys)
+        )
+        works = session.exec(works_stmt).all()
+        
+        for work in works:
+            if work.category:
+                extra_keywords.add(work.category)
+            if work.tags:
+                # Add top 3 tags per book to avoid noise
+                for tag in work.tags[:3]:
+                    extra_keywords.add(tag)
+
+    # Combine Interests + Extra Keywords
+    query_parts = list(interests) + list(extra_keywords)
+    # Use distinct terms to keep query length manageable
+    unique_query_parts = list(set(query_parts))
+    search_query = " ".join(unique_query_parts) if unique_query_parts else ""
     
     # 3. Construct Meilisearch Filter
     # item_type = 'book' AND (owner_id IN [...] OR pooled_in IN [...])
