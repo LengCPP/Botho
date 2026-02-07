@@ -174,7 +174,11 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
             autoComplete="off"
           />
         </PopoverTrigger>
-        <PopoverContent width="auto" minW="300px" portalled={false}>
+        <PopoverContent
+          width="auto"
+          minW="300px"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
           <PopoverBody p={0}>
             {isLoading && !interests.length ? (
               <Box p={4} textAlign="center">
@@ -182,6 +186,23 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
               </Box>
             ) : (
               <VStack align="stretch" gap={0} maxH="200px" overflowY="auto">
+                {showCreateOption && (
+                  <Button
+                    variant="ghost"
+                    justifyContent="start"
+                    width="full"
+                    borderRadius={0}
+                    height="auto"
+                    py={2}
+                    onMouseDown={(e) => e.preventDefault()} // Prevent blur
+                    onClick={handleCreate}
+                    loading={createInterestMutation.isPending}
+                  >
+                    <Icon as={FiPlus} mr={2} />
+                    Create "{searchTerm}"
+                  </Button>
+                )}
+
                 {interests.map((interest) => {
                   const isSelected = selectedIds.includes(interest.id)
                   return (
@@ -205,23 +226,6 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
                     </Box>
                   )
                 })}
-
-                {showCreateOption && (
-                  <Button
-                    variant="ghost"
-                    justifyContent="start"
-                    width="full"
-                    borderRadius={0}
-                    height="auto"
-                    py={2}
-                    onMouseDown={(e) => e.preventDefault()} // Prevent blur
-                    onClick={handleCreate}
-                    loading={createInterestMutation.isPending}
-                  >
-                    <Icon as={FiPlus} mr={2} />
-                    Create "{searchTerm}"
-                  </Button>
-                )}
 
                 {interests.length === 0 && !showCreateOption && !isLoading && (
                   <Box p={4} textAlign="center">
