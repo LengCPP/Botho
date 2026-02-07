@@ -6,6 +6,8 @@ from sqlmodel import Session, and_, func, or_, select
 from app.models import (
     Friendship,
     FriendshipStatus,
+    Item,
+    ItemConditionRating,
     ItemOwnerPublic,
     Loan,
     LoanPublic,
@@ -188,3 +190,35 @@ def check_item_availability(session: Session, item_id: uuid.UUID) -> bool:
         )
     ).first()
     return active_loan is None
+
+
+def check_possession(session: Session, user_id: uuid.UUID, item_id: uuid.UUID) -> bool:
+    item = session.get(Item, item_id)
+    if not item:
+        return False
+    if item.owner_id == user_id:
+        return True
+
+    # Check loans
+    loan = session.exec(
+        select(Loan).where(
+            Loan.item_id == item_id,
+            Loan.requester_id == user_id,
+            Loan.status.in_([LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING, LoanStatus.RETURNED])
+        )
+    ).first()
+    return bool(loan)
+
+
+def get_item_condition_data(session: Session, item_id: uuid.UUID) -> dict:
+    ratings = session.exec(
+        select(ItemConditionRating).where(ItemConditionRating.item_id == item_id)
+    ).all()
+
+    if not ratings:
+        return {"average_grade": 0.0, "notes": []}
+
+    avg_grade = sum(r.grade for r in ratings) / len(ratings)
+    notes = [{"user_id": r.user_id, "note": r.notes, "created_at": r.created_at} for r in ratings if r.notes]
+
+    return {"average_grade": avg_grade, "notes": notes}

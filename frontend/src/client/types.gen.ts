@@ -239,8 +239,8 @@ export type LoanPublic = {
     owner: (UserPublic | null);
     requester: UserPublic;
     community: (CommunityPublic | null);
-    has_review: boolean;
-    other_admins_exist: boolean;
+    has_review?: boolean;
+    other_admins_exist?: boolean;
 };
 
 export type LoansPublic = {
@@ -405,7 +405,7 @@ export type UserReviewDisputeCreate = {
 export type UserReviewPublic = {
     id: string;
     reviewer_id: string;
-    reviewee_id: (string | null);
+    reviewee_id?: (string | null);
     loan_id: string;
     rating: number;
     comment: (string | null);
@@ -471,8 +471,8 @@ export type WorkMetadataUpdate = {
 
 export type CommunitiesReadCommunitiesData = {
     limit?: number;
-    skip?: number;
     memberOnly?: boolean;
+    skip?: number;
 };
 
 export type CommunitiesReadCommunitiesResponse = (CommunitiesPublic);
@@ -628,6 +628,14 @@ export type CommunitiesReadCommunityLoansData = {
 
 export type CommunitiesReadCommunityLoansResponse = (LoansPublic);
 
+export type DashboardGetDashboardStatsResponse = (unknown);
+
+export type DashboardGetRecentActivityData = {
+    limit?: number;
+};
+
+export type DashboardGetRecentActivityResponse = (ItemsPublic);
+
 export type FriendsSearchUserByIdData = {
     publicId: string;
 };
@@ -675,8 +683,8 @@ export type FriendsRemoveFriendResponse = (Message);
 
 export type InterestsReadInterestsData = {
     limit?: number;
-    skip?: number;
     q?: (string | null);
+    skip?: number;
 };
 
 export type InterestsReadInterestsResponse = (Array<InterestPublic>);
@@ -709,14 +717,14 @@ export type ItemsRecommendItemsResponse = (ItemsPublic);
 
 export type ItemsReadItemsData = {
     category?: (string | null);
+    enableFeed?: boolean;
     genre?: (string | null);
+    itemType?: (ItemType | null);
     limit?: number;
     ownerId?: (string | null);
     skip?: number;
     sortBy?: string;
     sortOrder?: string;
-    itemType?: (ItemType | null);
-    enableFeed?: boolean;
 };
 
 export type ItemsReadItemsResponse = (ItemsPublic);

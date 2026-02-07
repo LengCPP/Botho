@@ -6,7 +6,12 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from sqlmodel import func, select
 
 from app.api.deps import CurrentUser, SessionDep
-from app.api.utils import check_item_availability, filter_owner_privacy
+from app.api.utils import (
+    check_item_availability,
+    check_possession,
+    filter_owner_privacy,
+    get_item_condition_data,
+)
 from app.core.config import settings
 from app.models import (
     CommunityItem,

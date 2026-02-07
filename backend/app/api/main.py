@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.routes import (
     communities,
+    dashboard,
     friends,
     interests,
     items,
@@ -34,6 +35,7 @@ api_router.include_router(
 api_router.include_router(loans.router)
 api_router.include_router(reading_log.router)
 api_router.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
+api_router.include_router(dashboard.router)
 
 
 if settings.ENVIRONMENT == "local":
