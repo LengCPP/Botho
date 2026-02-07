@@ -165,7 +165,7 @@ async def create_loan_request(
                 title="New Community Loan Request",
                 message=f"{current_user.full_name or current_user.email} wants to borrow '{item.title}' from {community.name}.",
                 type=NotificationType.INFO,
-                link=f"/communities/{community_id}"
+                link=f"/communities/{community_id}?tab=loans"
             )
     elif owner_id:
         # Notify single owner
@@ -300,7 +300,7 @@ async def respond_to_loan_request(
         title=f"Loan Request {status_msg.capitalize()}",
         message=f"Your request for '{loan.item.title}' has been {status_msg}.",
         type=NotificationType.SUCCESS if accept else NotificationType.WARNING,
-        link=f"/communities/{loan.community_id}" if loan.community_id else "/loans"
+        link=f"/communities/{loan.community_id}?tab=loans" if loan.community_id else "/loans"
     )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
@@ -344,7 +344,7 @@ async def cancel_loan(
     session.refresh(loan)
 
     # Notify the other party
-    notif_link = f"/communities/{loan.community_id}" if loan.community_id else "/loans"
+    notif_link = f"/communities/{loan.community_id}?tab=loans" if loan.community_id else "/loans"
     if is_requester:
         # Notify owner or admins
         if loan.community_id:

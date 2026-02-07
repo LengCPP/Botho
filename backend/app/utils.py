@@ -149,7 +149,7 @@ def generate_donation_notification_email(
 ) -> EmailData:
     project_name = settings.PROJECT_NAME
     subject = f"{project_name} - New Donation Request in {community_name}"
-    link = f"{settings.FRONTEND_HOST}/communities/{community_id}"
+    link = f"{settings.FRONTEND_HOST}/communities/{community_id}?tab=items"
     html_content = render_email_template(
         template_name="donation_notification.html",
         context={

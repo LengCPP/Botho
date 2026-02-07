@@ -279,7 +279,7 @@ async def join_community(
                 title="New Join Request",
                 message=f"{current_user.full_name or current_user.email} applied to join {community.name}.",
                 type=NotificationType.INFO,
-                link=f"/communities/{id}"
+                link=f"/communities/{id}?tab=manage"
             )
 
     return Message(message="Application sent" if community.requires_approval else "Joined successfully")
@@ -780,9 +780,8 @@ async def initiate_donation(
             title="Item Donation Pending",
             message=f"{donor_name} wants to donate an item to the community.",
             type=NotificationType.INFO,
-            link=f"/communities/{id}"
+            link=f"/communities/{id}?tab=items"
         )
-
         # Send email notification
         email_data = generate_donation_notification_email(
             email_to=user.email,

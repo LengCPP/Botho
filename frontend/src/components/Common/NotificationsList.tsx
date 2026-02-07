@@ -31,12 +31,15 @@ const NotificationsList = ({ onItemClick, limit }: NotificationsListProps) => {
 
     if (notification.link) {
       const communityMatch = notification.link.match(
-        /\/communities\/([a-f0-9-]+)/i,
+        /\/communities\/([a-f0-9-]+)(?:\?tab=([a-z]+))?/i,
       )
       if (communityMatch) {
         navigate({
           to: "/communities/$communityId",
           params: { communityId: communityMatch[1] },
+          search: communityMatch[2]
+            ? { tab: communityMatch[2] as any }
+            : undefined,
         })
       } else {
         navigate({ to: notification.link as any })

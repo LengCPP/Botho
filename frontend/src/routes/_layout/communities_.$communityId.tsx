@@ -53,6 +53,7 @@ import {
   FiUsers,
   FiX,
 } from "react-icons/fi"
+import { z } from "zod"
 
 import {
   CommunitiesService,
@@ -90,8 +91,13 @@ import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
 import { getImageUrl, groupItems } from "@/utils"
 
+const communitySearchSchema = z.object({
+  tab: z.enum(["board", "items", "members", "loans", "manage"]).catch("board"),
+})
+
 export const Route = createFileRoute("/_layout/communities/$communityId")({
   component: CommunityBoard,
+  validateSearch: (search) => communitySearchSchema.parse(search),
 })
 
 function AddAnnouncementModal({ communityId }: { communityId: string }) {
@@ -423,10 +429,11 @@ function DonationManagement({
 
 function CommunityBoard() {
   const { communityId } = Route.useParams()
+  const { tab } = Route.useSearch()
   const { user: currentUser } = useAuth()
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const queryClient = useQueryClient()
-  const navigate = useNavigate()
+  const navigate = useNavigate({ from: Route.fullPath })
   const [message, setMessage] = useState("")
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false)
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
@@ -440,6 +447,12 @@ function CommunityBoard() {
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
   const [q, setQ] = useState("")
   const isMobile = useBreakpointValue({ base: true, md: false })
+
+  const handleTabChange = (value: string) => {
+    navigate({
+      search: (prev) => ({ ...prev, tab: value as any }),
+    })
+  }
 
   const { data: community, isLoading: isLoadingCommunity } = useQuery({
     queryKey: ["community", communityId],
@@ -823,7 +836,11 @@ function CommunityBoard() {
 
         <Separator />
 
-        <Tabs.Root defaultValue="board" variant="enclosed">
+        <Tabs.Root
+          value={tab}
+          onValueChange={(e) => handleTabChange(e.value)}
+          variant="enclosed"
+        >
           <Tabs.List
             display={{ base: "grid", md: "flex" }}
             gridTemplateColumns={{ base: "repeat(3, 1fr)", md: "none" }}

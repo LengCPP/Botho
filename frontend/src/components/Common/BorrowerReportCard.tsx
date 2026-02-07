@@ -18,6 +18,7 @@ import { useQuery } from "@tanstack/react-query"
 import { Link as RouterLink } from "@tanstack/react-router"
 import { format } from "date-fns"
 import {
+  FiAward,
   FiCheckCircle,
   FiClock,
   FiMessageSquare,
@@ -67,9 +68,9 @@ const BorrowerReportCard = ({ userId }: BorrowerReportCardProps) => {
             </HStack>
             <HStack gap={1}>
               <Text fontWeight="bold" fontSize="sm">
-                {metrics.honor_score.toFixed(1)}
+                {(metrics.honor_score).toFixed(0)}
               </Text>
-              <Icon as={FiStar} color="yellow.500" />
+              <Icon as={FiAward} color="yellow.500" />
             </HStack>
           </HStack>
 

@@ -331,8 +331,8 @@ class User(UserBase, table=True):
     public_id: str | None = Field(default=None, unique=True, index=True, max_length=10)
     hashed_password: str
     has_set_password: bool = Field(default=True)
-    honor_score: float = Field(default=0.0)
-    reliability_rate: float = Field(default=0.0)
+    honor_score: float = Field(default=100.0)
+    reliability_rate: float = Field(default=100.0)
     is_delinquent: bool = Field(default=False)
     ai_honor_summary: str | None = Field(default=None, sa_column=Column(JSON))
     ai_improvement_tips: Any = Field(default=[], sa_column=Column(JSON))

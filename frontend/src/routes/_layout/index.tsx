@@ -134,7 +134,9 @@ function Dashboard() {
                 </Text>
                 <Flex align="baseline" gap={2}>
                   <Text fontSize="3xl" fontWeight="bold">
-                    {isLoadingStats ? "-" : stats?.honor_score.toFixed(1)}
+                    {isLoadingStats
+                      ? "-"
+                      : (stats?.honor_score).toFixed(0)}
                   </Text>
                   <Text fontSize="sm" color="gray.400">
                     / 100

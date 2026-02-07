@@ -96,9 +96,9 @@ const ReputationDashboard = () => {
               </Text>
               <HStack gap={1}>
                 <Text fontSize="2xl" fontWeight="bold">
-                  {reputation.honor_score.toFixed(1)}
+                  {(reputation.honor_score).toFixed(0)}
                 </Text>
-                <Icon as={FiStar} color="yellow.500" />
+                <Icon as={FiAward} color="yellow.500" />
               </HStack>
             </VStack>
             <VStack gap={0}>
