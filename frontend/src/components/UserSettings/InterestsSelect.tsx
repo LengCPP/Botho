@@ -154,7 +154,14 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
                       cursor={isSelected ? "default" : "pointer"}
                       bg={isSelected ? "gray.100" : "transparent"}
                       _hover={{ bg: isSelected ? "gray.100" : "gray.50" }}
+                      _dark={{
+                        bg: isSelected ? "whiteAlpha.200" : "transparent",
+                        _hover: {
+                          bg: isSelected ? "whiteAlpha.200" : "whiteAlpha.100",
+                        },
+                      }}
                       opacity={isSelected ? 0.6 : 1}
+                      onMouseDown={(e) => e.preventDefault()}
                       onClick={() => !isSelected && handleSelect(interest)}
                     >
                       <Text fontSize="sm">{interest.name}</Text>
@@ -171,6 +178,7 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
                       justifyContent="start"
                       width="full"
                       borderRadius={0}
+                      onMouseDown={(e) => e.preventDefault()}
                       onClick={handleCreate}
                       loading={createInterestMutation.isPending}
                     >
