@@ -41,8 +41,10 @@ class LoanStatus(str, Enum):
     REJECTED = "REJECTED"
     CANCELLED = "CANCELLED"
     ACTIVE = "ACTIVE"  # Ratified by requester
+    EXTENSION_PENDING = "EXTENSION_PENDING" # Requesting more time
     RETURN_PENDING = "RETURN_PENDING" # Requester signaled return
     RETURNED = "RETURNED"
+    DEFAULTED = "DEFAULTED" # Marked unrecoverable by lender
 
 
 class NotificationType(str, Enum):
@@ -180,6 +182,11 @@ class Loan(SQLModel, table=True):
         default=None,
         sa_column=Column(DateTime(timezone=True), nullable=True)
     )
+    returned_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    is_forgiven: bool = Field(default=False)
     created_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -366,6 +373,7 @@ class User(UserBase, table=True):
     reviews_given: list["UserReview"] = Relationship(
         sa_relationship_kwargs={"foreign_keys": "UserReview.reviewer_id"}
     )
+    contributions: list["Contribution"] = Relationship(back_populates="user")
 
 
 class CommunityBase(SQLModel):
@@ -756,6 +764,9 @@ class LoanPublic(SQLModel):
     status: LoanStatus
     start_date: datetime
     end_date: datetime
+    pending_extension_date: datetime | None = None
+    returned_at: datetime | None = None
+    is_forgiven: bool = False
     created_at: datetime
     item: "ItemPublic"
     owner: Optional["UserPublic"]
@@ -854,6 +865,21 @@ class ReadingLogsPublic(SQLModel):
 
 
     count: int
+
+
+class Contribution(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
+    item_id: uuid.UUID | None = Field(default=None, foreign_key="item.id", ondelete="SET NULL")
+    work_author: str | None = Field(default=None, max_length=255)
+    work_title: str | None = Field(default=None, max_length=255)
+    description: str = Field(max_length=255)
+    created_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    )
+
+    user: "User" = Relationship()
 
 
 

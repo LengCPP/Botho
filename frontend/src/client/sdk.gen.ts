@@ -1713,6 +1713,75 @@ export class LoansService {
       },
     })
   }
+
+  /**
+   * Mark Loan Defaulted
+   * Mark a loan as defaulted/unrecoverable (Lender only).
+   * @param data The data for the request.
+   * @param data.id
+   * @returns LoanPublic Successful Response
+   * @throws ApiError
+   */
+  public static markLoanDefaulted(
+    data: LoansMarkLoanDefaultedData,
+  ): CancelablePromise<LoansMarkLoanDefaultedResponse> {
+    return __request(OpenAPI, {
+      method: "POST",
+      url: "/api/v1/loans/{id}/default",
+      path: {
+        id: data.id,
+      },
+      errors: {
+        422: "Validation Error",
+      },
+    })
+  }
+
+  /**
+   * Forgive Loan
+   * Forgive a defaulted loan (Lender only).
+   * @param data The data for the request.
+   * @param data.id
+   * @returns LoanPublic Successful Response
+   * @throws ApiError
+   */
+  public static forgiveLoan(
+    data: LoansForgiveLoanData,
+  ): CancelablePromise<LoansForgiveLoanResponse> {
+    return __request(OpenAPI, {
+      method: "POST",
+      url: "/api/v1/loans/{id}/forgive",
+      path: {
+        id: data.id,
+      },
+      errors: {
+        422: "Validation Error",
+      },
+    })
+  }
+
+  /**
+   * Send Return Reminder
+   * Send an email reminder to the borrower (Lender only).
+   * @param data The data for the request.
+   * @param data.id
+   * @returns Message Successful Response
+   * @throws ApiError
+   */
+  public static sendReturnReminder(
+    data: LoansSendReturnReminderData,
+  ): CancelablePromise<LoansSendReturnReminderResponse> {
+    return __request(OpenAPI, {
+      method: "POST",
+      url: "/api/v1/loans/{id}/remind",
+      path: {
+        id: data.id,
+      },
+      errors: {
+        422: "Validation Error",
+      },
+    })
+  }
 }
 
 export class LoginService {

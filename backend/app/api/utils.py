@@ -15,7 +15,53 @@ from app.models import (
     User,
     UserPublic,
     UserReview,
+    WorkMetadata,
 )
+
+
+def get_work_metadata(session: Session, author: str | None, title: str) -> WorkMetadata | None:
+    if not author:
+        return None
+    return session.get(WorkMetadata, (author, title))
+
+
+def ensure_work_metadata(
+    session: Session,
+    author: str | None,
+    title: str,
+    isbn: str | None = None,
+    description: str | None = None,
+    category: str | None = None,
+    image_url: str | None = None
+) -> WorkMetadata | None:
+    if not author:
+        return None
+    meta = session.get(WorkMetadata, (author, title))
+    if not meta:
+        meta = WorkMetadata(
+            author=author,
+            title=title,
+            isbn=isbn,
+            description=description,
+            category=category,
+            image_url=image_url
+        )
+        session.add(meta)
+    else:
+        # Update missing info if found
+        if isbn and not meta.isbn:
+            meta.isbn = isbn
+        if description and not meta.description:
+            meta.description = description
+        if category and not meta.category:
+            meta.category = category
+        if image_url and not meta.image_url:
+            meta.image_url = image_url
+        session.add(meta)
+    session.flush()
+    from app.search import sync_work_metadata_to_search
+    sync_work_metadata_to_search(meta)
+    return meta
 
 
 def filter_user_privacy(user: User, current_user_id: Any = None, is_admin: bool = False, is_friend: bool = False) -> UserPublic:
@@ -186,7 +232,7 @@ def check_item_availability(session: Session, item_id: uuid.UUID) -> bool:
     active_loan = session.exec(
         select(Loan).where(
             Loan.item_id == item_id,
-            Loan.status.in_([LoanStatus.ACTIVE, LoanStatus.PENDING, LoanStatus.ACCEPTED, LoanStatus.RETURN_PENDING])
+            Loan.status.in_([LoanStatus.ACTIVE, LoanStatus.PENDING, LoanStatus.ACCEPTED, LoanStatus.RETURN_PENDING, LoanStatus.EXTENSION_PENDING])
         )
     ).first()
     return active_loan is None
@@ -204,7 +250,7 @@ def check_possession(session: Session, user_id: uuid.UUID, item_id: uuid.UUID) -
         select(Loan).where(
             Loan.item_id == item_id,
             Loan.requester_id == user_id,
-            Loan.status.in_([LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING, LoanStatus.RETURNED])
+            Loan.status.in_([LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING, LoanStatus.RETURNED, LoanStatus.EXTENSION_PENDING])
         )
     ).first()
     return bool(loan)

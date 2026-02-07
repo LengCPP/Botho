@@ -13,13 +13,14 @@ import {
   VStack,
 } from "@chakra-ui/react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import { useId, useState } from "react"
 import {
   type ApiError,
   ReviewsService,
   type UserReviewPublic,
 } from "../../client"
 import useCustomToast from "../../hooks/useCustomToast"
+import { Field } from "../ui/field"
 
 interface DisputeModalProps {
   review: UserReviewPublic
@@ -31,6 +32,7 @@ const DisputeModal = ({ review, isOpen, onClose }: DisputeModalProps) => {
   const [reason, setReason] = useState("")
   const queryClient = useQueryClient()
   const showToast = useCustomToast()
+  const id = useId()
 
   const mutation = useMutation({
     mutationFn: (data: { reason: string }) =>
@@ -76,12 +78,15 @@ const DisputeModal = ({ review, isOpen, onClose }: DisputeModalProps) => {
                 moderator.
               </Text>
             </VStack>
-            <Textarea
-              placeholder="Reason for dispute (min 10 chars)..."
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              minH="120px"
-            />
+            <Field label="Dispute Reason" required>
+              <Textarea
+                id={id}
+                placeholder="Reason for dispute (min 10 chars)..."
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                minH="120px"
+              />
+            </Field>
           </VStack>
         </DialogBody>
         <DialogFooter>
@@ -104,3 +109,4 @@ const DisputeModal = ({ review, isOpen, onClose }: DisputeModalProps) => {
 }
 
 export default DisputeModal
+

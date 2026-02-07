@@ -11,6 +11,8 @@ from app.api.utils import (
     check_possession,
     filter_owner_privacy,
     get_item_condition_data,
+    get_work_metadata,
+    ensure_work_metadata
 )
 from app.core.config import settings
 from app.models import (
@@ -19,6 +21,7 @@ from app.models import (
     CommunityMember,
     CommunityMemberRole,
     CommunityMemberStatus,
+    Contribution,
     Friendship,
     FriendshipStatus,
     Interest,
@@ -52,50 +55,6 @@ from app.search import (
 from app.storage import delete_image, upload_image, upload_image_from_url
 
 router = APIRouter(prefix="/items", tags=["items"])
-
-
-def get_work_metadata(session: SessionDep, author: str | None, title: str) -> WorkMetadata | None:
-    if not author:
-        return None
-    return session.get(WorkMetadata, (author, title))
-
-
-def ensure_work_metadata(
-    session: SessionDep,
-    author: str | None,
-    title: str,
-    isbn: str | None = None,
-    description: str | None = None,
-    category: str | None = None,
-    image_url: str | None = None
-) -> WorkMetadata | None:
-    if not author:
-        return None
-    meta = session.get(WorkMetadata, (author, title))
-    if not meta:
-        meta = WorkMetadata(
-            author=author,
-            title=title,
-            isbn=isbn,
-            description=description,
-            category=category,
-            image_url=image_url
-        )
-        session.add(meta)
-    else:
-        # Update missing info if found
-        if isbn and not meta.isbn:
-            meta.isbn = isbn
-        if description and not meta.description:
-            meta.description = description
-        if category and not meta.category:
-            meta.category = category
-        if image_url and not meta.image_url:
-            meta.image_url = image_url
-        session.add(meta)
-    session.flush()
-    sync_work_metadata_to_search(meta)
-    return meta
 
 
 @router.get("/book-registry/search", response_model=list[WorkMetadataPublic])
@@ -147,7 +106,7 @@ def check_possession(session: SessionDep, user_id: uuid.UUID, item_id: uuid.UUID
         select(Loan).where(
             Loan.item_id == item_id,
             Loan.requester_id == user_id,
-            Loan.status.in_([LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING, LoanStatus.RETURNED])
+            Loan.status.in_([LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING, LoanStatus.RETURNED, LoanStatus.EXTENSION_PENDING])
         )
     ).first()
     return bool(loan)
@@ -905,10 +864,22 @@ async def update_item(
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
 
+        # Record contribution
+        contribution = Contribution(
+            user_id=current_user.id,
+            item_id=db_item.id,
+            description="Updated item specifications"
+        )
+        session.add(contribution)
+
         session.add(db_item)
         session.commit()
         session.refresh(db_item)
         sync_item_to_search(db_item)
+
+        # Refresh honor score
+        from app.api.routes.loans import refresh_user_honor
+        await refresh_user_honor(session, current_user.id)
 
         is_avail = check_item_availability(session, db_item.id)
 
@@ -1065,7 +1036,7 @@ def read_work_metadata(
 
 
 @router.patch("/work-metadata/{author}/{title}", response_model=WorkMetadataPublic)
-def update_work_metadata(
+async def update_work_metadata(
     *, session: SessionDep, current_user: CurrentUser, author: str, title: str, meta_in: WorkMetadataUpdate
 ) -> Any:
     """
@@ -1080,9 +1051,23 @@ def update_work_metadata(
     for key, value in update_data.items():
         setattr(meta, key, value)
 
+    # Record contribution
+    contribution = Contribution(
+        user_id=current_user.id,
+        work_author=author,
+        work_title=title,
+        description="Updated work metadata (tags)"
+    )
+    session.add(contribution)
+
     session.add(meta)
     session.commit()
     session.refresh(meta)
+
+    # Refresh honor score
+    from app.api.routes.loans import refresh_user_honor
+    await refresh_user_honor(session, current_user.id)
+
     return meta
 
 

@@ -8,6 +8,7 @@ import {
   Heading,
   Icon,
   Separator,
+  SimpleGrid,
   Spinner,
   Text,
   VStack,
@@ -37,13 +38,15 @@ const ReputationDashboard = () => {
   if (!reputation) return null
 
   const honorTier =
-    reputation.honor_score >= 4.5
+    reputation.honor_score >= 90
       ? "Pillar of Community"
-      : reputation.honor_score >= 3.5
+      : reputation.honor_score >= 75
         ? "Trusted Member"
-        : reputation.honor_score >= 2.0
+        : reputation.honor_score >= 50
           ? "Reliable Neighbor"
-          : "Novice"
+          : reputation.honor_score >= 25
+            ? "Member"
+            : "Novice"
 
   return (
     <VStack gap={6} align="stretch" width="full">
@@ -96,7 +99,7 @@ const ReputationDashboard = () => {
               </Text>
               <HStack gap={1}>
                 <Text fontSize="2xl" fontWeight="bold">
-                  {(reputation.honor_score).toFixed(0)}
+                  {(reputation.honor_score ?? 0).toFixed(0)}
                 </Text>
                 <Icon as={FiAward} color="yellow.500" />
               </HStack>
@@ -112,7 +115,7 @@ const ReputationDashboard = () => {
               </Text>
               <HStack gap={1}>
                 <Text fontSize="2xl" fontWeight="bold">
-                  {reputation.reliability_rate.toFixed(0)}%
+                  {(reputation.reliability_rate ?? 0).toFixed(0)}%
                 </Text>
                 <Icon as={FiTrendingUp} color="green.500" />
               </HStack>
@@ -121,11 +124,22 @@ const ReputationDashboard = () => {
         </HStack>
 
         <Box mt={4} pt={4} borderTopWidth="1px" borderColor={borderColor}>
-          <Text fontSize="xs" color="gray.500">
-            <strong>How to improve:</strong> Fulfill loan requests promptly,
-            return items on time, and earn positive reviews to boost your Honor
-            Score.
-          </Text>
+          <VStack align="start" gap={2}>
+            <Text fontSize="xs" color="gray.500">
+              <strong>Honor Score Components:</strong>
+            </Text>
+            <SimpleGrid columns={{ base: 1, md: 2 }} gap={2} width="full">
+              <Text fontSize="2xs" color="gray.500">• <strong>Pooling:</strong> Sharing items with communities (+15 max)</Text>
+              <Text fontSize="2xs" color="gray.500">• <strong>Reviews:</strong> Reviewing items you borrow (+15 max)</Text>
+              <Text fontSize="2xs" color="gray.500">• <strong>Responsiveness:</strong> Approving loan requests (+10 max)</Text>
+              <Text fontSize="2xs" color="gray.500">• <strong>Contributions:</strong> Improving item metadata (+10 max)</Text>
+              <Text fontSize="2xs" color="gray.500">• <strong>Reputation:</strong> Ratings from lenders (+25 max)</Text>
+              <Text fontSize="2xs" color="gray.500">• <strong>Punctuality:</strong> Returning items on time (+25 max)</Text>
+            </SimpleGrid>
+            <Text fontSize="2xs" color="red.500" mt={1}>
+              <strong>Note:</strong> Overdue items and unrecoverable defaults significantly penalize your score.
+            </Text>
+          </VStack>
         </Box>
       </Box>
 

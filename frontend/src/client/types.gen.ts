@@ -891,6 +891,24 @@ export type LoansRespondToExtensionRequestData = {
 
 export type LoansRespondToExtensionRequestResponse = LoanPublic
 
+export type LoansMarkLoanDefaultedData = {
+  id: string
+}
+
+export type LoansMarkLoanDefaultedResponse = LoanPublic
+
+export type LoansForgiveLoanData = {
+  id: string
+}
+
+export type LoansForgiveLoanResponse = LoanPublic
+
+export type LoansSendReturnReminderData = {
+  id: string
+}
+
+export type LoansSendReturnReminderResponse = Message
+
 export type LoginLoginAccessTokenData = {
   formData: Body_login_login_access_token
 }

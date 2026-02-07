@@ -60,7 +60,7 @@ function LoansPage() {
   const borrowedItems = useMemo(
     () =>
       outgoing?.data.filter(
-        (l) => l.status === "ACTIVE" || l.status === "RETURN_PENDING",
+        (l) => l.status === "ACTIVE" || l.status === "RETURN_PENDING" || l.status === "EXTENSION_PENDING",
       ) || [],
     [outgoing],
   )
@@ -71,7 +71,8 @@ function LoansPage() {
         (l) =>
           l.status === "PENDING" ||
           l.status === "ACCEPTED" ||
-          l.status === "REJECTED",
+          l.status === "REJECTED" ||
+          l.status === "EXTENSION_PENDING",
       ) || [],
     [outgoing],
   )
@@ -82,7 +83,8 @@ function LoansPage() {
         (l) =>
           l.status === "PENDING" ||
           l.status === "RETURN_PENDING" ||
-          l.status === "REJECTED",
+          l.status === "REJECTED" ||
+          l.status === "EXTENSION_PENDING",
       ) || [],
     [incoming],
   )
@@ -107,7 +109,7 @@ function LoansPage() {
     const now = new Date()
     return [...(incoming?.data || []), ...(outgoing?.data || [])].filter(
       (l) =>
-        (l.status === "ACTIVE" || l.status === "RETURN_PENDING") &&
+        (l.status === "ACTIVE" || l.status === "RETURN_PENDING" || l.status === "EXTENSION_PENDING") &&
         new Date(l.end_date) < now,
     )
   }, [incoming, outgoing])
@@ -115,7 +117,7 @@ function LoansPage() {
   const activeLending = useMemo(
     () =>
       incoming?.data.filter(
-        (l) => l.status === "ACTIVE" || l.status === "RETURN_PENDING",
+        (l) => l.status === "ACTIVE" || l.status === "RETURN_PENDING" || l.status === "EXTENSION_PENDING",
       ) || [],
     [incoming],
   )

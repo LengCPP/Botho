@@ -853,7 +853,7 @@ async def ratify_donation(
     # Update active/pending loans to reflect new ownership (Community is now the lender)
     loans_stmt = select(Loan).where(
         Loan.item_id == item_id,
-        Loan.status.in_([LoanStatus.PENDING, LoanStatus.ACCEPTED, LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING])
+        Loan.status.in_([LoanStatus.PENDING, LoanStatus.ACCEPTED, LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING, LoanStatus.EXTENSION_PENDING])
     )
     loans = session.exec(loans_stmt).all()
     for loan in loans:

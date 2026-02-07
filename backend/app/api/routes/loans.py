@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -21,9 +21,12 @@ from app.models import (
     LoanPublic,
     LoansPublic,
     LoanStatus,
+    Message,
     NotificationType,
+    User,
 )
 from app.notifications import notify_user
+from app.utils import generate_loan_reminder_email, send_email
 
 router = APIRouter(prefix="/loans", tags=["loans"])
 
@@ -76,6 +79,10 @@ async def create_loan_request(
             # Also check if it's exclusively community owned
             if item.owner_id != community_id:
                 raise HTTPException(status_code=400, detail="Item is not in this community")
+
+        # Set owner_id if it's a user-owned item being borrowed from community
+        if item.user_owner:
+            owner_id = item.owner_id
 
         # Check if requester is a member (Admins are members)
         statement = select(CommunityMember).where(
@@ -524,9 +531,15 @@ async def return_loan(
         raise HTTPException(status_code=400, detail="Loan must be active or return pending to be returned")
 
     loan.status = LoanStatus.RETURNED
+    loan.returned_at = datetime.now(timezone.utc)
     session.add(loan)
     session.commit()
     session.refresh(loan)
+
+    # Refresh honor for both parties
+    await refresh_user_honor(session, loan.requester_id)
+    if loan.owner_id:
+        await refresh_user_honor(session, loan.owner_id)
 
     # Notify requester
     await notify_user(
@@ -558,14 +571,19 @@ async def create_extension_request(
     if loan.status != LoanStatus.ACTIVE:
         raise HTTPException(status_code=400, detail="Loan must be active to request extension")
 
-    # Ensure new_end_date is timezone-aware for comparison
+    # Ensure both are timezone-aware for comparison
     if new_end_date.tzinfo is None:
-        new_end_date = new_end_date.replace(tzinfo=loan.end_date.tzinfo)
+        new_end_date = new_end_date.replace(tzinfo=timezone.utc)
+    
+    current_end_date = loan.end_date
+    if current_end_date.tzinfo is None:
+        current_end_date = current_end_date.replace(tzinfo=timezone.utc)
 
-    if new_end_date <= loan.end_date:
+    if new_end_date <= current_end_date:
         raise HTTPException(status_code=400, detail="New end date must be after current end date")
 
     loan.pending_extension_date = new_end_date
+    loan.status = LoanStatus.EXTENSION_PENDING
     session.add(loan)
     session.commit()
     session.refresh(loan)
@@ -636,13 +654,14 @@ async def respond_to_extension_request(
     if not can_respond and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
-    if not loan.pending_extension_date:
+    if loan.status != LoanStatus.EXTENSION_PENDING or not loan.pending_extension_date:
         raise HTTPException(status_code=400, detail="No pending extension request")
 
     if accept:
         loan.end_date = loan.pending_extension_date
 
     loan.pending_extension_date = None
+    loan.status = LoanStatus.ACTIVE
     session.add(loan)
     session.commit()
     session.refresh(loan)
@@ -659,3 +678,182 @@ async def respond_to_extension_request(
     )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
+
+
+async def refresh_user_honor(session: SessionDep, user_id: uuid.UUID) -> None:
+    """
+    Recalculate and update honor score for a user.
+    """
+    from app.api.routes.users import calculate_honor_score
+    user = session.get(User, user_id)
+    if user:
+        score_data = calculate_honor_score(session, user)
+        user.honor_score = score_data["honor_score"]
+        user.reliability_rate = score_data["reliability_rate"]
+        user.is_delinquent = score_data["is_delinquent"]
+        session.add(user)
+        session.commit()
+
+
+@router.post("/{id}/default", response_model=LoanPublic)
+async def mark_loan_defaulted(
+    *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID
+) -> Any:
+    """
+    Mark a loan as defaulted/unrecoverable (Lender only).
+    """
+    loan = session.get(Loan, id)
+    if not loan:
+        raise HTTPException(status_code=404, detail="Loan not found")
+
+    # Only lender or community admin can mark as defaulted
+    can_mark = False
+    if loan.owner_id == current_user.id:
+        can_mark = True
+    elif loan.community_id:
+        statement = select(CommunityMember).where(
+            CommunityMember.community_id == loan.community_id,
+            CommunityMember.user_id == current_user.id,
+            CommunityMember.role == CommunityMemberRole.ADMIN,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED
+        )
+        if session.exec(statement).first():
+            can_mark = True
+
+    if not can_mark and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Only the lender or community admin can mark a loan as defaulted")
+
+    if loan.status not in [LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING]:
+        raise HTTPException(status_code=400, detail="Only active loans can be marked as defaulted")
+
+    loan.status = LoanStatus.DEFAULTED
+    session.add(loan)
+    session.commit()
+    session.refresh(loan)
+
+    # Refresh borrower honor
+    await refresh_user_honor(session, loan.requester_id)
+
+    # Notify borrower
+    await notify_user(
+        session=session,
+        recipient_id=loan.requester_id,
+        title="Loan Marked as Defaulted",
+        message=f"The lender has marked '{loan.item.title}' as unrecoverable. Your honor score has been penalized.",
+        type=NotificationType.ERROR,
+        link="/loans"
+    )
+
+    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
+
+
+@router.post("/{id}/forgive", response_model=LoanPublic)
+async def forgive_loan(
+    *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID
+) -> Any:
+    """
+    Forgive a defaulted loan (Lender only).
+    """
+    loan = session.get(Loan, id)
+    if not loan:
+        raise HTTPException(status_code=404, detail="Loan not found")
+
+    # Only lender or community admin can forgive
+    can_forgive = False
+    if loan.owner_id == current_user.id:
+        can_forgive = True
+    elif loan.community_id:
+        statement = select(CommunityMember).where(
+            CommunityMember.community_id == loan.community_id,
+            CommunityMember.user_id == current_user.id,
+            CommunityMember.role == CommunityMemberRole.ADMIN,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED
+        )
+        if session.exec(statement).first():
+            can_forgive = True
+
+    if not can_forgive and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Only the lender or community admin can forgive a loan")
+
+    if loan.status != LoanStatus.DEFAULTED:
+        raise HTTPException(status_code=400, detail="Only defaulted loans can be forgiven")
+
+    loan.is_forgiven = True
+    session.add(loan)
+    session.commit()
+    session.refresh(loan)
+
+    # Refresh borrower honor to remove delinquency
+    await refresh_user_honor(session, loan.requester_id)
+
+    # Notify borrower
+    await notify_user(
+        session=session,
+        recipient_id=loan.requester_id,
+        title="Loan Forgiven",
+        message=f"The lender has forgiven the defaulted loan for '{loan.item.title}'.",
+        type=NotificationType.SUCCESS,
+        link="/loans"
+    )
+
+    return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
+
+
+@router.post("/{id}/remind", response_model=Message)
+async def send_return_reminder(
+    *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID
+) -> Any:
+    """
+    Send an email reminder to the borrower (Lender only).
+    """
+    loan = session.get(Loan, id)
+    if not loan:
+        raise HTTPException(status_code=404, detail="Loan not found")
+
+    # Only lender or community admin can send reminders
+    can_remind = False
+    if loan.owner_id == current_user.id:
+        can_remind = True
+    elif loan.community_id:
+        statement = select(CommunityMember).where(
+            CommunityMember.community_id == loan.community_id,
+            CommunityMember.user_id == current_user.id,
+            CommunityMember.role == CommunityMemberRole.ADMIN,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED
+        )
+        if session.exec(statement).first():
+            can_remind = True
+
+    if not can_remind and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Only the lender or community admin can send reminders")
+
+    if loan.status != LoanStatus.ACTIVE:
+        raise HTTPException(status_code=400, detail="Can only remind for active loans")
+
+    borrower = loan.requester
+    lender_name = current_user.full_name or current_user.email
+
+    email_data = generate_loan_reminder_email(
+        email_to=borrower.email,
+        lender_name=lender_name,
+        item_title=loan.item.title,
+        due_date=loan.end_date
+    )
+    
+    send_email(
+        email_to=borrower.email,
+        subject=email_data.subject,
+        html_content=email_data.html_content
+    )
+
+    # Also send in-app notification
+    await notify_user(
+        session=session,
+        recipient_id=borrower.id,
+        title="Return Reminder",
+        message=f"{lender_name} reminded you to return '{loan.item.title}'.",
+        type=NotificationType.WARNING,
+        link="/loans"
+    )
+
+    return Message(message="Reminder sent successfully")

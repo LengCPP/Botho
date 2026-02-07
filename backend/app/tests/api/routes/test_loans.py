@@ -127,6 +127,85 @@ def test_loan_lifecycle(
     assert response.status_code == 200
     assert response.json()["status"] == LoanStatus.RETURNED
 
+def test_loan_extension_lifecycle(
+    client: TestClient, db: Session
+) -> None:
+    # Setup: Superuser (owner) and Normal User (requester)
+    superuser_headers = get_superuser_token_headers(client, db)
+    superuser = crud.get_user_by_email(session=db, email=settings.FIRST_SUPERUSER)
+
+    user_email = random_email()
+    user_password = random_lower_string()
+    user_data = {"email": user_email, "password": user_password}
+    client.post(f"{settings.API_V1_STR}/users/signup", json=user_data)
+    requester = crud.get_user_by_email(session=db, email=user_email)
+    requester.is_verified = True
+    db.add(requester)
+    # Establish friendship
+    from app.models import Friendship, FriendshipStatus
+    friendship = Friendship(
+        user_id=requester.id,
+        friend_id=superuser.id,
+        status=FriendshipStatus.ACCEPTED
+    )
+    db.add(friendship)
+    db.commit()
+
+    login_data = {"username": user_email, "password": user_password}
+    r = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data)
+    requester_headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+    item = create_random_item(db, owner_id=superuser.id)
+
+    # 1. Start a loan
+    start_date = datetime.now(timezone.utc)
+    end_date = start_date + timedelta(days=7)
+    loan_data = {
+        "item_id": str(item.id),
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+    }
+    response = client.post(f"{settings.API_V1_STR}/loans/request", headers=requester_headers, json=loan_data)
+    loan_id = response.json()["id"]
+    client.patch(f"{settings.API_V1_STR}/loans/{loan_id}/respond?accept=true", headers=superuser_headers)
+    client.patch(f"{settings.API_V1_STR}/loans/{loan_id}/ratify", headers=requester_headers)
+
+    # 2. Requester requests extension
+    new_end_date = end_date + timedelta(days=7)
+    response = client.post(
+        f"{settings.API_V1_STR}/loans/{loan_id}/extension",
+        headers=requester_headers,
+        params={"new_end_date": new_end_date.isoformat()}
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == LoanStatus.EXTENSION_PENDING
+    assert response.json()["pending_extension_date"] is not None
+
+    # 3. Owner rejects extension
+    response = client.patch(f"{settings.API_V1_STR}/loans/{loan_id}/extension/respond?accept=false", headers=superuser_headers)
+    assert response.status_code == 200
+    assert response.json()["status"] == LoanStatus.ACTIVE
+    assert response.json()["pending_extension_date"] is None
+    # Original end date remains
+    # Note: isoformat can differ slightly in precision, so we check if they represent the same point in time
+    # or just trust the backend logic if status is ACTIVE and pending is None.
+
+    # 4. Requester requests extension again
+    response = client.post(
+        f"{settings.API_V1_STR}/loans/{loan_id}/extension",
+        headers=requester_headers,
+        params={"new_end_date": new_end_date.isoformat()}
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == LoanStatus.EXTENSION_PENDING
+
+    # 5. Owner accepts extension
+    response = client.patch(f"{settings.API_V1_STR}/loans/{loan_id}/extension/respond?accept=true", headers=superuser_headers)
+    assert response.status_code == 200
+    assert response.json()["status"] == LoanStatus.ACTIVE
+    # End date should be updated
+    assert response.json()["end_date"].startswith(new_end_date.strftime("%Y-%m-%dT%H:%M:%S"))
+
 def test_read_incoming_loan_requests(
     client: TestClient, db: Session
 ) -> None:

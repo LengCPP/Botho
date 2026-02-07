@@ -528,14 +528,14 @@ function CommunityBoard() {
   const activeLoans = useMemo(() => {
     return (
       communityLoans?.data.filter((loan) =>
-        ["ACCEPTED", "ACTIVE", "RETURN_PENDING"].includes(loan.status),
+        ["ACCEPTED", "ACTIVE", "RETURN_PENDING", "EXTENSION_PENDING"].includes(loan.status),
       ) || []
     )
   }, [communityLoans])
 
   const pendingRequests = useMemo(() => {
     return (
-      communityLoans?.data.filter((loan) => loan.status === "PENDING") || []
+      communityLoans?.data.filter((loan) => ["PENDING", "EXTENSION_PENDING"].includes(loan.status)) || []
     )
   }, [communityLoans])
 

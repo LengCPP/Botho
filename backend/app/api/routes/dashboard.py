@@ -2,6 +2,7 @@ from typing import Any
 import uuid
 from fastapi import APIRouter
 from sqlmodel import func, select, or_
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentUser, SessionDep
 from app.models import (
@@ -17,8 +18,13 @@ from app.models import (
     ItemsPublic,
     ItemPublic
 )
-from app.api.utils import check_item_availability, get_item_condition_data, check_possession, filter_owner_privacy
-from app.api.routes.items import get_work_metadata
+from app.api.utils import (
+    check_item_availability, 
+    get_item_condition_data, 
+    check_possession, 
+    filter_owner_privacy,
+    get_work_metadata
+)
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -29,13 +35,13 @@ def get_dashboard_stats(session: SessionDep, current_user: CurrentUser) -> Any:
     Get aggregated stats for the user dashboard.
     """
     # 1. Active Loans (Incoming - Borrowed by user)
-    # Status: ACTIVE, RETURN_PENDING
+    # Status: ACTIVE, RETURN_PENDING, EXTENSION_PENDING
     active_loans_count = session.exec(
         select(func.count())
         .select_from(Loan)
         .where(
             Loan.requester_id == current_user.id,
-            Loan.status.in_([LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING])
+            Loan.status.in_([LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING, LoanStatus.EXTENSION_PENDING])
         )
     ).one()
 
@@ -47,7 +53,7 @@ def get_dashboard_stats(session: SessionDep, current_user: CurrentUser) -> Any:
         .select_from(Loan)
         .where(
             Loan.owner_id == current_user.id,
-            Loan.status == LoanStatus.PENDING
+            Loan.status.in_([LoanStatus.PENDING, LoanStatus.EXTENSION_PENDING])
         )
     ).one()
 
@@ -69,7 +75,7 @@ def get_dashboard_stats(session: SessionDep, current_user: CurrentUser) -> Any:
             .select_from(Loan)
             .where(
                 Loan.community_id.in_(admin_communities),
-                Loan.status == LoanStatus.PENDING
+                Loan.status.in_([LoanStatus.PENDING, LoanStatus.EXTENSION_PENDING])
             )
         ).one()
 
@@ -124,6 +130,7 @@ def get_recent_activity(
         
     statement = (
         select(Item)
+        .options(selectinload(Item.user_owner), selectinload(Item.community_owner))
         .where(Item.owner_id.in_(allowed_ids))
         .order_by(Item.created_at.desc())
         .limit(limit)
@@ -172,3 +179,4 @@ def get_recent_activity(
         public_items.append(item_pub)
         
     return ItemsPublic(data=public_items, count=len(public_items))
+

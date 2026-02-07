@@ -42,24 +42,6 @@ def send_email(
 ) -> None:
     assert settings.emails_enabled, "no provided configuration for email variables"
 
-    # Use Mailtrap SDK if SMTP_HOST is a mailtrap address and we have a token
-    if settings.SMTP_HOST and "mailtrap" in settings.SMTP_HOST and settings.SMTP_PASSWORD:
-        try:
-            client = mt.MailtrapClient(token=settings.SMTP_PASSWORD)
-            mail = mt.Mail(
-                sender=mt.Address(email=settings.EMAILS_FROM_EMAIL, name=settings.EMAILS_FROM_NAME),
-                to=[mt.Address(email=email_to)],
-                subject=subject,
-                html=html_content,
-                category="System Notification",
-            )
-            response = client.send(mail)
-            logger.info(f"send email result (Mailtrap SDK): {response}")
-            return
-        except Exception as e:
-            logger.error(f"Failed to send email via Mailtrap SDK: {e}")
-            # Fallback to SMTP if SDK fails
-
     message = emails.Message(
         subject=subject,
         html=html_content,
@@ -160,6 +142,29 @@ def generate_donation_notification_email(
             "link": link,
         },
     )
+    return EmailData(html_content=html_content, subject=subject)
+
+
+def generate_loan_reminder_email(
+    *,
+    email_to: str,
+    lender_name: str,
+    item_title: str,
+    due_date: datetime,
+) -> EmailData:
+    project_name = settings.PROJECT_NAME
+    subject = f"{project_name} - Reminder to return '{item_title}'"
+    html_content = f"""
+    <html>
+        <body>
+            <p>Hi,</p>
+            <p>This is a reminder from <strong>{lender_name}</strong> to return the item <strong>'{item_title}'</strong>.</p>
+            <p>It was due on <strong>{due_date.strftime('%Y-%m-%d')}</strong>.</p>
+            <p>Please return it as soon as possible to maintain your honor score.</p>
+            <p>Best regards,<br>{project_name} Team</p>
+        </body>
+    </html>
+    """
     return EmailData(html_content=html_content, subject=subject)
 
 

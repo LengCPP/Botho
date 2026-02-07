@@ -136,7 +136,7 @@ function Dashboard() {
                   <Text fontSize="3xl" fontWeight="bold">
                     {isLoadingStats
                       ? "-"
-                      : (stats?.honor_score).toFixed(0)}
+                      : (stats?.honor_score ?? 0).toFixed(0)}
                   </Text>
                   <Text fontSize="sm" color="gray.400">
                     / 100

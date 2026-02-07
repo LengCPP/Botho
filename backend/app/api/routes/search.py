@@ -122,7 +122,7 @@ def search(
 
     # Convert raw items to ItemPublic
     items_public = []
-    from app.api.routes.items import check_item_availability
+    from app.api.utils import check_item_availability
     for item in meili_items_raw:
         is_avail = check_item_availability(session, item.id)
 
@@ -135,7 +135,7 @@ def search(
             community_pub = item.community_owner
 
         # Manually construct ItemPublic
-        from app.api.routes.items import check_possession, get_work_metadata
+        from app.api.utils import check_possession, get_work_metadata
         item_pub = ItemPublic(
             id=item.id,
             owner_id=item.owner_id,

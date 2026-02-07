@@ -9,6 +9,7 @@ import {
   Icon,
   Link,
   Separator,
+  SimpleGrid,
   Spinner,
   Text,
   Timeline,
@@ -68,7 +69,7 @@ const BorrowerReportCard = ({ userId }: BorrowerReportCardProps) => {
             </HStack>
             <HStack gap={1}>
               <Text fontWeight="bold" fontSize="sm">
-                {(metrics.honor_score).toFixed(0)}
+                {(metrics.honor_score ?? 0).toFixed(0)}
               </Text>
               <Icon as={FiAward} color="yellow.500" />
             </HStack>
@@ -80,7 +81,7 @@ const BorrowerReportCard = ({ userId }: BorrowerReportCardProps) => {
                 Reliability
               </Text>
               <Text fontSize="xs" fontWeight="semibold">
-                {metrics.reliability_rate.toFixed(0)}%
+                {(metrics.reliability_rate ?? 0).toFixed(0)}%
               </Text>
             </VStack>
             <VStack align="start" gap={0} flex={1}>
