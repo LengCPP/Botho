@@ -178,19 +178,26 @@ export const QuickSearch = ({
                   </Heading>
                   <Stack gap={2}>
                     {results.items.map((item) => {
-                      let to = "/items"
-                      let params: any = {}
+                      const primaryCommunity =
+                        item.community_owner || item.communities?.[0]
                       const isOwner = item.owner_id === currentUser?.id
 
-                      if (item.community_owner) {
+                      let to = "/items"
+                      let params: any = {}
+                      let search: any = { q: item.title }
+
+                      if (primaryCommunity) {
                         to = "/communities/$communityId"
-                        params = { communityId: item.community_owner.id }
+                        params = { communityId: primaryCommunity.id }
+                        search = { tab: "items", q: item.title }
                       } else if (isOwner) {
-                        to = "/items" // Or /profile, but items is the main list
+                        to = "/items"
                         params = {}
+                        search = { q: item.title }
                       } else {
                         to = "/users/$userId"
                         params = { userId: item.owner_id }
+                        search = { q: item.title }
                       }
 
                       return (
@@ -198,6 +205,7 @@ export const QuickSearch = ({
                           key={item.id}
                           to={to}
                           params={params}
+                          search={search}
                           onClick={() => setShowResults(false)}
                         >
                           <HStack

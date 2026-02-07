@@ -30,26 +30,31 @@ export const ItemListItem = ({
   // Else:
   //   - /items/$itemId
 
-  let to = "/items/$itemId"
-  let params: any = { itemId: item.id }
+  const primaryCommunity = item.community_owner || item.communities?.[0]
 
-  if (linkToOwner) {
-    if (item.community_owner) {
-      to = "/communities/$communityId"
-      params = { communityId: item.community_owner.id }
-    } else if (isOwner) {
-      to = "/profile"
-      params = {}
-    } else {
-      to = "/users/$userId"
-      params = { userId: item.owner_id }
-    }
+  let to = "/items"
+  let params: any = {}
+  let search: any = { q: item.title }
+
+  if (primaryCommunity) {
+    to = "/communities/$communityId"
+    params = { communityId: primaryCommunity.id }
+    search = { tab: "items", q: item.title }
+  } else if (isOwner) {
+    to = "/items"
+    params = {}
+    search = { q: item.title }
+  } else {
+    to = "/users/$userId"
+    params = { userId: item.owner_id }
+    search = { q: item.title }
   }
 
   return (
     <Link
       to={to}
       params={params}
+      search={search}
       style={{ textDecoration: "none", width: "100%" }}
     >
       <Flex

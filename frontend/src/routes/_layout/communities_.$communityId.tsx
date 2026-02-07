@@ -93,6 +93,7 @@ import { getImageUrl, groupItems } from "@/utils"
 
 const communitySearchSchema = z.object({
   tab: z.enum(["board", "items", "members", "loans", "manage"]).catch("board"),
+  q: z.string().optional(),
 })
 
 export const Route = createFileRoute("/_layout/communities/$communityId")({
@@ -429,7 +430,7 @@ function DonationManagement({
 
 function CommunityBoard() {
   const { communityId } = Route.useParams()
-  const { tab } = Route.useSearch()
+  const { tab, q: qParam } = Route.useSearch()
   const { user: currentUser } = useAuth()
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const queryClient = useQueryClient()
@@ -445,8 +446,18 @@ function CommunityBoard() {
     "subject" | "genre" | "category" | "author" | "ownership"
   >("subject")
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
-  const [q, setQ] = useState("")
+  const [q, setQ] = useState(qParam || "")
   const isMobile = useBreakpointValue({ base: true, md: false })
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      navigate({
+        search: (prev) => ({ ...prev, q: q || undefined }),
+        replace: true,
+      })
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [q, navigate])
 
   const handleTabChange = (value: string) => {
     navigate({
@@ -499,9 +510,9 @@ function CommunityBoard() {
   })
 
   const { data: communityItems, isLoading: isLoadingItems } = useQuery({
-    queryKey: ["communityItems", communityId, q],
+    queryKey: ["communityItems", communityId, qParam],
     queryFn: () =>
-      CommunitiesService.readCommunityItems({ id: communityId, q }),
+      CommunitiesService.readCommunityItems({ id: communityId, q: qParam }),
     enabled: !!isMember,
   })
 

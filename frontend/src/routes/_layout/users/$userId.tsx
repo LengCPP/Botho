@@ -30,6 +30,7 @@ import {
   FiUserMinus,
   FiUserPlus,
 } from "react-icons/fi"
+import { z } from "zod"
 
 import {
   FriendsService,
@@ -56,12 +57,18 @@ import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
 import { formatPublicId, getImageUrl, groupItems, handleError } from "@/utils"
 
+const userSearchSchema = z.object({
+  q: z.string().optional(),
+})
+
 export const Route = createFileRoute("/_layout/users/$userId")({
   component: UserProfilePage,
+  validateSearch: (search) => userSearchSchema.parse(search),
 })
 
 function UserProfilePage() {
   const { userId } = Route.useParams()
+  const { q: qParam } = Route.useSearch()
   const { user: currentUser } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -79,7 +86,17 @@ function UserProfilePage() {
   const [sortOrder, setSortOrder] = useState("desc")
   const [category, setCategory] = useState<string | undefined>(undefined)
   const [genre, setGenre] = useState<string | undefined>(undefined)
-  const [q, setQ] = useState("")
+  const [q, setQ] = useState(qParam || "")
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      navigate({
+        search: (prev) => ({ ...prev, q: q || undefined }),
+        replace: true,
+      })
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [q, navigate])
 
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
   const isMobile = useBreakpointValue({ base: true, md: false })
@@ -104,7 +121,7 @@ function UserProfilePage() {
     queryKey: [
       "items",
       userId,
-      { excludeCollections: true, sortBy, sortOrder, category, genre, q },
+      { excludeCollections: true, sortBy, sortOrder, category, genre, q: qParam },
     ],
     queryFn: () =>
       ItemsService.readItems({
@@ -114,7 +131,7 @@ function UserProfilePage() {
         sortOrder,
         category,
         genre,
-        q,
+        q: qParam,
       }),
     enabled: canSeeAll,
   })

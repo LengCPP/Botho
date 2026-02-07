@@ -42,6 +42,24 @@ def send_email(
 ) -> None:
     assert settings.emails_enabled, "no provided configuration for email variables"
 
+    # Use Mailtrap SDK if SMTP_HOST is a mailtrap address and we have a token
+    if settings.SMTP_HOST and "mailtrap" in settings.SMTP_HOST and settings.SMTP_PASSWORD:
+        try:
+            client = mt.MailtrapClient(token=settings.SMTP_PASSWORD)
+            mail = mt.Mail(
+                sender=mt.Address(email=settings.EMAILS_FROM_EMAIL, name=settings.EMAILS_FROM_NAME),
+                to=[mt.Address(email=email_to)],
+                subject=subject,
+                html=html_content,
+                category="System Notification",
+            )
+            response = client.send(mail)
+            logger.info(f"send email result (Mailtrap SDK): {response}")
+            return
+        except Exception as e:
+            logger.error(f"Failed to send email via Mailtrap SDK: {e}")
+            # Fallback to SMTP if SDK fails
+
     message = emails.Message(
         subject=subject,
         html=html_content,

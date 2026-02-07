@@ -702,7 +702,7 @@ const ItemCard = ({
                     <Link
                       to={
                         currentLoan.owner?.id === user?.id
-                          ? "/profile"
+                          ? "/items"
                           : "/users/$userId"
                       }
                       params={
@@ -710,6 +710,7 @@ const ItemCard = ({
                           ? {}
                           : { userId: currentLoan.owner?.id || "" }
                       }
+                      search={{ q: item.title }}
                       onClick={(e) => e.stopPropagation()}
                       style={{ textDecoration: "none" }}
                     >
@@ -730,10 +731,15 @@ const ItemCard = ({
                     </Link>
                   ) : (
                     <>
-                      {item.community_owner ? (
+                      {item.community_owner || item.communities?.[0] ? (
                         <Link
                           to="/communities/$communityId"
-                          params={{ communityId: item.community_owner.id }}
+                          params={{
+                            communityId:
+                              item.community_owner?.id ||
+                              item.communities?.[0].id,
+                          }}
+                          search={{ tab: "items", q: item.title }}
                           onClick={(e) => e.stopPropagation()}
                           style={{ textDecoration: "none" }}
                         >
@@ -743,13 +749,15 @@ const ItemCard = ({
                             fontWeight="bold"
                             _hover={{ textDecoration: "underline" }}
                           >
-                            {item.community_owner.name}
+                            {item.community_owner?.name ||
+                              item.communities?.[0].name}
                           </Text>
                         </Link>
                       ) : (
                         <Link
-                          to={isOwner ? "/profile" : "/users/$userId"}
+                          to={isOwner ? "/items" : "/users/$userId"}
                           params={isOwner ? {} : { userId: item.owner_id }}
+                          search={{ q: item.title }}
                           onClick={(e) => e.stopPropagation()}
                           style={{ textDecoration: "none" }}
                         >
