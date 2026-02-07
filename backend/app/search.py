@@ -9,6 +9,17 @@ client = meilisearch.Client(settings.MEILI_URL, settings.MEILI_MASTER_KEY)
 
 def sync_item_to_search(item: Item):
     index = client.index("items")
+    
+    # Extract category and genre from extra_data
+    category = None
+    genre = None
+    if item.extra_data:
+        category = item.extra_data.get("category")
+        genre = item.extra_data.get("genre")
+        
+    # Get pooled communities
+    pooled_in = [str(c.id) for c in item.communities]
+    
     document = {
         "id": str(item.id),
         "title": item.title,
@@ -16,6 +27,10 @@ def sync_item_to_search(item: Item):
         "author": item.author,
         "item_type": str(item.item_type.value) if hasattr(item.item_type, 'value') else str(item.item_type),
         "info": item.info,
+        "owner_id": str(item.owner_id),
+        "pooled_in": pooled_in,
+        "category": category,
+        "genre": genre,
     }
     index.add_documents([document])
 

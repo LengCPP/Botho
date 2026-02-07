@@ -29,7 +29,7 @@ export const Route = createFileRoute("/_layout/communities")({
 function Communities() {
   const { data, isLoading } = useQuery({
     queryKey: ["communities"],
-    queryFn: () => CommunitiesService.readCommunities({}),
+    queryFn: () => CommunitiesService.readCommunities({ memberOnly: true }),
   })
 
   const communities = data?.data ?? []

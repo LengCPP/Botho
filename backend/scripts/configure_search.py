@@ -14,7 +14,16 @@ def configure_meilisearch():
             "title",
             "author",
             "description",
-            "item_type"
+            "item_type",
+            "category",
+            "genre"
+        ],
+        "filterableAttributes": [
+            "item_type",
+            "owner_id",
+            "pooled_in",
+            "category",
+            "genre"
         ],
         "typoTolerance": {
             "enabled": True,

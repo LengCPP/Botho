@@ -71,7 +71,7 @@ def get_community_admin_count(session: SessionDep, community_id: uuid.UUID) -> i
 
 @router.get("/", response_model=CommunitiesPublic)
 def read_communities(
-    session: SessionDep, current_user: CurrentUser, skip: int = 0, limit: int = 100
+    session: SessionDep, current_user: CurrentUser, skip: int = 0, limit: int = 100, member_only: bool = False
 ) -> Any:
     """
     Retrieve communities.
@@ -83,13 +83,16 @@ def read_communities(
         )
     ).all()
 
-    # Filter: Public OR (Private AND Member)
-    statement = select(Community).where(
-        or_(
-            Community.is_private == False,
-            Community.id.in_(user_memberships)
+    if member_only:
+        statement = select(Community).where(Community.id.in_(user_memberships))
+    else:
+        # Filter: Public OR (Private AND Member)
+        statement = select(Community).where(
+            or_(
+                Community.is_private == False,
+                Community.id.in_(user_memberships)
+            )
         )
-    )
 
     count_statement = select(func.count()).select_from(statement.subquery())
     count = session.exec(count_statement).one()

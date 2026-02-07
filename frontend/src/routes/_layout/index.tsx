@@ -15,7 +15,7 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import { FiSearch } from "react-icons/fi"
 
-import { CommunitiesService, SearchService } from "@/client"
+import { CommunitiesService, ItemsService, SearchService } from "@/client"
 import UserCard from "@/components/Common/UserCard"
 import CommunityCard from "@/components/Communities/CommunityCard"
 import ItemCard from "@/components/Items/ItemCard"
@@ -44,9 +44,14 @@ function Dashboard() {
     enabled: debouncedSearchTerm.length > 0,
   })
 
-  const { data: recommendations, isLoading: isLoadingRecs } = useQuery({
-    queryKey: ["recommended-communities"],
+  const { data: communities, isLoading: isLoadingCommunities } = useQuery({
+    queryKey: ["browse-communities"],
     queryFn: () => CommunitiesService.readCommunities({ limit: 4 }),
+  })
+
+  const { data: books, isLoading: isLoadingBooks } = useQuery({
+    queryKey: ["recommended-books"],
+    queryFn: () => ItemsService.recommendItems({ limit: 4 }),
   })
 
   const showSearch = debouncedSearchTerm.length > 0
@@ -148,23 +153,43 @@ function Dashboard() {
               )}
             </VStack>
           ) : (
-            <Box mb={12}>
-              <Heading size="md" mb={4}>
-                Recommended Communities
-              </Heading>
-              {isLoadingRecs ? (
-                <Spinner />
-              ) : (
-                <Grid
-                  templateColumns="repeat(auto-fill, minmax(300px, 1fr))"
-                  gap={6}
-                >
-                  {recommendations?.data.map((community: any) => (
-                    <CommunityCard key={community.id} community={community} />
-                  ))}
-                </Grid>
-              )}
-            </Box>
+            <VStack align="stretch" gap={12} mb={12}>
+              <Box>
+                <Heading size="md" mb={4}>
+                  Browse Communities
+                </Heading>
+                {isLoadingCommunities ? (
+                  <Spinner />
+                ) : (
+                  <Grid
+                    templateColumns="repeat(auto-fill, minmax(300px, 1fr))"
+                    gap={6}
+                  >
+                    {communities?.data.map((community: any) => (
+                      <CommunityCard key={community.id} community={community} />
+                    ))}
+                  </Grid>
+                )}
+              </Box>
+
+              <Box>
+                <Heading size="md" mb={4}>
+                  Recommended Books
+                </Heading>
+                {isLoadingBooks ? (
+                  <Spinner />
+                ) : (
+                  <SimpleGrid
+                    columns={{ base: 2, sm: 3, md: 4 }}
+                    gap={{ base: 4, md: 6 }}
+                  >
+                    {groupItems(books?.data || []).map((group: any) => (
+                      <ItemCard key={group[0].id} item={group} />
+                    ))}
+                  </SimpleGrid>
+                )}
+              </Box>
+            </VStack>
           )}
         </Box>
       </Container>

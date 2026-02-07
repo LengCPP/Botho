@@ -15,6 +15,7 @@ from app.models import (
     CommunityMemberStatus,
     Friendship,
     FriendshipStatus,
+    Interest,
     Item,
     ItemConditionRating,
     ItemConditionRatingCreate,
@@ -30,6 +31,9 @@ from app.models import (
     Loan,
     LoanStatus,
     Message,
+    UserInterest,
+    UserPublic,
+    UsersPublic,
     WorkMetadata,
     WorkMetadataPublic,
     WorkMetadataUpdate,
@@ -157,6 +161,145 @@ def get_item_condition_data(session: SessionDep, item_id: uuid.UUID) -> dict:
     return {"average_grade": avg_grade, "notes": notes}
 
 
+@router.get("/recommendations", response_model=ItemsPublic)
+def recommend_items(
+    session: SessionDep,
+    current_user: CurrentUser,
+    skip: int = 0,
+    limit: int = 10,
+) -> Any:
+    """
+    Get recommended books based on user interests and social graph.
+    Uses Meilisearch for ranking and filtering.
+    """
+    from app.search import client
+    
+    # 1. Get Social Graph (Friends & Communities)
+    # Friends (bidirectional)
+    friends_stmt = select(Friendship).where(
+        (Friendship.user_id == current_user.id) | (Friendship.friend_id == current_user.id),
+        Friendship.status == FriendshipStatus.ACCEPTED
+    )
+    friendships = session.exec(friends_stmt).all()
+    friend_ids = set()
+    for f in friendships:
+        if f.user_id == current_user.id:
+            friend_ids.add(str(f.friend_id))
+        else:
+            friend_ids.add(str(f.user_id))
+            
+    # Communities
+    comm_stmt = select(CommunityMember.community_id).where(
+        CommunityMember.user_id == current_user.id,
+        CommunityMember.status == CommunityMemberStatus.ACCEPTED
+    )
+    community_ids = {str(cid) for cid in session.exec(comm_stmt).all()}
+    
+    # 2. Get Interests
+    interests = session.exec(
+        select(Interest.name)
+        .join(UserInterest)
+        .where(UserInterest.user_id == current_user.id)
+    ).all()
+    search_query = " ".join(interests) if interests else ""
+    
+    # 3. Construct Meilisearch Filter
+    # item_type = 'book' AND (owner_id IN [...] OR pooled_in IN [...])
+    
+    # Combine friends and communities for owner_id check
+    allowed_owners = list(friend_ids | community_ids)
+    allowed_pools = list(community_ids)
+    
+    filter_expression = ["item_type = book"]
+    
+    access_filters = []
+    if allowed_owners:
+        access_filters.append(f"owner_id IN {allowed_owners}")
+    if allowed_pools:
+        access_filters.append(f"pooled_in IN {allowed_pools}")
+        
+    if access_filters:
+        filter_expression.append(f"({' OR '.join(access_filters)})")
+    else:
+        # If no friends and no communities, show nothing? 
+        # Or maybe public items? The prompt implies "available for user to borrow".
+        # Let's return empty if no access.
+        return ItemsPublic(data=[], count=0)
+        
+    # 4. Execute Search
+    index = client.index("items")
+    search_results = index.search(
+        search_query,
+        {
+            "filter": filter_expression,
+            "limit": limit,
+            "offset": skip,
+        }
+    )
+    
+    # 5. Fetch DB Items
+    hits = search_results["hits"]
+    if not hits:
+        return ItemsPublic(data=[], count=0)
+        
+    item_ids = [uuid.UUID(hit["id"]) for hit in hits]
+    
+    # Fetch items preserving order (roughly)
+    # SQL IN clause doesn't preserve order. We fetch all and reorder in python.
+    db_items = session.exec(select(Item).where(Item.id.in_(item_ids))).all()
+    item_map = {item.id: item for item in db_items}
+    
+    ordered_items = []
+    for hit in hits:
+        hid = uuid.UUID(hit["id"])
+        if hid in item_map:
+            item = item_map[hid]
+            
+            # Enrich
+            is_avail = check_item_availability(session, item.id)
+            owner_pub = None
+            community_pub = None
+            if item.user_owner:
+                owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser)
+                owner_pub.is_available = is_avail
+            elif item.community_owner:
+                community_pub = item.community_owner
+                
+            cond_data = get_item_condition_data(session, item.id)
+            had_possession = check_possession(session, current_user.id, item.id)
+            
+            item_pub = ItemPublic(
+                id=item.id,
+                owner_id=item.owner_id,
+                title=item.title,
+                description=item.description,
+                author=item.author,
+                item_type=item.item_type,
+                image_url=item.image_url,
+                extra_data=item.extra_data,
+                info={
+                    **(item.info or {}),
+                    "average_condition_grade": cond_data["average_grade"],
+                    "physical_notes": cond_data["notes"]
+                },
+                count=item.count,
+                created_at=item.created_at,
+                owner=owner_pub,
+                community_owner=community_pub,
+                is_available=is_avail,
+                work_metadata=get_work_metadata(session, item.author, item.title),
+                had_possession=had_possession
+            )
+            # Add pooling meta if applicable (simplified check)
+            # We don't have the CommunityItem loaded here efficiently for pooling details
+            # but we can check if any of user's communities have it pooled
+            # For recommendations, basic info is likely enough.
+            
+            ordered_items.append(item_pub)
+            
+    return ItemsPublic(data=ordered_items, count=search_results["estimatedTotalHits"])
+
+
 @router.get("/", response_model=ItemsPublic)
 def read_items(
     session: SessionDep,
@@ -167,40 +310,77 @@ def read_items(
     sort_by: str = "created_at",
     sort_order: str = "desc",
     category: str | None = None,
-    genre: str | None = None
+    genre: str | None = None,
+    item_type: ItemType | None = None,
+    enable_feed: bool = False
 ) -> Any:
     """
-    Retrieve items. Filters by current user's owner_id by default.
+    Retrieve items. Filters by current user's owner_id by default, unless enable_feed is True.
     """
 
-    # Permission check and target owner selection
-    if owner_id and owner_id != current_user.id:
-        # Check if it's a community owner_id
-        is_community = session.exec(
-            select(CommunityMember).where(
-                CommunityMember.community_id == owner_id,
-                CommunityMember.user_id == current_user.id,
-                CommunityMember.status == CommunityMemberStatus.ACCEPTED
-            )
-        ).first()
+    target_owner_id = None
+    feed_mode = False
 
-        if not is_community:
-            # Check if friend
-            is_friend = session.exec(
-                select(Friendship).where(
-                    ((Friendship.user_id == current_user.id) & (Friendship.friend_id == owner_id)) |
-                    ((Friendship.user_id == owner_id) & (Friendship.friend_id == current_user.id)),
-                    Friendship.status == FriendshipStatus.ACCEPTED
+    # Permission check and target owner selection
+    if owner_id:
+        if owner_id != current_user.id:
+            # Check if it's a community owner_id
+            is_community = session.exec(
+                select(CommunityMember).where(
+                    CommunityMember.community_id == owner_id,
+                    CommunityMember.user_id == current_user.id,
+                    CommunityMember.status == CommunityMemberStatus.ACCEPTED
                 )
             ).first()
-            if not is_friend and not current_user.is_superuser:
-                raise HTTPException(status_code=403, detail="Not enough permissions to view this user's items")
+
+            if not is_community:
+                # Check if public community
+                is_public_community = session.exec(
+                    select(Community).where(Community.id == owner_id, Community.is_private == False)
+                ).first()
+                
+                if not is_public_community:
+                    # Check if friend
+                    is_friend = session.exec(
+                        select(Friendship).where(
+                            ((Friendship.user_id == current_user.id) & (Friendship.friend_id == owner_id)) |
+                            ((Friendship.user_id == owner_id) & (Friendship.friend_id == current_user.id)),
+                            Friendship.status == FriendshipStatus.ACCEPTED
+                        )
+                    ).first()
+                    if not is_friend and not current_user.is_superuser:
+                        raise HTTPException(status_code=403, detail="Not enough permissions to view this user's items")
         target_owner_id = owner_id
+    elif enable_feed:
+        feed_mode = True
     else:
         target_owner_id = current_user.id
 
-    # Filter items by owner_id
-    statement = select(Item).where(Item.owner_id == target_owner_id)
+    # Filter items
+    if feed_mode:
+        # Get IDs of communities user is in
+        my_community_ids = session.exec(
+            select(CommunityMember.community_id).where(
+                CommunityMember.user_id == current_user.id,
+                CommunityMember.status == CommunityMemberStatus.ACCEPTED
+            )
+        ).all()
+        
+        # Get public communities
+        public_community_ids = session.exec(
+            select(Community.id).where(Community.is_private == False)
+        ).all()
+        
+        allowed_community_ids = list(set(my_community_ids + public_community_ids))
+        
+        statement = select(Item).where(
+            or_(
+                Item.owner_id.in_(allowed_community_ids),
+                Item.community_owner.has(Community.id.in_(allowed_community_ids))
+            )
+        )
+    else:
+        statement = select(Item).where(Item.owner_id == target_owner_id)
 
     if category:
         statement = statement.where(
@@ -211,6 +391,9 @@ def read_items(
         statement = statement.where(
             func.json_extract_path_text(Item.extra_data, 'genre') == genre
         )
+
+    if item_type:
+        statement = statement.where(Item.item_type == item_type)
 
     # Count total
     count_stmt = select(func.count()).select_from(statement.subquery())

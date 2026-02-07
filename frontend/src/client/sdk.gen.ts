@@ -824,6 +824,29 @@ export class ItemsService {
             }
         });
     }
+
+    /**
+     * Recommend Items
+     * Get recommended books based on user interests and social graph.
+     * @param data The data for the request.
+     * @param data.skip
+     * @param data.limit
+     * @returns ItemsPublic Successful Response
+     * @throws ApiError
+     */
+    public static recommendItems(data: ItemsRecommendItemsData = {}): CancelablePromise<ItemsRecommendItemsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/items/recommendations',
+            query: {
+                skip: data.skip,
+                limit: data.limit
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
     
     /**
      * Read Item

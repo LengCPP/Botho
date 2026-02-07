@@ -467,6 +467,7 @@ export type WorkMetadataUpdate = {
 export type CommunitiesReadCommunitiesData = {
     limit?: number;
     skip?: number;
+    memberOnly?: boolean;
 };
 
 export type CommunitiesReadCommunitiesResponse = (CommunitiesPublic);
@@ -687,6 +688,13 @@ export type ItemsLookupBookRegistryData = {
 
 export type ItemsLookupBookRegistryResponse = (WorkMetadataPublic);
 
+export type ItemsRecommendItemsData = {
+    limit?: number;
+    skip?: number;
+};
+
+export type ItemsRecommendItemsResponse = (ItemsPublic);
+
 export type ItemsReadItemsData = {
     category?: (string | null);
     genre?: (string | null);
@@ -695,6 +703,8 @@ export type ItemsReadItemsData = {
     skip?: number;
     sortBy?: string;
     sortOrder?: string;
+    itemType?: (ItemType | null);
+    enableFeed?: boolean;
 };
 
 export type ItemsReadItemsResponse = (ItemsPublic);
