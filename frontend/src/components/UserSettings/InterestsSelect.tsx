@@ -15,16 +15,10 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { FiPlus, FiX } from "react-icons/fi"
 
 import { InterestsService } from "@/client"
-import {
-  PopoverBody,
-  PopoverContent,
-  PopoverRoot,
-  PopoverTrigger,
-} from "@/components/ui/popover"
 import useCustomToast from "@/hooks/useCustomToast"
 
 interface Interest {
@@ -42,6 +36,7 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
   const [searchTerm, setSearchTerm] = useState("")
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("")
   const [isOpen, setIsOpen] = useState(false)
+  const wrapperRef = useRef<HTMLDivElement>(null)
   const queryClient = useQueryClient()
   const { showSuccessToast } = useCustomToast()
 
@@ -53,10 +48,22 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
     return () => clearTimeout(timer)
   }, [searchTerm])
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [])
+
   const {
     data: interests = [],
     isLoading,
-    isFetching,
   } = useQuery({
     queryKey: ["interests", debouncedSearchTerm],
     queryFn: () => InterestsService.readInterests({ q: debouncedSearchTerm }),
@@ -100,7 +107,6 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
     const term = searchTerm.trim()
     if (!term) return
 
-    // Check if it's already in the *current* list as exact match to avoid duplicates
     const existing = interests.find(
       (i) => i.name.toLowerCase() === term.toLowerCase(),
     )
@@ -114,8 +120,6 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.preventDefault()
-      // If there is exactly one match, select it? Or just create/select exact?
-      // Prefer exact match, then create.
       handleCreate()
     }
   }
@@ -124,7 +128,6 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
     selectedIds.includes(i.id),
   )
 
-  // Determine if we should show the create button
   const showCreateOption =
     searchTerm.trim().length > 0 &&
     !interests.some(
@@ -132,7 +135,7 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
     )
 
   return (
-    <VStack align="stretch" gap={3}>
+    <VStack align="stretch" gap={3} ref={wrapperRef}>
       <Flex wrap="wrap" gap={2}>
         {selectedInterestsDetails.map((interest) => (
           <Badge
@@ -156,36 +159,43 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
         ))}
       </Flex>
 
-      <PopoverRoot
-        open={isOpen}
-        onOpenChange={(e) => setIsOpen(e.open)}
-        positioning={{ sameWidth: true, placement: "bottom-start" }}
-      >
-        <PopoverTrigger asChild>
-          <Input
-            placeholder="Search or add interests..."
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value)
-              if (!isOpen) setIsOpen(true)
-            }}
-            onClick={() => setIsOpen(true)}
-            onKeyDown={handleKeyDown}
-            autoComplete="off"
-          />
-        </PopoverTrigger>
-        <PopoverContent
-          width="auto"
-          minW="300px"
-          onOpenAutoFocus={(e) => e.preventDefault()}
-        >
-          <PopoverBody p={0}>
+      <Box position="relative">
+        <Input
+          placeholder="Search or add interests..."
+          value={searchTerm}
+          onChange={(e) => {
+            setSearchTerm(e.target.value)
+            if (!isOpen) setIsOpen(true)
+          }}
+          onFocus={() => setIsOpen(true)}
+          onKeyDown={handleKeyDown}
+          autoComplete="off"
+        />
+        
+        {isOpen && (
+          <Box
+            position="absolute"
+            top="100%"
+            left={0}
+            right={0}
+            mt={1}
+            bg="white"
+            _dark={{ bg: "gray.800" }}
+            borderRadius="md"
+            boxShadow="md"
+            zIndex={1000}
+            maxH="200px"
+            overflowY="auto"
+            borderWidth="1px"
+            borderColor="gray.200"
+            _darkBorder={{ borderColor: "gray.700" }}
+          >
             {isLoading && !interests.length ? (
               <Box p={4} textAlign="center">
                 <Spinner size="sm" />
               </Box>
             ) : (
-              <VStack align="stretch" gap={0} maxH="200px" overflowY="auto">
+              <VStack align="stretch" gap={0}>
                 {showCreateOption && (
                   <Button
                     variant="ghost"
@@ -194,7 +204,6 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
                     borderRadius={0}
                     height="auto"
                     py={2}
-                    onMouseDown={(e) => e.preventDefault()} // Prevent blur
                     onClick={handleCreate}
                     loading={createInterestMutation.isPending}
                   >
@@ -219,7 +228,6 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
                         },
                       }}
                       opacity={isSelected ? 0.6 : 1}
-                      onMouseDown={(e) => e.preventDefault()} // Prevent blur
                       onClick={() => !isSelected && handleSelect(interest)}
                     >
                       <Text fontSize="sm">{interest.name}</Text>
@@ -236,9 +244,9 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
                 )}
               </VStack>
             )}
-          </PopoverBody>
-        </PopoverContent>
-      </PopoverRoot>
+          </Box>
+        )}
+      </Box>
     </VStack>
   )
 }
