@@ -4,14 +4,18 @@ import {
   Button,
   Flex,
   Icon,
-  IconButton,
   Input,
   Spinner,
   Text,
   VStack,
 } from "@chakra-ui/react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
+import { useEffect, useState } from "react"
 import { FiPlus, FiX } from "react-icons/fi"
 
 import { InterestsService } from "@/client"
@@ -36,25 +40,31 @@ interface InterestsSelectProps {
 
 const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
   const [searchTerm, setSearchTerm] = useState("")
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("")
   const [isOpen, setIsOpen] = useState(false)
   const queryClient = useQueryClient()
   const { showSuccessToast } = useCustomToast()
 
-  const { data: interests = [], isLoading } = useQuery({
-    queryKey: ["interests", searchTerm],
-    queryFn: () => InterestsService.readInterests({ q: searchTerm }),
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchTerm])
+
+  const {
+    data: interests = [],
+    isLoading,
+    isFetching,
+  } = useQuery({
+    queryKey: ["interests", debouncedSearchTerm],
+    queryFn: () => InterestsService.readInterests({ q: debouncedSearchTerm }),
     enabled: isOpen,
+    placeholderData: keepPreviousData,
   })
 
-  // Fetch full details of selected interests to display them
-  // We can optimize this by maintaining a local cache or passing full objects
-  // But for now, let's fetch all interests initially or assume we have them.
-  // Actually, readInterests returns filtered list.
-  // Let's rely on a separate query for ALL known interests to map IDs to names?
-  // Or just use the ones we have.
-  // Better: Fetch details for selectedIds. But backend doesn't support bulk get by IDs.
-  // Workaround: We'll assume the parent component might pass initial data or we fetch all.
-  // Let's just fetch all interests once for mapping.
+  // Fetch all for mapping names (caching strategy)
   const { data: allInterests = [] } = useQuery({
     queryKey: ["interests-all"],
     queryFn: () => InterestsService.readInterests({ limit: 1000 }),
@@ -65,8 +75,11 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
       InterestsService.createInterest({ requestBody: { name } }),
     onSuccess: (newInterest) => {
       showSuccessToast("Interest added!")
-      onChange([...selectedIds, newInterest.id])
+      if (!selectedIds.includes(newInterest.id)) {
+        onChange([...selectedIds, newInterest.id])
+      }
       setSearchTerm("")
+      // Invalidate to refresh lists
       queryClient.invalidateQueries({ queryKey: ["interests"] })
       queryClient.invalidateQueries({ queryKey: ["interests-all"] })
     },
@@ -84,8 +97,26 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
   }
 
   const handleCreate = () => {
-    if (searchTerm.trim()) {
-      createInterestMutation.mutate(searchTerm.trim())
+    const term = searchTerm.trim()
+    if (!term) return
+
+    // Check if it's already in the *current* list as exact match to avoid duplicates
+    const existing = interests.find(
+      (i) => i.name.toLowerCase() === term.toLowerCase(),
+    )
+    if (existing) {
+      handleSelect(existing)
+    } else {
+      createInterestMutation.mutate(term)
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault()
+      // If there is exactly one match, select it? Or just create/select exact?
+      // Prefer exact match, then create.
+      handleCreate()
     }
   }
 
@@ -93,8 +124,12 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
     selectedIds.includes(i.id),
   )
 
-  // Merge selected with searched to ensure we can display them if searched
-  // But strictly we rely on allInterests for display.
+  // Determine if we should show the create button
+  const showCreateOption =
+    searchTerm.trim().length > 0 &&
+    !interests.some(
+      (i) => i.name.toLowerCase() === searchTerm.trim().toLowerCase(),
+    )
 
   return (
     <VStack align="stretch" gap={3}>
@@ -124,7 +159,7 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
       <PopoverRoot
         open={isOpen}
         onOpenChange={(e) => setIsOpen(e.open)}
-        positioning={{ sameWidth: true }}
+        positioning={{ sameWidth: true, placement: "bottom-start" }}
       >
         <PopoverTrigger asChild>
           <Input
@@ -135,11 +170,13 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
               if (!isOpen) setIsOpen(true)
             }}
             onClick={() => setIsOpen(true)}
+            onKeyDown={handleKeyDown}
+            autoComplete="off"
           />
         </PopoverTrigger>
-        <PopoverContent width="auto" minW="300px">
+        <PopoverContent width="auto" minW="300px" portalled={false}>
           <PopoverBody p={0}>
-            {isLoading ? (
+            {isLoading && !interests.length ? (
               <Box p={4} textAlign="center">
                 <Spinner size="sm" />
               </Box>
@@ -161,35 +198,35 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
                         },
                       }}
                       opacity={isSelected ? 0.6 : 1}
-                      onMouseDown={(e) => e.preventDefault()}
+                      onMouseDown={(e) => e.preventDefault()} // Prevent blur
                       onClick={() => !isSelected && handleSelect(interest)}
                     >
                       <Text fontSize="sm">{interest.name}</Text>
                     </Box>
                   )
                 })}
-                {searchTerm &&
-                  !interests.some(
-                    (i) =>
-                      i.name.toLowerCase() === searchTerm.trim().toLowerCase(),
-                  ) && (
-                    <Button
-                      variant="ghost"
-                      justifyContent="start"
-                      width="full"
-                      borderRadius={0}
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={handleCreate}
-                      loading={createInterestMutation.isPending}
-                    >
-                      <Icon as={FiPlus} mr={2} />
-                      Create "{searchTerm}"
-                    </Button>
-                  )}
-                {interests.length === 0 && !searchTerm && (
+
+                {showCreateOption && (
+                  <Button
+                    variant="ghost"
+                    justifyContent="start"
+                    width="full"
+                    borderRadius={0}
+                    height="auto"
+                    py={2}
+                    onMouseDown={(e) => e.preventDefault()} // Prevent blur
+                    onClick={handleCreate}
+                    loading={createInterestMutation.isPending}
+                  >
+                    <Icon as={FiPlus} mr={2} />
+                    Create "{searchTerm}"
+                  </Button>
+                )}
+
+                {interests.length === 0 && !showCreateOption && !isLoading && (
                   <Box p={4} textAlign="center">
                     <Text fontSize="sm" color="gray.500">
-                      Type to search...
+                      Type to add...
                     </Text>
                   </Box>
                 )}
