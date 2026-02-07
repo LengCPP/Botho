@@ -393,7 +393,9 @@ function DonationManagement({
                 </Text>
                 <Text fontSize="xs" color="fg.muted">
                   {isOwnDonation
-                    ? "Waiting for another admin to verify"
+                    ? otherAdminsExist
+                      ? "Waiting for another admin to verify"
+                      : "Verified by you (Only Admin)"
                     : "Donated by member"}
                 </Text>
               </VStack>

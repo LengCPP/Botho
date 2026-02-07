@@ -757,6 +757,7 @@ class LoanPublic(SQLModel):
     requester: "UserPublic"
     community: Optional["CommunityPublic"]
     has_review: bool = False
+    other_admins_exist: bool = False
 
 
 class LoansPublic(SQLModel):
@@ -863,9 +864,11 @@ class UserReview(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     loan_id: uuid.UUID = Field(foreign_key="loan.id", ondelete="CASCADE")
     reviewer_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
-    reviewee_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
+    reviewee_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="CASCADE")
     rating: int = Field(ge=1, le=5)
     comment: str | None = Field(default=None, max_length=2000)
+    condition_grade: int | None = Field(default=None, ge=1, le=10)
+    condition_notes: str | None = Field(default=None, max_length=1000)
     is_disputed: bool = Field(default=False)
     dispute_reason: str | None = Field(default=None, max_length=1000)
     role_reviewed: UserRoleReviewed
@@ -887,6 +890,8 @@ class UserReviewCreate(SQLModel):
     loan_id: uuid.UUID
     rating: int = Field(ge=1, le=5)
     comment: str | None = Field(default=None, max_length=2000)
+    condition_grade: int | None = Field(default=None, ge=1, le=10)
+    condition_notes: str | None = Field(default=None, max_length=1000)
 
 
 class UserReviewDisputeCreate(SQLModel):
@@ -897,10 +902,12 @@ class UserReviewPublic(SQLModel):
     model_config = {"arbitrary_types_allowed": True}
     id: uuid.UUID
     reviewer_id: uuid.UUID
-    reviewee_id: uuid.UUID
+    reviewee_id: uuid.UUID | None = None
     loan_id: uuid.UUID
     rating: int
     comment: str | None
+    condition_grade: int | None = None
+    condition_notes: str | None = None
     role_reviewed: UserRoleReviewed
     created_at: datetime
     reviewer_name: str | None = None

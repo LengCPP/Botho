@@ -163,11 +163,36 @@ async def create_review(
         role_reviewed=role_reviewed,
     )
     session.add(db_obj)
+
+    # If reviewing owner, also update/create ItemConditionRating
+    if role_reviewed == UserRoleReviewed.OWNER and review_in.condition_grade:
+        from app.models import ItemConditionRating
+        existing_cond = session.exec(
+            select(ItemConditionRating).where(
+                ItemConditionRating.item_id == loan.item_id,
+                ItemConditionRating.user_id == current_user.id
+            )
+        ).first()
+
+        if existing_cond:
+            existing_cond.grade = review_in.condition_grade
+            existing_cond.notes = review_in.condition_notes
+            session.add(existing_cond)
+        else:
+            new_cond = ItemConditionRating(
+                item_id=loan.item_id,
+                user_id=current_user.id,
+                grade=review_in.condition_grade,
+                notes=review_in.condition_notes
+            )
+            session.add(new_cond)
+
     session.commit()
     session.refresh(db_obj)
 
-    # Trigger metric update
-    await update_user_metrics(user_id=reviewee_id, session=session)
+    # Trigger metric update if we reviewed a specific person
+    if reviewee_id:
+        await update_user_metrics(user_id=reviewee_id, session=session)
 
     return db_obj
 

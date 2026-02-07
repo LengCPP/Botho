@@ -1,5 +1,6 @@
 import BorrowerReportCard from "@/components/Common/BorrowerReportCard"
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
+import { Link as RouterLink } from "@tanstack/react-router"
 import {
   Badge,
   Box,
@@ -7,6 +8,7 @@ import {
   Flex,
   HStack,
   IconButton,
+  Link,
   Text,
   VStack,
 } from "@chakra-ui/react"
@@ -93,7 +95,7 @@ export function LoanCard({
 
   const isSelfRequested =
     type === "incoming" && loan.requester_id === currentUser?.id
-  const restrictionApplies = isSelfRequested && !!otherAdminsExist
+  const restrictionApplies = isSelfRequested && loan.other_admins_exist
 
   return (
     <>
@@ -108,37 +110,44 @@ export function LoanCard({
         pointerEvents={restrictionApplies ? "none" : "auto"}
         position="relative"
       >
-        {restrictionApplies && (
-          <Badge
-            position="absolute"
-            top={2}
-            right={2}
-            colorPalette="gray"
-            variant="subtle"
-            fontSize="3xs"
-          >
-            Your Request (Requires Other Admin)
-          </Badge>
-        )}
-
         <Flex justify="space-between" align="start" mb={4}>
           <VStack align="start" gap={0}>
             <Text fontWeight="bold" fontSize="lg">
               {loan.item.title}
             </Text>
             <Text fontSize="xs" color="fg.muted">
-              {type === "incoming"
-                ? `Borrower: ${
-                    loan.requester?.full_name ||
-                    loan.requester?.email ||
+              {type === "incoming" ? (
+                <>
+                  Borrower:{" "}
+                  {loan.requester ? (
+                    <Link asChild colorPalette="blue" fontWeight="medium">
+                      <RouterLink to={`/users/${loan.requester.id}`}>
+                        {loan.requester.full_name ||
+                          loan.requester.email ||
+                          "Unknown"}
+                      </RouterLink>
+                    </Link>
+                  ) : (
                     "Unknown"
-                  } ${isSelfRequested ? "(You)" : ""}`
-                : `Owner: ${
-                    loan.owner?.full_name ||
-                    loan.owner?.email ||
-                    loan.community?.name ||
-                    "Community"
-                  }`}
+                  )}{" "}
+                  {isSelfRequested ? "(You)" : ""}
+                </>
+              ) : (
+                <>
+                  Owner:{" "}
+                  {loan.owner ? (
+                    <Link asChild colorPalette="blue" fontWeight="medium">
+                      <RouterLink to={`/users/${loan.owner.id}`}>
+                        {loan.owner.full_name ||
+                          loan.owner.email ||
+                          "Owner"}
+                      </RouterLink>
+                    </Link>
+                  ) : (
+                    loan.community?.name || "Community"
+                  )}
+                </>
+              )}
             </Text>
           </VStack>
           <VStack align="end" gap={2}>
@@ -159,6 +168,11 @@ export function LoanCard({
             >
               {loan.status.replace("_", " ").toUpperCase()}
             </Badge>
+            {restrictionApplies && (
+              <Badge colorPalette="gray" variant="subtle" fontSize="3xs">
+                Your Request (Requires Other Admin)
+              </Badge>
+            )}
             {canCancel && (
               <IconButton
                 aria-label="Cancel Loan"

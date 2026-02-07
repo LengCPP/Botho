@@ -122,6 +122,33 @@ const MyReviewsList = () => {
                 {review.comment || "No comment provided."}
               </Text>
 
+              {review.condition_grade && (
+                <Box
+                  mt={2}
+                  p={2}
+                  bg="gray.50"
+                  _dark={{ bg: "gray.700/50" }}
+                  borderRadius="md"
+                  width="full"
+                  borderLeftWidth="3px"
+                  borderLeftColor="ui.hover"
+                >
+                  <HStack justify="space-between" mb={1}>
+                    <Text fontSize="xs" fontWeight="bold" color="ui.hover">
+                      ITEM CONDITION RATING
+                    </Text>
+                    <Text fontSize="xs" fontWeight="bold">
+                      {review.condition_grade}/10
+                    </Text>
+                  </HStack>
+                  {review.condition_notes && (
+                    <Text fontSize="xs" color="gray.500" fontStyle="italic">
+                      "{review.condition_notes}"
+                    </Text>
+                  )}
+                </Box>
+              )}
+
               {review.is_disputed && (
                 <HStack
                   gap={2}

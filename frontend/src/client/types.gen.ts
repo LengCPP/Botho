@@ -234,6 +234,8 @@ export type LoanPublic = {
     owner: (UserPublic | null);
     requester: UserPublic;
     community: (CommunityPublic | null);
+    has_review: boolean;
+    other_admins_exist: boolean;
 };
 
 export type LoansPublic = {
@@ -387,6 +389,8 @@ export type UserReviewCreate = {
     loan_id: string;
     rating: number;
     comment?: (string | null);
+    condition_grade?: (number | null);
+    condition_notes?: (string | null);
 };
 
 export type UserReviewDisputeCreate = {
@@ -396,10 +400,12 @@ export type UserReviewDisputeCreate = {
 export type UserReviewPublic = {
     id: string;
     reviewer_id: string;
-    reviewee_id: string;
+    reviewee_id: (string | null);
     loan_id: string;
     rating: number;
     comment: (string | null);
+    condition_grade?: (number | null);
+    condition_notes?: (string | null);
     role_reviewed: UserRoleReviewed;
     created_at: string;
     reviewer_name?: (string | null);

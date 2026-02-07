@@ -1,7 +1,7 @@
 import uuid
 from typing import Any
 
-from sqlmodel import Session, and_, or_, select
+from sqlmodel import Session, and_, func, or_, select
 
 from app.models import (
     Friendship,
@@ -83,10 +83,15 @@ def filter_loan_privacy(loan: Loan, current_user_id: Any = None, is_admin: bool 
     reveal_owner = is_admin
 
     if session and loan.owner_id and loan.requester_id:
-        # Check if current user is the owner and needs to see requester details for a decision
+        # Check if current user is the owner - they always see requester details
         is_owner = current_user_id and str(loan.owner_id) == str(current_user_id)
-        if is_owner and loan.status in [LoanStatus.PENDING, LoanStatus.ACCEPTED]:
+        if is_owner:
             reveal_requester = True
+
+        # Check if current user is the requester - they always see owner details
+        is_requester = current_user_id and str(loan.requester_id) == str(current_user_id)
+        if is_requester:
+            reveal_owner = True
 
         # Check friendship
         is_friend = session.exec(
@@ -140,6 +145,19 @@ def filter_loan_privacy(loan: Loan, current_user_id: Any = None, is_admin: bool 
             )
         ).first()
         loan_public.has_review = existing_review is not None
+
+        # Check if other admins exist for community loans
+        if loan.community_id:
+            from app.models import CommunityMember, CommunityMemberRole, CommunityMemberStatus
+            other_admins = session.exec(
+                select(func.count()).select_from(CommunityMember).where(
+                    CommunityMember.community_id == loan.community_id,
+                    CommunityMember.role == CommunityMemberRole.ADMIN,
+                    CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+                    CommunityMember.user_id != current_user_id
+                )
+            ).one()
+            loan_public.other_admins_exist = other_admins > 0
 
     return loan_public
 

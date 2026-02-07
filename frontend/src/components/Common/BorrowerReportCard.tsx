@@ -1,3 +1,4 @@
+import { Link as RouterLink } from "@tanstack/react-router"
 import { UsersService } from "@/client"
 import { useColorModeValue } from "@/components/ui/color-mode"
 import {
@@ -7,6 +8,7 @@ import {
   HStack,
   Heading,
   Icon,
+  Link,
   Separator,
   Spinner,
   Text,
@@ -57,9 +59,11 @@ const BorrowerReportCard = ({ userId }: BorrowerReportCardProps) => {
           <HStack justify="space-between" width="full">
             <HStack gap={2}>
               <Icon as={FiUser} />
-              <Text fontWeight="bold" fontSize="sm">
-                {user.full_name || user.email}
-              </Text>
+              <Link asChild fontWeight="bold" fontSize="sm" colorPalette="blue">
+                <RouterLink to={`/users/${user.id}`}>
+                  {user.full_name || user.email}
+                </RouterLink>
+              </Link>
             </HStack>
             <HStack gap={1}>
               <Text fontWeight="bold" fontSize="sm">
@@ -143,6 +147,32 @@ const BorrowerReportCard = ({ userId }: BorrowerReportCardProps) => {
                   <Text fontSize="xs" color="gray.700" lineHeight="short">
                     {review.comment || "No comment provided."}
                   </Text>
+                  {review.condition_grade && (
+                    <Box
+                      mt={1}
+                      p={1.5}
+                      bg="white"
+                      _dark={{ bg: "gray.800" }}
+                      borderRadius="sm"
+                      width="full"
+                      borderLeftWidth="2px"
+                      borderLeftColor="ui.hover"
+                    >
+                      <HStack justify="space-between">
+                        <Text fontSize="3xs" fontWeight="bold" color="ui.hover">
+                          ITEM CONDITION
+                        </Text>
+                        <Text fontSize="3xs" fontWeight="bold">
+                          {review.condition_grade}/10
+                        </Text>
+                      </HStack>
+                      {review.condition_notes && (
+                        <Text fontSize="3xs" color="gray.500" fontStyle="italic">
+                          "{review.condition_notes}"
+                        </Text>
+                      )}
+                    </Box>
+                  )}
                 </VStack>
               </Box>
             ))}
