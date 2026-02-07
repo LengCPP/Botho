@@ -235,10 +235,10 @@ function Dashboard() {
               <Box p={5} bg="blue.50" _dark={{ bg: "blue.900" }} rounded="lg">
                   <Heading size="sm" mb={2} color="blue.600" _dark={{ color: "blue.200" }}>Did you know?</Heading>
                   <Text fontSize="sm" mb={4}>
-                      Maintaining a high Honor Score increases your visibility and borrowing limits.
+                      A complete profile and high Honor Score help build trust with other members.
                   </Text>
-                  <Button size="sm" colorScheme="blue" variant="outline" w="full" as={Link} to="/settings">
-                      View My Profile
+                  <Button size="sm" colorScheme="blue" variant="outline" w="full" as={Link} to="/profile">
+                      Edit Profile
                   </Button>
               </Box>
             </VStack>
