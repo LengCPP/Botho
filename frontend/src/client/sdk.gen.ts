@@ -708,6 +708,7 @@ export class InterestsService {
      * @param data The data for the request.
      * @param data.skip
      * @param data.limit
+     * @param data.q
      * @returns InterestPublic Successful Response
      * @throws ApiError
      */
@@ -717,8 +718,29 @@ export class InterestsService {
             url: '/api/v1/interests/',
             query: {
                 skip: data.skip,
-                limit: data.limit
+                limit: data.limit,
+                q: data.q
             },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Create Interest
+     * Create a new interest.
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns InterestPublic Successful Response
+     * @throws ApiError
+     */
+    public static createInterest(data: InterestsCreateInterestData): CancelablePromise<InterestsCreateInterestResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/interests/',
+            body: data.requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: 'Validation Error'
             }

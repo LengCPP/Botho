@@ -204,6 +204,11 @@ class Interest(SQLModel, table=True):
     communities: list["Community"] = Relationship(back_populates="interests", link_model=CommunityInterest)
 
 
+class InterestCreate(SQLModel):
+    name: str = Field(min_length=1, max_length=255)
+    category: str | None = Field(default=None, max_length=255)
+
+
 # Shared properties
 class UserBase(SQLModel):
     email: EmailStr = Field(unique=True, index=True, max_length=255)

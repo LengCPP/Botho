@@ -1,25 +1,22 @@
 import {
   Button,
-  Flex,
   Heading,
   Input,
   Separator,
   Textarea,
   VStack,
 } from "@chakra-ui/react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 
 import { OpenAPI, UsersService } from "@/client"
 import { request as apiRequest } from "@/client/core/request"
 import type {
-  InterestPublic,
   UserProfileUpdate,
   UserPublicExtended,
   UserUpdateMe,
 } from "@/customTypes"
 import useCustomToast from "@/hooks/useCustomToast"
-import { Checkbox } from "../ui/checkbox"
 import {
   DialogActionTrigger,
   DialogBody,
@@ -31,6 +28,7 @@ import {
   DialogTitle,
 } from "../ui/dialog"
 import { Field } from "../ui/field"
+import InterestsSelect from "./InterestsSelect"
 
 interface EditProfileModalProps {
   user: UserPublicExtended
@@ -62,15 +60,6 @@ const EditProfileModal = ({ user, isOpen, onClose }: EditProfileModalProps) => {
   })
 
   const selectedInterests = watch("interest_ids") || []
-
-  const { data: interests } = useQuery({
-    queryKey: ["interests"],
-    queryFn: () =>
-      apiRequest(OpenAPI, {
-        method: "GET",
-        url: "/api/v1/interests/",
-      }) as Promise<InterestPublic[]>,
-  })
 
   const mutation = useMutation({
     mutationFn: async (data: EditProfileFormValues) => {
@@ -106,19 +95,6 @@ const EditProfileModal = ({ user, isOpen, onClose }: EditProfileModalProps) => {
 
   const onSubmit = (data: EditProfileFormValues) => {
     mutation.mutate(data)
-  }
-
-  const toggleInterest = (id: string) => {
-    const current = selectedInterests
-    if (current.includes(id)) {
-      setValue(
-        "interest_ids",
-        current.filter((i) => i !== id),
-        { shouldDirty: true },
-      )
-    } else {
-      setValue("interest_ids", [...current, id], { shouldDirty: true })
-    }
   }
 
   return (
@@ -195,18 +171,10 @@ const EditProfileModal = ({ user, isOpen, onClose }: EditProfileModalProps) => {
 
             <Separator my={2} />
             <Heading size="xs">Interests</Heading>
-            <Flex gap={4} wrap="wrap">
-              {interests?.map((interest) => (
-                <Checkbox
-                  key={interest.id}
-                  id={`interest-${interest.id}`}
-                  checked={selectedInterests.includes(interest.id)}
-                  onCheckedChange={() => toggleInterest(interest.id)}
-                >
-                  {interest.name}
-                </Checkbox>
-              ))}
-            </Flex>
+            <InterestsSelect
+              selectedIds={selectedInterests}
+              onChange={(ids) => setValue("interest_ids", ids, { shouldDirty: true })}
+            />
           </VStack>
         </DialogBody>
         <DialogFooter>

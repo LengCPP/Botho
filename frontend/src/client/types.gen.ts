@@ -125,6 +125,11 @@ export type HTTPValidationError = {
     detail?: Array<ValidationError>;
 };
 
+export type InterestCreate = {
+    name: string;
+    category?: (string | null);
+};
+
 export type InterestPublic = {
     id: string;
     name: string;
@@ -671,9 +676,16 @@ export type FriendsRemoveFriendResponse = (Message);
 export type InterestsReadInterestsData = {
     limit?: number;
     skip?: number;
+    q?: (string | null);
 };
 
 export type InterestsReadInterestsResponse = (Array<InterestPublic>);
+
+export type InterestsCreateInterestData = {
+    requestBody: InterestCreate;
+};
+
+export type InterestsCreateInterestResponse = (InterestPublic);
 
 export type ItemsSearchBookRegistryData = {
     limit?: number;
