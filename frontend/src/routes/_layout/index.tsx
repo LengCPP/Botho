@@ -13,6 +13,7 @@ import {
 } from "@chakra-ui/react"
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, Link } from "@tanstack/react-router"
+import { useState } from "react"
 import { FiBook, FiPlus, FiUserPlus } from "react-icons/fi"
 
 import {
@@ -26,6 +27,14 @@ import { QuickSearch } from "@/components/Dashboard/QuickSearch"
 import ItemCard from "@/components/Items/ItemCard"
 import { ItemListItem } from "@/components/Items/ItemListItem"
 import { useColorModeValue } from "@/components/ui/color-mode"
+import {
+  DialogBody,
+  DialogCloseTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogRoot,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import useAuth from "@/hooks/useAuth"
 import { groupItems } from "@/utils"
 
@@ -35,6 +44,7 @@ export const Route = createFileRoute("/_layout/")({
 
 function Dashboard() {
   const { user: currentUser } = useAuth()
+  const [isNewArrivalsModalOpen, setIsNewArrivalsModalOpen] = useState(false)
   
   const cardBg = useColorModeValue("white", "gray.700")
 
@@ -49,7 +59,7 @@ function Dashboard() {
   // 2. Recent Activity (New Items)
   const { data: recentActivity, isLoading: isLoadingActivity } = useQuery({
     queryKey: ["recent-activity"],
-    queryFn: () => DashboardService.getRecentActivity({ limit: 5 }),
+    queryFn: () => DashboardService.getRecentActivity({ limit: 20 }),
   })
 
   // 3. Communities (Fallback/Sidebar)
@@ -63,6 +73,10 @@ function Dashboard() {
     queryKey: ["recommended-books"],
     queryFn: () => ItemsService.recommendItems({ limit: 4 }),
   })
+
+  const newArrivals = groupItems(recentActivity?.data || [])
+  const displayedArrivals = newArrivals.slice(0, 3)
+  const hasMoreArrivals = newArrivals.length > 3
 
   return (
     <>
@@ -151,7 +165,7 @@ function Dashboard() {
                 
                 {isLoadingActivity ? (
                   <Spinner />
-                ) : recentActivity?.data.length === 0 ? (
+                ) : newArrivals.length === 0 ? (
                   <Box p={6} bg={cardBg} rounded="lg" textAlign="center">
                     <Text color="gray.500">No new items from your network recently.</Text>
                     <Button as={Link} to="/communities" size="sm" mt={4} variant="link" color="ui.main">
@@ -160,9 +174,21 @@ function Dashboard() {
                   </Box>
                 ) : (
                    <VStack align="stretch" gap={3}>
-                      {groupItems(recentActivity?.data || []).map((group: any) => (
+                      {displayedArrivals.map((group: any) => (
                         <ItemListItem key={group[0].id} item={group} />
                       ))}
+                      
+                      {hasMoreArrivals && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => setIsNewArrivalsModalOpen(true)}
+                          alignSelf="center"
+                          color="ui.main"
+                        >
+                          Show More ({newArrivals.length - 3})
+                        </Button>
+                      )}
                    </VStack>
                 )}
               </Box>
@@ -219,6 +245,32 @@ function Dashboard() {
           </Grid>
         </Box>
       </Container>
+      
+      {/* New Arrivals Modal */}
+      <DialogRoot 
+        open={isNewArrivalsModalOpen} 
+        onOpenChange={(e) => setIsNewArrivalsModalOpen(e.open)}
+        size="lg"
+        scrollBehavior="inside"
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New Arrivals</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
+            <VStack align="stretch" gap={3}>
+              {newArrivals.map((group: any) => (
+                <ItemListItem 
+                  key={group[0].id} 
+                  item={group} 
+                  linkToOwner={true} 
+                />
+              ))}
+            </VStack>
+          </DialogBody>
+          <DialogCloseTrigger />
+        </DialogContent>
+      </DialogRoot>
     </>
   )
 }

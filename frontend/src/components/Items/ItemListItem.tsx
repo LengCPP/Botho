@@ -1,4 +1,5 @@
 import { type ItemPublic } from "@/client"
+import useAuth from "@/hooks/useAuth"
 import { getImageUrl } from "@/utils"
 import {
   Badge,
@@ -14,18 +15,46 @@ import { FiBook, FiUser } from "react-icons/fi"
 
 interface ItemListItemProps {
   item: ItemPublic | ItemPublic[]
+  linkToOwner?: boolean
 }
 
-export const ItemListItem = ({ item: itemProp }: ItemListItemProps) => {
+export const ItemListItem = ({ item: itemProp, linkToOwner = false }: ItemListItemProps) => {
+  const { user } = useAuth()
   const items = Array.isArray(itemProp) ? itemProp : [itemProp]
   const item = items[0]
   const isBook = item.item_type === "book"
   const count = items.length
 
+  const isOwner = item.owner_id === user?.id
+  
+  // Logic for destination
+  // If linkToOwner is true:
+  //   - If community owner: /communities/$communityId
+  //   - If user owner (self): /profile
+  //   - If user owner (other): /users/$userId
+  // Else:
+  //   - /items/$itemId
+  
+  let to = "/items/$itemId"
+  let params: any = { itemId: item.id }
+
+  if (linkToOwner) {
+    if (item.community_owner) {
+      to = "/communities/$communityId"
+      params = { communityId: item.community_owner.id }
+    } else if (isOwner) {
+      to = "/profile"
+      params = {}
+    } else {
+      to = "/users/$userId"
+      params = { userId: item.owner_id }
+    }
+  }
+
   return (
     <Link
-      to="/items/$itemId"
-      params={{ itemId: item.id }}
+      to={to}
+      params={params}
       style={{ textDecoration: "none", width: "100%" }}
     >
       <Flex
