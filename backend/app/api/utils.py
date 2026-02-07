@@ -131,6 +131,22 @@ def filter_loan_privacy(loan: Loan, current_user_id: Any = None, is_admin: bool 
                 reveal_requester = True
                 reveal_owner = True
 
+    # Check if current user is an admin of the loan's community
+    if session and current_user_id and loan.community_id:
+        from app.models import CommunityMember, CommunityMemberRole, CommunityMemberStatus
+        is_community_admin = session.exec(
+            select(CommunityMember).where(
+                CommunityMember.community_id == loan.community_id,
+                CommunityMember.user_id == current_user_id,
+                CommunityMember.role == CommunityMemberRole.ADMIN,
+                CommunityMember.status == CommunityMemberStatus.ACCEPTED
+            )
+        ).first() is not None
+
+        if is_community_admin:
+            reveal_requester = True
+            reveal_owner = True
+
     if loan.owner:
         loan_public.owner = filter_user_privacy(loan.owner, current_user_id, is_admin=reveal_owner)
 
