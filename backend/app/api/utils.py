@@ -12,6 +12,7 @@ from app.models import (
     LoanStatus,
     User,
     UserPublic,
+    UserReview,
 )
 
 
@@ -130,6 +131,15 @@ def filter_loan_privacy(loan: Loan, current_user_id: Any = None, is_admin: bool 
 
     if loan.requester:
         loan_public.requester = filter_user_privacy(loan.requester, current_user_id, is_admin=reveal_requester)
+
+    if session and current_user_id:
+        existing_review = session.exec(
+            select(UserReview).where(
+                UserReview.loan_id == loan.id,
+                UserReview.reviewer_id == current_user_id
+            )
+        ).first()
+        loan_public.has_review = existing_review is not None
 
     return loan_public
 

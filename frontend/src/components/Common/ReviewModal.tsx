@@ -83,6 +83,8 @@ const ReviewModal = ({ loan, isOpen, onClose }: ReviewModalProps) => {
                 <Rating
                   value={ratingValue}
                   onChange={(val) => setValue("rating", val)}
+                  readOnly={false}
+                  size={24}
                 />
               </Field.Root>
 

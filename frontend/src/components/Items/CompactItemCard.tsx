@@ -39,6 +39,7 @@ interface CompactItemCardProps {
   isAdmin?: boolean
   onShowDetails: () => void
   onRemoveFromCollection?: () => void
+  onReview?: (loan: LoanPublic) => void
 }
 
 export const CompactItemCard = ({
@@ -48,6 +49,7 @@ export const CompactItemCard = ({
   isAdmin,
   onShowDetails,
   onRemoveFromCollection,
+  onReview,
 }: CompactItemCardProps) => {
   const [itemIndex, setItemIndex] = useState(0)
   const [isLoanModalOpen, setIsLoanModalOpen] = useState(false)
@@ -98,8 +100,9 @@ export const CompactItemCard = ({
   const signalReturnMutation = useMutation({
     mutationFn: () =>
       LoansService.signalReturn({ id: (loanProp?.id || currentLoan?.id)! }),
-    onSuccess: () => {
+    onSuccess: (updatedLoan) => {
       queryClient.invalidateQueries({ queryKey: ["loans"] })
+      onReview?.(updatedLoan)
     },
   })
 

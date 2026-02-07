@@ -59,6 +59,12 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
 
   const bgColor = useColorModeValue("main.50", "gray.900")
   const borderColor = useColorModeValue("main.200", "gray.700")
+  const headerBg = useColorModeValue("main.100", "gray.800")
+  const headerTextColor = useColorModeValue("gray.800", "gray.100")
+  const rowHoverBg = useColorModeValue("main.100/50", "gray.800/50")
+  const fallbackBg = useColorModeValue("main.100", "gray.800")
+  const titleColor = useColorModeValue("gray.800", "gray.100")
+  const dateTextColor = useColorModeValue("gray.700", "gray.200")
   const mutedTextColor = useColorModeValue("gray.600", "gray.400")
 
   const { data: logs, isLoading } = useQuery({
@@ -124,23 +130,17 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
       >
         <Table.Root variant="line" interactive size="sm" width="full">
           <Table.Header>
-            <Table.Row bg={useColorModeValue("main.100", "gray.800")}>
-              <Table.ColumnHeader
-                py={2}
-                color={useColorModeValue("gray.800", "gray.100")}
-              >
+            <Table.Row bg={headerBg}>
+              <Table.ColumnHeader py={2} color={headerTextColor}>
                 Book
               </Table.ColumnHeader>
-              <Table.ColumnHeader
-                py={2}
-                color={useColorModeValue("gray.800", "gray.100")}
-              >
+              <Table.ColumnHeader py={2} color={headerTextColor}>
                 Date
               </Table.ColumnHeader>
               <Table.ColumnHeader
                 py={2}
                 textAlign="left"
-                color={useColorModeValue("gray.800", "gray.100")}
+                color={headerTextColor}
               >
                 Actions
               </Table.ColumnHeader>
@@ -148,10 +148,7 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
           </Table.Header>
           <Table.Body>
             {logs.data.map((log) => (
-              <Table.Row
-                key={log.id}
-                _hover={{ bg: useColorModeValue("main.100/50", "gray.800/50") }}
-              >
+              <Table.Row key={log.id} _hover={{ bg: rowHoverBg }}>
                 <Table.Cell py={2}>
                   <HStack gap={3} width="full">
                     <Image
@@ -164,7 +161,7 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
                         <Flex
                           w="35px"
                           h="50px"
-                          bg={useColorModeValue("main.100", "gray.800")}
+                          bg={fallbackBg}
                           borderRadius="sm"
                           align="center"
                           justify="center"
@@ -185,7 +182,7 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
                         fontWeight="bold"
                         fontSize="sm"
                         lineClamp={1}
-                        color={useColorModeValue("gray.800", "gray.100")}
+                        color={titleColor}
                       >
                         {log.title}
                       </Text>
@@ -230,10 +227,7 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
                       >
                         Start:
                       </Text>
-                      <Text
-                        fontSize="2xs"
-                        color={useColorModeValue("gray.700", "gray.200")}
-                      >
+                      <Text fontSize="2xs" color={dateTextColor}>
                         {format(new Date(log.created_at), "MMM d, yy")}
                       </Text>
                     </HStack>
@@ -247,10 +241,7 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
                         >
                           {status === "COMPLETED" ? "End:" : "Drop:"}
                         </Text>
-                        <Text
-                          fontSize="2xs"
-                          color={useColorModeValue("gray.700", "gray.200")}
-                        >
+                        <Text fontSize="2xs" color={dateTextColor}>
                           {format(new Date(log.updated_at), "MMM d, yy")}
                         </Text>
                       </HStack>

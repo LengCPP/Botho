@@ -25,11 +25,13 @@ def upload_image(file_data: bytes, file_name: str, folder: str = "item-images") 
         if not minio_client.bucket_exists(settings.MINIO_STORAGE_BUCKET):
             minio_client.make_bucket(settings.MINIO_STORAGE_BUCKET)
 
-        # Generate a safer filename if none provided
-        if not file_name:
-            file_name = f"{uuid.uuid4()}.png"
-
-        file_path = f"{folder}/{file_name}"
+        # Generate a unique filename using UUID, preserving extension if possible
+        ext = "png"
+        if file_name and "." in file_name:
+            ext = file_name.split(".")[-1].lower()
+        
+        unique_name = f"{uuid.uuid4()}.{ext}"
+        file_path = f"{folder}/{unique_name}"
         data = BytesIO(file_data)
 
         minio_client.put_object(

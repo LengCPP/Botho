@@ -1133,6 +1133,6 @@ def read_community_loans(
     )
     loans = session.exec(statement.offset(skip).limit(limit)).all()
     return LoansPublic(
-        data=[filter_loan_privacy(l, current_user.id, is_admin=current_user.is_superuser) for l in loans],
+        data=[filter_loan_privacy(l, current_user.id, is_admin=current_user.is_superuser, session=session) for l in loans],
         count=count
     )

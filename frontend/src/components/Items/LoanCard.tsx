@@ -1,18 +1,19 @@
 import BorrowerReportCard from "@/components/Common/BorrowerReportCard"
-import ReviewModal from "@/components/Common/ReviewModal"
+import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import {
   Badge,
   Box,
   Button,
   Flex,
   HStack,
+  IconButton,
   Text,
   VStack,
 } from "@chakra-ui/react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { format } from "date-fns"
 import { useState } from "react"
-import { FiCheckCircle, FiXCircle } from "react-icons/fi"
+import { FiCheckCircle, FiStar, FiXCircle } from "react-icons/fi"
 
 import { type LoanPublic, LoansService } from "@/client"
 import useAuth from "@/hooks/useAuth"
@@ -22,13 +23,19 @@ interface LoanCardProps {
   loan: LoanPublic
   type: "incoming" | "outgoing"
   otherAdminsExist?: boolean
+  onReview?: (loan: LoanPublic) => void
 }
 
-export function LoanCard({ loan, type, otherAdminsExist }: LoanCardProps) {
+export function LoanCard({
+  loan,
+  type,
+  otherAdminsExist,
+  onReview,
+}: LoanCardProps) {
   const queryClient = useQueryClient()
   const { showSuccessToast } = useCustomToast()
   const { user: currentUser } = useAuth()
-  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false)
+  const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false)
 
   const respondMutation = useMutation({
     mutationFn: (accept: boolean) =>
@@ -46,6 +53,7 @@ export function LoanCard({ loan, type, otherAdminsExist }: LoanCardProps) {
       showSuccessToast("Loan cancelled successfully")
       queryClient.invalidateQueries({ queryKey: ["loans"] })
       queryClient.invalidateQueries({ queryKey: ["communityLoans"] })
+      setIsCancelConfirmOpen(false)
     },
   })
 
@@ -59,11 +67,11 @@ export function LoanCard({ loan, type, otherAdminsExist }: LoanCardProps) {
 
   const returnMutation = useMutation({
     mutationFn: () => LoansService.returnLoan({ id: loan.id }),
-    onSuccess: () => {
+    onSuccess: (updatedLoan) => {
       showSuccessToast("Item marked as returned")
       queryClient.invalidateQueries({ queryKey: ["loans"] })
       queryClient.invalidateQueries({ queryKey: ["communityLoans"] })
-      setIsReviewModalOpen(true)
+      onReview?.(updatedLoan)
     },
   })
 
@@ -71,7 +79,17 @@ export function LoanCard({ loan, type, otherAdminsExist }: LoanCardProps) {
   const isAccepted = loan.status === "ACCEPTED"
   const isActive = loan.status === "ACTIVE"
   const isReturnPending = loan.status === "RETURN_PENDING"
+  const isExtensionPending = !!loan.pending_extension_date
   const canCancel = isPending || isAccepted
+
+  const extensionMutation = useMutation({
+    mutationFn: (accept: boolean) =>
+      LoansService.respondToExtensionRequest({ id: loan.id, accept }),
+    onSuccess: () => {
+      showSuccessToast("Extension response sent")
+      queryClient.invalidateQueries({ queryKey: ["loans"] })
+    },
+  })
 
   const isSelfRequested =
     type === "incoming" && loan.requester_id === currentUser?.id
@@ -102,6 +120,7 @@ export function LoanCard({ loan, type, otherAdminsExist }: LoanCardProps) {
             Your Request (Requires Other Admin)
           </Badge>
         )}
+
         <Flex justify="space-between" align="start" mb={4}>
           <VStack align="start" gap={0}>
             <Text fontWeight="bold" fontSize="lg">
@@ -122,23 +141,37 @@ export function LoanCard({ loan, type, otherAdminsExist }: LoanCardProps) {
                   }`}
             </Text>
           </VStack>
-          <Badge
-            colorPalette={
-              loan.status === "ACTIVE"
-                ? "green"
-                : loan.status === "PENDING"
-                  ? "accent"
-                  : loan.status === "ACCEPTED"
-                    ? "main"
-                    : loan.status === "REJECTED" || loan.status === "CANCELLED"
-                      ? "red"
-                      : loan.status === "RETURN_PENDING"
-                        ? "orange"
-                        : "gray"
-            }
-          >
-            {loan.status.replace("_", " ").toUpperCase()}
-          </Badge>
+          <VStack align="end" gap={2}>
+            <Badge
+              colorPalette={
+                loan.status === "ACTIVE"
+                  ? "green"
+                  : loan.status === "PENDING"
+                    ? "accent"
+                    : loan.status === "ACCEPTED"
+                      ? "main"
+                      : loan.status === "REJECTED" || loan.status === "CANCELLED"
+                        ? "red"
+                        : loan.status === "RETURN_PENDING"
+                          ? "orange"
+                          : "gray"
+              }
+            >
+              {loan.status.replace("_", " ").toUpperCase()}
+            </Badge>
+            {canCancel && (
+              <IconButton
+                aria-label="Cancel Loan"
+                size="xs"
+                variant="ghost"
+                colorPalette="red"
+                onClick={() => setIsCancelConfirmOpen(true)}
+                disabled={restrictionApplies}
+              >
+                <FiXCircle />
+              </IconButton>
+            )}
+          </VStack>
         </Flex>
 
         {type === "incoming" && isPending && (
@@ -171,6 +204,49 @@ export function LoanCard({ loan, type, otherAdminsExist }: LoanCardProps) {
             <Text>{format(new Date(loan.end_date), "MMM d, yyyy")}</Text>
           </VStack>
         </HStack>
+
+        {isExtensionPending && (
+          <Box
+            mb={4}
+            p={2}
+            bg="orange.50"
+            borderWidth="1px"
+            borderColor="orange.200"
+            borderRadius="md"
+          >
+            <VStack align="start" gap={2}>
+              <Text fontSize="xs" fontWeight="bold" color="orange.800">
+                Extension requested until:{" "}
+                {format(new Date(loan.pending_extension_date!), "MMM d, yyyy")}
+              </Text>
+              {type === "incoming" && (
+                <HStack gap={2} width="full">
+                  <Button
+                    size="xs"
+                    colorPalette="green"
+                    flex={1}
+                    onClick={() => extensionMutation.mutate(true)}
+                    loading={extensionMutation.isPending}
+                    disabled={restrictionApplies}
+                  >
+                    <FiCheckCircle /> Accept
+                  </Button>
+                  <Button
+                    size="xs"
+                    colorPalette="red"
+                    variant="outline"
+                    flex={1}
+                    onClick={() => extensionMutation.mutate(false)}
+                    loading={extensionMutation.isPending}
+                    disabled={restrictionApplies}
+                  >
+                    <FiXCircle /> Reject
+                  </Button>
+                </HStack>
+              )}
+            </VStack>
+          </Box>
+        )}
 
         <Flex gap={2} mt="auto">
           {type === "incoming" && isPending && (
@@ -229,26 +305,39 @@ export function LoanCard({ loan, type, otherAdminsExist }: LoanCardProps) {
             </Button>
           )}
 
-          {canCancel && (
+          {loan.status === "RETURNED" && !loan.has_review && (
             <Button
               size="xs"
-              variant="ghost"
-              colorPalette="red"
-              onClick={() => cancelMutation.mutate()}
-              loading={cancelMutation.isPending}
-              ml={type === "outgoing" && isAccepted ? 0 : "auto"}
-              disabled={restrictionApplies}
+              colorPalette="main"
+              width="full"
+              onClick={() => onReview?.(loan)}
+              variant="surface"
             >
-              Cancel
+              <FiStar /> Review Experience
             </Button>
+          )}
+
+          {loan.status === "RETURNED" && loan.has_review && (
+            <Badge
+              colorPalette="gray"
+              variant="subtle"
+              width="full"
+              justifyContent="center"
+              py={1}
+            >
+              Review Submitted
+            </Badge>
           )}
         </Flex>
       </Box>
 
-      <ReviewModal
-        loan={loan}
-        isOpen={isReviewModalOpen}
-        onClose={() => setIsReviewModalOpen(false)}
+      <ConfirmationModal
+        isOpen={isCancelConfirmOpen}
+        onClose={() => setIsCancelConfirmOpen(false)}
+        onConfirm={() => cancelMutation.mutate()}
+        title="Cancel Loan Request"
+        message={`Are you sure you want to cancel the loan request for '${loan.item.title}'?`}
+        isLoading={cancelMutation.isPending}
       />
     </>
   )

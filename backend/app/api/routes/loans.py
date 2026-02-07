@@ -558,6 +558,10 @@ async def create_extension_request(
     if loan.status != LoanStatus.ACTIVE:
         raise HTTPException(status_code=400, detail="Loan must be active to request extension")
 
+    # Ensure new_end_date is timezone-aware for comparison
+    if new_end_date.tzinfo is None:
+        new_end_date = new_end_date.replace(tzinfo=loan.end_date.tzinfo)
+
     if new_end_date <= loan.end_date:
         raise HTTPException(status_code=400, detail="New end date must be after current end date")
 

@@ -13,19 +13,23 @@ import { useQuery } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
 import { useMemo, useState } from "react"
 import {
+  FiAlertCircle,
   FiArrowDownLeft,
   FiArrowUpRight,
+  FiCheckCircle,
   FiClock,
   FiFileText,
   FiLayers,
+  FiShare2,
 } from "react-icons/fi"
 
-import { type ItemPublic, LoansService } from "@/client"
+import { type ItemPublic, type LoanPublic, LoansService } from "@/client"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
 import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
 import { LoanCard } from "@/components/Items/LoanCard"
+import ReviewModal from "@/components/Common/ReviewModal"
 import useAuth from "@/hooks/useAuth"
 
 export const Route = createFileRoute("/_layout/loans")({
@@ -38,6 +42,7 @@ function LoansPage() {
   const [sortBy, setSortBy] = useState("created_at")
   const [sortOrder, setSortOrder] = useState("desc")
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
+  const [selectedLoanForReview, setSelectedLoanForReview] = useState<LoanPublic | null>(null)
 
   const { data: incoming, isLoading: isLoadingIn } = useQuery({
     queryKey: ["loans", "incoming"],
@@ -62,7 +67,10 @@ function LoansPage() {
   const pendingOutgoing = useMemo(
     () =>
       outgoing?.data.filter(
-        (l) => l.status === "PENDING" || l.status === "ACCEPTED",
+        (l) =>
+          l.status === "PENDING" ||
+          l.status === "ACCEPTED" ||
+          l.status === "REJECTED",
       ) || [],
     [outgoing],
   )
@@ -70,8 +78,16 @@ function LoansPage() {
   const pendingIncoming = useMemo(
     () =>
       incoming?.data.filter(
-        (l) => l.status === "PENDING" || l.status === "RETURN_PENDING",
+        (l) =>
+          l.status === "PENDING" ||
+          l.status === "RETURN_PENDING" ||
+          l.status === "REJECTED",
       ) || [],
+    [incoming],
+  )
+
+  const approvedIncoming = useMemo(
+    () => incoming?.data.filter((l) => l.status === "ACCEPTED") || [],
     [incoming],
   )
 
@@ -79,12 +95,29 @@ function LoansPage() {
     const combined = [
       ...(incoming?.data || []),
       ...(outgoing?.data || []),
-    ].filter((l) => ["REJECTED", "CANCELLED", "RETURNED"].includes(l.status))
+    ].filter((l) => ["CANCELLED", "RETURNED"].includes(l.status))
     return combined.sort(
       (a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     )
   }, [incoming, outgoing])
+
+  const overdueLoans = useMemo(() => {
+    const now = new Date()
+    return [...(incoming?.data || []), ...(outgoing?.data || [])].filter(
+      (l) =>
+        (l.status === "ACTIVE" || l.status === "RETURN_PENDING") &&
+        new Date(l.end_date) < now,
+    )
+  }, [incoming, outgoing])
+
+  const activeLending = useMemo(
+    () =>
+      incoming?.data.filter(
+        (l) => l.status === "ACTIVE" || l.status === "RETURN_PENDING",
+      ) || [],
+    [incoming],
+  )
 
   // Client-side sorting for borrowed items
   const sortedBorrowedItems = useMemo(() => {
@@ -189,6 +222,7 @@ function LoansPage() {
                           item={loan.item}
                           loan={loan}
                           onShowDetails={() => setSelectedItem(loan.item)}
+                          onReview={(l) => setSelectedLoanForReview(l)}
                         />
                       ) : (
                         <VStack key={loan.id} align="stretch" gap={2}>
@@ -196,6 +230,7 @@ function LoansPage() {
                             item={loan.item}
                             loan={loan}
                             onShowDetails={() => setSelectedItem(loan.item)}
+                            onReview={(l) => setSelectedLoanForReview(l)}
                           />
                           {loan.status === "RETURN_PENDING" && (
                             <Badge
@@ -215,6 +250,87 @@ function LoansPage() {
               </Box>
 
               <Separator />
+
+              {/* Items I Approved Section */}
+              {approvedIncoming.length > 0 && (
+                <Box>
+                  <Heading
+                    size="md"
+                    mb={6}
+                    display="flex"
+                    alignItems="center"
+                    gap={2}
+                  >
+                    <FiCheckCircle color="green.500" /> Loans I've Approved
+                    (Waiting for Borrower)
+                  </Heading>
+                  <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={4}>
+                    {approvedIncoming.map((loan) => (
+                      <LoanCard
+                        key={loan.id}
+                        loan={loan}
+                        type="incoming"
+                        onReview={(l) => setSelectedLoanForReview(l)}
+                      />
+                    ))}
+                  </SimpleGrid>
+                  <Separator mt={12} />
+                </Box>
+              )}
+
+              {/* Overdue Section */}
+              {overdueLoans.length > 0 && (
+                <Box>
+                  <Heading
+                    size="md"
+                    mb={6}
+                    display="flex"
+                    alignItems="center"
+                    gap={2}
+                  >
+                    <FiAlertCircle color="red.500" /> Overdue Items
+                  </Heading>
+                  <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={4}>
+                    {overdueLoans.map((loan) => (
+                      <LoanCard
+                        key={loan.id}
+                        loan={loan}
+                        type={
+                          loan.requester_id === user?.id ? "outgoing" : "incoming"
+                        }
+                        onReview={(l) => setSelectedLoanForReview(l)}
+                      />
+                    ))}
+                  </SimpleGrid>
+                  <Separator mt={12} />
+                </Box>
+              )}
+
+              {/* Active Lending Section */}
+              {activeLending.length > 0 && (
+                <Box>
+                  <Heading
+                    size="md"
+                    mb={6}
+                    display="flex"
+                    alignItems="center"
+                    gap={2}
+                  >
+                    <FiShare2 color="blue.500" /> Items I'm Lending
+                  </Heading>
+                  <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={4}>
+                    {activeLending.map((loan) => (
+                      <LoanCard
+                        key={loan.id}
+                        loan={loan}
+                        type="incoming"
+                        onReview={(l) => setSelectedLoanForReview(l)}
+                      />
+                    ))}
+                  </SimpleGrid>
+                  <Separator mt={12} />
+                </Box>
+              )}
 
               <SimpleGrid columns={{ base: 1, lg: 2 }} gap={12}>
                 {/* Actionable Requests */}
@@ -236,7 +352,12 @@ function LoansPage() {
                   ) : (
                     <VStack align="stretch" gap={4}>
                       {pendingIncoming.map((loan) => (
-                        <LoanCard key={loan.id} loan={loan} type="incoming" />
+                        <LoanCard
+                          key={loan.id}
+                          loan={loan}
+                          type="incoming"
+                          onReview={(l) => setSelectedLoanForReview(l)}
+                        />
                       ))}
                     </VStack>
                   )}
@@ -259,7 +380,12 @@ function LoansPage() {
                   ) : (
                     <VStack align="stretch" gap={4}>
                       {pendingOutgoing.map((loan) => (
-                        <LoanCard key={loan.id} loan={loan} type="outgoing" />
+                        <LoanCard
+                          key={loan.id}
+                          loan={loan}
+                          type="outgoing"
+                          onReview={(l) => setSelectedLoanForReview(l)}
+                        />
                       ))}
                     </VStack>
                   )}
@@ -292,6 +418,7 @@ function LoansPage() {
                       type={
                         loan.requester_id === user?.id ? "outgoing" : "incoming"
                       }
+                      onReview={(l) => setSelectedLoanForReview(l)}
                     />
                   ))}
                 </VStack>
@@ -306,6 +433,14 @@ function LoansPage() {
         isOpen={!!selectedItem}
         onClose={() => setSelectedItem(null)}
       />
+
+      {selectedLoanForReview && (
+        <ReviewModal
+          loan={selectedLoanForReview}
+          isOpen={!!selectedLoanForReview}
+          onClose={() => setSelectedLoanForReview(null)}
+        />
+      )}
     </Container>
   )
 }

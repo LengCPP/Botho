@@ -756,6 +756,7 @@ class LoanPublic(SQLModel):
     owner: Optional["UserPublic"]
     requester: "UserPublic"
     community: Optional["CommunityPublic"]
+    has_review: bool = False
 
 
 class LoansPublic(SQLModel):

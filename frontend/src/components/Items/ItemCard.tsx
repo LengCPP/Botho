@@ -63,6 +63,7 @@ interface ItemCardProps {
   displayOwnerId?: string
   onRemoveFromCollection?: () => void
   onShowDetails?: () => void
+  onReview?: (loan: LoanPublic) => void
 }
 
 const ItemCard = ({
@@ -73,6 +74,7 @@ const ItemCard = ({
   displayOwnerId,
   onRemoveFromCollection,
   onShowDetails,
+  onReview,
 }: ItemCardProps) => {
   const [isFlipped, setIsFlipped] = useState(false)
   const [showAdditionalInfo, setShowAdditionalInfo] = useState(false)
@@ -130,9 +132,10 @@ const ItemCard = ({
   const signalReturnMutation = useMutation({
     mutationFn: () =>
       LoansService.signalReturn({ id: (loanProp?.id || currentLoan?.id)! }),
-    onSuccess: () => {
+    onSuccess: (updatedLoan) => {
       showSuccessToast("Return signaled to owner.")
       queryClient.invalidateQueries({ queryKey: ["loans"] })
+      onReview?.(updatedLoan)
     },
     onError: (err: any) => {
       showErrorToast(err.body?.detail || "Failed to signal return")
