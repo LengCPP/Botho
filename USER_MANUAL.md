@@ -14,7 +14,7 @@ Welcome to **Botho**, your platform for sharing, lending, and managing resources
 ### 2. Profile Management
 - **Profile Settings**: Update your **Bio**, **Alias**, and **Interests** in the User Settings.
 - **Privacy**: You can toggle the visibility of your contact details and full name in the settings.
-- **Visual Identity**: Your avatar is automatically generated with a unique color based on your name, featuring a themed orange ring.
+- **Visual Identity**: Your avatar is automatically generated with a unique color based on your name, featuring a themed orange ring (`#fb6635`).
 
 ---
 
@@ -24,6 +24,7 @@ Welcome to **Botho**, your platform for sharing, lending, and managing resources
 Communities are private groups where you can share items with trusted members.
 - **Join a Community**: Search for communities and click **Join**. If a community requires approval, your request will be sent to the administrators.
 - **Create a Community**: Start your own community, set its privacy (Public or Private), and decide if new members need approval.
+- **Collections**: Community 'bucket' collections allow for organized sharing with auto-cleanup and member ownership.
 - **Management**: Community admins can manage members, post announcements, and moderate shared items.
 
 ### 4. Friends
@@ -36,7 +37,7 @@ Communities are private groups where you can share items with trusted members.
 
 ### 5. Adding Items
 You can add items to your personal collection or directly to a community.
-- **Book Search**: When adding a book, use the integrated search to automatically fetch metadata like Author, Title, and Cover Image.
+- **Book Search**: When adding a book, use the integrated search (Google Books) to automatically fetch metadata like Author, Title, and Cover Image.
 - **General Items**: For other resources (tools, games, etc.), manually enter the details and upload an image.
 - **Collections**: Organize your items into groups (e.g., "Fiction", "DIY Tools") for easier browsing.
 
@@ -62,11 +63,11 @@ Botho facilitates the lending of items between users and communities.
 ## 🔍 Search & Notifications
 
 ### 8. Search
-- Use the global search bar to find **Items**, **Users**, and **Communities** instantly.
+- Use the global search bar to find **Items**, **Users**, and **Communities** instantly, powered by Meilisearch.
 - Filter search results to find exactly what you're looking for.
 
 ### 9. Notifications
-- **Real-time Alerts**: Receive instant notifications for loan requests, community messages, and status updates.
+- **Real-time Alerts**: Receive instant notifications for loan requests, community messages, and status updates via WebSockets.
 - **Push Notifications**: Enable push notifications in your browser settings to stay updated even when the app is closed.
 
 ---

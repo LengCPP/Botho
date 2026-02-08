@@ -31,14 +31,15 @@ Botho is a containerized monorepo with a FastAPI (Python) backend and a React (T
 
 ## 5. Development Workflow
 - **Docker-Centric:** All services run in Docker. Use `docker compose up -d`.
-- **Staging:** The staging environment is at `demo.botho.app`.
+- **Live Reload:** Use `docker compose watch` for real-time development.
+- **Staging:** The primary staging environment is at **demo.botho.app** .
 - **Testing:**
-  - Backend: `bash backend/scripts/test.sh`.
+  - Backend: `docker compose exec backend bash scripts/tests-start.sh`.
   - Frontend: `npx playwright test`.
 - **Migrations:** Always run migrations after changing models.
 
 ## 6. Key Features to Remember
-- **Communities:** Private/Public groups for resource sharing.
+- **Communities:** Private/Public groups for resource sharing. Includes 'bucket' collections.
 - **Loans:** Workflow: Request -> Accept -> Ratify -> Return -> Confirm.
 - **Reading Log:** Book tracking and reviews.
 - **Avatars:** Deterministic colors with a themed orange ring (`ui.hover` / `#fb6635`).
