@@ -51,19 +51,33 @@ const ReviewModal = ({ loan, isOpen, onClose }: ReviewModalProps) => {
 
   const ratingValue = watch("rating")
   const isOwner = loan.owner_id === user?.id
+  const isBorrower = loan.requester_id === user?.id
   const isCommunityLoan = !loan.owner_id
+
   const revieweeName = isOwner
     ? loan.requester.full_name || loan.requester.email
-    : loan.owner?.full_name || loan.owner?.email || "Owner"
+    : isCommunityLoan && !isBorrower
+      ? loan.requester.full_name || loan.requester.email
+      : loan.owner?.full_name || loan.owner?.email || "Owner"
+
+  // Show general review (rating/comment) if it's a personal loan OR
+  // if it's a community loan and the user is NOT the borrower (Admin reviewing member)
+  const showGeneralReview = !isCommunityLoan || !isBorrower
 
   const mutation = useMutation({
     mutationFn: (data: UserReviewCreate) =>
       ReviewsService.createReview({ requestBody: data }),
     onSuccess: () => {
       showSuccessToast("Review submitted successfully!")
+      // Invalidate all loan and item related queries to update UI state immediately
       queryClient.invalidateQueries({ queryKey: ["loans"] })
-      queryClient.invalidateQueries({ queryKey: ["reputation"] })
+      queryClient.invalidateQueries({ queryKey: ["communityLoans"] })
       queryClient.invalidateQueries({ queryKey: ["items"] })
+      queryClient.invalidateQueries({ queryKey: ["communityItems"] })
+      queryClient.invalidateQueries({ queryKey: ["reputation"] })
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+      queryClient.invalidateQueries({ queryKey: ["recent-activity"] })
+      
       reset()
       onClose()
     },
@@ -97,7 +111,7 @@ const ReviewModal = ({ loan, isOpen, onClose }: ReviewModalProps) => {
                     : `How was your experience borrowing '${loan.item.title}' from the owner?`}
               </Text>
 
-              {!isCommunityLoan && (
+              {showGeneralReview && (
                 <Box>
                   <Text
                     fontWeight="bold"
@@ -134,7 +148,7 @@ const ReviewModal = ({ loan, isOpen, onClose }: ReviewModalProps) => {
 
               {!isOwner && (
                 <>
-                  {!isCommunityLoan && <Separator />}
+                  {showGeneralReview && <Separator />}
                   <Box>
                     <Text
                       fontWeight="bold"
@@ -184,9 +198,7 @@ const ReviewModal = ({ loan, isOpen, onClose }: ReviewModalProps) => {
                 loading={mutation.isPending}
                 width="full"
               >
-                {isCommunityLoan && !isOwner
-                  ? "Update Condition"
-                  : "Submit Review"}
+                {showGeneralReview ? "Submit Review" : "Update Condition"}
               </Button>
             </VStack>
           </form>

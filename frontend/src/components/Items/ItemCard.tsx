@@ -123,6 +123,7 @@ const ItemCard = ({
     onSuccess: () => {
       showSuccessToast("Loan request cancelled.")
       queryClient.invalidateQueries({ queryKey: ["loans"] })
+      queryClient.invalidateQueries({ queryKey: ["communityLoans"] })
     },
     onError: (err: any) => {
       showErrorToast(err.body?.detail || "Failed to cancel loan request")
@@ -135,6 +136,7 @@ const ItemCard = ({
     onSuccess: (updatedLoan) => {
       showSuccessToast("Return signaled to owner.")
       queryClient.invalidateQueries({ queryKey: ["loans"] })
+      queryClient.invalidateQueries({ queryKey: ["communityLoans"] })
       onReview?.(updatedLoan)
     },
     onError: (err: any) => {

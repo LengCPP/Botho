@@ -7,6 +7,7 @@ from sqlmodel import Session, func, or_, select
 from app.ai import generate_honor_snapshot
 from app.api import deps
 from app.models import (
+    CommunityItem,
     Friendship,
     FriendshipStatus,
     Item,
@@ -137,12 +138,43 @@ async def create_review(
         )
 
     # Determine role being reviewed
+    reviewee_id = None
+    role_reviewed = None
+
     if current_user.id == loan.owner_id:
         reviewee_id = loan.requester_id
         role_reviewed = UserRoleReviewed.BORROWER
     elif current_user.id == loan.requester_id:
         reviewee_id = loan.owner_id
         role_reviewed = UserRoleReviewed.OWNER
+    elif loan.community_id:
+        # Check if current user is an admin of the community
+        from app.models import CommunityMember, CommunityMemberRole, CommunityMemberStatus
+        is_admin = session.exec(
+            select(CommunityMember).where(
+                CommunityMember.community_id == loan.community_id,
+                CommunityMember.user_id == current_user.id,
+                CommunityMember.role == CommunityMemberRole.ADMIN,
+                CommunityMember.status == CommunityMemberStatus.ACCEPTED
+            )
+        ).first() is not None
+        
+        if is_admin:
+            # Admins review the borrower
+            reviewee_id = loan.requester_id
+            role_reviewed = UserRoleReviewed.BORROWER
+            
+            # Prevent self-review (admin is the borrower)
+            if reviewee_id == current_user.id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Admins cannot review themselves as borrowers"
+                )
+        else:
+            raise HTTPException(
+                status_code=403,
+                detail="You were not a participant or admin in this loan"
+            )
     else:
         raise HTTPException(
             status_code=403,

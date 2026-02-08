@@ -60,8 +60,10 @@ import {
   type CommunityPublic,
   FriendsService,
   type ItemPublic,
+  type LoanPublic,
 } from "@/client"
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
+import ReviewModal from "@/components/Common/ReviewModal"
 import AddItem from "@/components/Items/AddItem"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
 import { GroupCard } from "@/components/Items/GroupCard"
@@ -438,6 +440,8 @@ function CommunityBoard() {
   const [message, setMessage] = useState("")
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false)
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
+  const [selectedLoanForReview, setSelectedLoanForReview] =
+    useState<LoanPublic | null>(null)
   const [viewMode, setViewMode] = useState<"card" | "list">(
     () => (localStorage.getItem("view_mode") as any) || "card",
   )
@@ -737,6 +741,7 @@ function CommunityBoard() {
             communityId={communityId}
             isAdmin={isAdmin}
             onShowDetails={() => setSelectedItem(item)}
+            onReview={(l) => setSelectedLoanForReview(l)}
           />
         ) : (
           <ItemCard
@@ -745,6 +750,7 @@ function CommunityBoard() {
             communityId={communityId}
             isAdmin={isAdmin}
             onShowDetails={() => setSelectedItem(item)}
+            onReview={(l) => setSelectedLoanForReview(l)}
           />
         )
       })}
@@ -1332,6 +1338,7 @@ function CommunityBoard() {
                                 loan={loan}
                                 type="incoming"
                                 otherAdminsExist={otherAdminsExist}
+                                onReview={(l) => setSelectedLoanForReview(l)}
                               />
                             ))}
                           </VStack>
@@ -1361,6 +1368,7 @@ function CommunityBoard() {
                                 loan={loan}
                                 type="incoming"
                                 otherAdminsExist={otherAdminsExist}
+                                onReview={(l) => setSelectedLoanForReview(l)}
                               />
                             ))}
                           </VStack>
@@ -1390,6 +1398,7 @@ function CommunityBoard() {
                                 loan={loan}
                                 type="incoming"
                                 otherAdminsExist={otherAdminsExist}
+                                onReview={(l) => setSelectedLoanForReview(l)}
                               />
                             ))}
                           </VStack>
@@ -1617,6 +1626,14 @@ function CommunityBoard() {
         message="Are you sure you want to leave this community?"
         isLoading={leaveMutation.isPending}
       />
+
+      {selectedLoanForReview && (
+        <ReviewModal
+          loan={selectedLoanForReview}
+          isOpen={!!selectedLoanForReview}
+          onClose={() => setSelectedLoanForReview(null)}
+        />
+      )}
     </Container>
   )
 }

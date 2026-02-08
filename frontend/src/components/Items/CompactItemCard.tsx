@@ -94,6 +94,7 @@ export const CompactItemCard = ({
     mutationFn: () => LoansService.cancelLoan({ id: currentLoan!.id }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["loans"] })
+      queryClient.invalidateQueries({ queryKey: ["communityLoans"] })
     },
   })
 
@@ -102,6 +103,7 @@ export const CompactItemCard = ({
       LoansService.signalReturn({ id: (loanProp?.id || currentLoan?.id)! }),
     onSuccess: (updatedLoan) => {
       queryClient.invalidateQueries({ queryKey: ["loans"] })
+      queryClient.invalidateQueries({ queryKey: ["communityLoans"] })
       onReview?.(updatedLoan)
     },
   })

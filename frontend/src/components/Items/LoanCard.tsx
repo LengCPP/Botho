@@ -78,6 +78,7 @@ export function LoanCard({
     onSuccess: () => {
       showSuccessToast("Loan ratified! You now have the item.")
       queryClient.invalidateQueries({ queryKey: ["loans"] })
+      queryClient.invalidateQueries({ queryKey: ["communityLoans"] })
       setModalType(null)
     },
   })
@@ -517,17 +518,19 @@ export function LoanCard({
             </Button>
           )}
 
-          {loan.status === "RETURNED" && !loan.has_review && (
-            <Button
-              size="xs"
-              colorPalette="main"
-              width="full"
-              onClick={() => onReview?.(loan)}
-              variant="surface"
-            >
-              <FiStar /> Review Experience
-            </Button>
-          )}
+          {loan.status === "RETURNED" &&
+            !loan.has_review &&
+            (type === "outgoing" || loan.requester_id !== currentUser?.id) && (
+              <Button
+                size="xs"
+                colorPalette="main"
+                width="full"
+                onClick={() => onReview?.(loan)}
+                variant="surface"
+              >
+                <FiStar /> Review Experience
+              </Button>
+            )}
 
           {loan.status === "RETURNED" && loan.has_review && (
             <Badge
