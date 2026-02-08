@@ -128,10 +128,14 @@ def get_recent_activity(
     if not allowed_ids:
         return ItemsPublic(data=[], count=0)
         
+    # Exclude items with DEFAULTED loans
+    defaulted_item_ids = select(Loan.item_id).where(Loan.status == LoanStatus.DEFAULTED)
+
     statement = (
         select(Item)
         .options(selectinload(Item.user_owner), selectinload(Item.community_owner))
         .where(Item.owner_id.in_(allowed_ids))
+        .where(Item.id.not_in(defaulted_item_ids))
         .order_by(Item.created_at.desc())
         .limit(limit)
     )

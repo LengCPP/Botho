@@ -112,7 +112,7 @@ def check_possession(session: SessionDep, user_id: uuid.UUID, item_id: uuid.UUID
     return bool(loan)
 
 
-def get_item_condition_data(session: SessionDep, item_id: uuid.UUID) -> dict:
+def get_item_condition_data(session: SessionDep, item_id: uuid.UUID) -> dict[str, Any]:
     ratings = session.exec(
         select(ItemConditionRating).where(ItemConditionRating.item_id == item_id)
     ).all()
@@ -121,7 +121,14 @@ def get_item_condition_data(session: SessionDep, item_id: uuid.UUID) -> dict:
         return {"average_grade": 0.0, "notes": []}
 
     avg_grade = sum(r.grade for r in ratings) / len(ratings)
-    notes = [{"user_id": r.user_id, "note": r.notes, "created_at": r.created_at} for r in ratings if r.notes]
+    notes = [
+        {
+            "user_id": str(r.user_id),
+            "note": r.notes,
+            "created_at": r.created_at.isoformat() if r.created_at else None
+        }
+        for r in ratings if r.notes
+    ]
 
     return {"average_grade": avg_grade, "notes": notes}
 
@@ -199,10 +206,6 @@ def recommend_items(
     # Fetch metadata tags/categories for these works
     extra_keywords = set()
     if work_keys:
-        # Construct OR condition for composite primary key
-        # (WorkMetadata.author == a AND WorkMetadata.title == t) OR ...
-        # SQLModel/SQLAlchemy composite IN clause is tricky across DBs, 
-        # but we can iterate or use tuple_ (if supported by backend DB, Postgres supports it).
         from sqlalchemy import tuple_
         
         works_stmt = select(WorkMetadata).where(
@@ -214,60 +217,61 @@ def recommend_items(
             if work.category:
                 extra_keywords.add(work.category)
             if work.tags:
-                # Add top 3 tags per book to avoid noise
                 for tag in work.tags[:3]:
                     extra_keywords.add(tag)
 
     # Combine Interests + Extra Keywords
     query_parts = list(interests) + list(extra_keywords)
-    # Use distinct terms to keep query length manageable
     unique_query_parts = list(set(query_parts))
     search_query = " ".join(unique_query_parts) if unique_query_parts else ""
     
     # 3. Construct Meilisearch Filter
-    # item_type = 'book' AND (owner_id IN [...] OR pooled_in IN [...])
-    
-    # Combine friends and communities for owner_id check
     allowed_owners = list(friend_ids | community_ids)
     allowed_pools = list(community_ids)
     
-    filter_expression = ["item_type = book"]
+    filter_expression = ["item_type = 'book'"]
     
     access_filters = []
     if allowed_owners:
-        access_filters.append(f"owner_id IN {allowed_owners}")
+        owners_list = ", ".join([f"'{uid}'" for uid in allowed_owners])
+        access_filters.append(f"owner_id IN [{owners_list}]")
     if allowed_pools:
-        access_filters.append(f"pooled_in IN {allowed_pools}")
+        pools_list = ", ".join([f"'{pid}'" for pid in allowed_pools])
+        access_filters.append(f"pooled_in IN [{pools_list}]")
         
     if access_filters:
         filter_expression.append(f"({' OR '.join(access_filters)})")
     else:
-        # If no friends and no communities, show nothing? 
-        # Or maybe public items? The prompt implies "available for user to borrow".
-        # Let's return empty if no access.
         return ItemsPublic(data=[], count=0)
         
     # 4. Execute Search
-    index = client.index("items")
-    search_results = index.search(
-        search_query,
-        {
-            "filter": filter_expression,
-            "limit": limit,
-            "offset": skip,
-        }
-    )
+    try:
+        index = client.index("items")
+        search_results = index.search(
+            search_query,
+            {
+                "filter": filter_expression,
+                "limit": limit,
+                "offset": skip,
+            }
+        )
+        hits = search_results["hits"]
+    except Exception:
+        return ItemsPublic(data=[], count=0)
     
-    # 5. Fetch DB Items
-    hits = search_results["hits"]
     if not hits:
         return ItemsPublic(data=[], count=0)
         
     item_ids = [uuid.UUID(hit["id"]) for hit in hits]
     
-    # Fetch items preserving order (roughly)
-    # SQL IN clause doesn't preserve order. We fetch all and reorder in python.
-    db_items = session.exec(select(Item).where(Item.id.in_(item_ids))).all()
+    # 5. Fetch DB Items
+    # Exclude items with DEFAULTED loans
+    defaulted_item_ids = select(Loan.item_id).where(Loan.status == LoanStatus.DEFAULTED)
+    db_items = session.exec(
+        select(Item)
+        .where(Item.id.in_(item_ids))
+        .where(~Item.id.in_(defaulted_item_ids))
+    ).all()
     item_map = {item.id: item for item in db_items}
     
     ordered_items = []
@@ -289,6 +293,12 @@ def recommend_items(
             cond_data = get_item_condition_data(session, item.id)
             had_possession = check_possession(session, current_user.id, item.id)
             
+            # Stringify UUIDs/datetimes in condition data for JSON safety
+            serializable_notes = [
+                {**n, "user_id": str(n["user_id"]), "created_at": n["created_at"].isoformat() if n["created_at"] else None}
+                for n in cond_data["notes"]
+            ]
+
             item_pub = ItemPublic(
                 id=item.id,
                 owner_id=item.owner_id,
@@ -301,7 +311,7 @@ def recommend_items(
                 info={
                     **(item.info or {}),
                     "average_condition_grade": cond_data["average_grade"],
-                    "physical_notes": cond_data["notes"]
+                    "physical_notes": serializable_notes
                 },
                 count=item.count,
                 created_at=item.created_at,
@@ -311,14 +321,9 @@ def recommend_items(
                 work_metadata=get_work_metadata(session, item.author, item.title),
                 had_possession=had_possession
             )
-            # Add pooling meta if applicable (simplified check)
-            # We don't have the CommunityItem loaded here efficiently for pooling details
-            # but we can check if any of user's communities have it pooled
-            # For recommendations, basic info is likely enough.
-            
             ordered_items.append(item_pub)
             
-    return ItemsPublic(data=ordered_items, count=search_results["estimatedTotalHits"])
+    return ItemsPublic(data=ordered_items, count=len(ordered_items))
 
 
 @router.get("/", response_model=ItemsPublic)
@@ -344,6 +349,9 @@ def read_items(
     target_owner_id = None
     feed_mode = False
     allowed_community_ids = []
+
+    # Exclude items with DEFAULTED loans
+    defaulted_item_ids = select(Loan.item_id).where(Loan.status == LoanStatus.DEFAULTED)
 
     # Permission check and target owner selection
     if owner_id:
@@ -403,16 +411,16 @@ def read_items(
             index = meili_client.index("items")
             filters = []
             if target_owner_id:
-                filters.append(f'owner_id = "{target_owner_id}"')
+                filters.append(f"owner_id = '{target_owner_id}'")
             if category:
                 filters.append(f"category = '{category}'")
             if genre:
                 filters.append(f"genre = '{genre}'")
             if item_type:
-                filters.append(f'item_type = "{item_type.value}"')
+                filters.append(f"item_type = '{item_type.value}'")
             if feed_mode:
                 if allowed_community_ids:
-                    allowed_ids_str = "[" + ", ".join([f'"{cid}"' for cid in allowed_community_ids]) + "]"
+                    allowed_ids_str = "[" + ", ".join([f"'{cid}'" for cid in allowed_community_ids]) + "]"
                     filters.append(f"(owner_id IN {allowed_ids_str} OR pooled_in IN {allowed_ids_str})")
                 else:
                     return ItemsPublic(data=[], count=0)
@@ -430,10 +438,14 @@ def read_items(
                 return ItemsPublic(data=[], count=0)
 
             # Fetch from DB preserving order
-            items = session.exec(select(Item).where(Item.id.in_(item_ids))).all()
+            items = session.exec(
+                select(Item)
+                .where(Item.id.in_(item_ids))
+                .where(~Item.id.in_(defaulted_item_ids))
+            ).all()
             item_map = {item.id: item for item in items}
             items = [item_map[iid] for iid in item_ids if iid in item_map]
-            count = search_results["estimatedTotalHits"]
+            count = len(items) # estimatedTotalHits might be wrong if we filtered in DB
         except Exception:
             # Fallback to SQL if Meilisearch fails
             q_filter = or_(
@@ -451,6 +463,8 @@ def read_items(
                 )
             else:
                 statement = select(Item).where(q_filter, Item.owner_id == target_owner_id)
+
+            statement = statement.where(Item.id.not_in(defaulted_item_ids))
 
             if category:
                 statement = statement.where(func.json_extract_path_text(Item.extra_data, 'category') == category)
@@ -473,6 +487,8 @@ def read_items(
             )
         else:
             statement = select(Item).where(Item.owner_id == target_owner_id)
+
+        statement = statement.where(Item.id.not_in(defaulted_item_ids))
 
         if category:
             statement = statement.where(

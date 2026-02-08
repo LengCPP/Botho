@@ -129,15 +129,32 @@ const ReputationDashboard = () => {
               <strong>Honor Score Components:</strong>
             </Text>
             <SimpleGrid columns={{ base: 1, md: 2 }} gap={2} width="full">
-              <Text fontSize="2xs" color="gray.500">• <strong>Pooling:</strong> Sharing items with communities (+15 max)</Text>
-              <Text fontSize="2xs" color="gray.500">• <strong>Reviews:</strong> Reviewing items you borrow (+15 max)</Text>
-              <Text fontSize="2xs" color="gray.500">• <strong>Responsiveness:</strong> Approving loan requests (+10 max)</Text>
-              <Text fontSize="2xs" color="gray.500">• <strong>Contributions:</strong> Improving item metadata (+10 max)</Text>
-              <Text fontSize="2xs" color="gray.500">• <strong>Reputation:</strong> Ratings from lenders (+25 max)</Text>
-              <Text fontSize="2xs" color="gray.500">• <strong>Punctuality:</strong> Returning items on time (+25 max)</Text>
+              <Text fontSize="2xs" color="gray.500">
+                • <strong>Pooling:</strong> Sharing items with communities (+15
+                max)
+              </Text>
+              <Text fontSize="2xs" color="gray.500">
+                • <strong>Reviews:</strong> Reviewing items you borrow (+15 max)
+              </Text>
+              <Text fontSize="2xs" color="gray.500">
+                • <strong>Responsiveness:</strong> Approving loan requests (+10
+                max)
+              </Text>
+              <Text fontSize="2xs" color="gray.500">
+                • <strong>Contributions:</strong> Improving item metadata (+10
+                max)
+              </Text>
+              <Text fontSize="2xs" color="gray.500">
+                • <strong>Reputation:</strong> Ratings from lenders (+25 max)
+              </Text>
+              <Text fontSize="2xs" color="gray.500">
+                • <strong>Punctuality:</strong> Returning items on time (+25
+                max)
+              </Text>
             </SimpleGrid>
             <Text fontSize="2xs" color="red.500" mt={1}>
-              <strong>Note:</strong> Overdue items and unrecoverable defaults significantly penalize your score.
+              <strong>Note:</strong> Overdue items and unrecoverable defaults
+              significantly penalize your score.
             </Text>
           </VStack>
         </Box>

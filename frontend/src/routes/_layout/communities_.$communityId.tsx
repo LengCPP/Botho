@@ -438,13 +438,22 @@ function CommunityBoard() {
   const [message, setMessage] = useState("")
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false)
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
-  const [viewMode, setViewMode] = useState<"card" | "list">("card")
+  const [viewMode, setViewMode] = useState<"card" | "list">(
+    () => (localStorage.getItem("view_mode") as any) || "card",
+  )
   const [displayType, setDisplayType] = useState<"items" | "collections">(
-    "collections",
+    () => (localStorage.getItem("display_type") as any) || "collections",
   )
   const [organizeBy, setOrganizeBy] = useState<
     "subject" | "genre" | "category" | "author" | "ownership"
-  >("subject")
+  >(() => (localStorage.getItem("organize_by") as any) || "subject")
+
+  useEffect(() => {
+    localStorage.setItem("view_mode", viewMode)
+    localStorage.setItem("display_type", displayType)
+    localStorage.setItem("organize_by", organizeBy)
+  }, [viewMode, displayType, organizeBy])
+
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
   const [q, setQ] = useState(qParam || "")
   const isMobile = useBreakpointValue({ base: true, md: false })
@@ -539,21 +548,27 @@ function CommunityBoard() {
   const activeLoans = useMemo(() => {
     return (
       communityLoans?.data.filter((loan) =>
-        ["ACCEPTED", "ACTIVE", "RETURN_PENDING", "EXTENSION_PENDING"].includes(loan.status),
+        ["ACCEPTED", "ACTIVE", "RETURN_PENDING", "EXTENSION_PENDING"].includes(
+          loan.status,
+        ),
       ) || []
     )
   }, [communityLoans])
 
   const pendingRequests = useMemo(() => {
     return (
-      communityLoans?.data.filter((loan) => ["PENDING", "EXTENSION_PENDING"].includes(loan.status)) || []
+      communityLoans?.data.filter((loan) =>
+        ["PENDING", "EXTENSION_PENDING"].includes(loan.status),
+      ) || []
     )
   }, [communityLoans])
 
   const auditTrail = useMemo(() => {
     return (
       communityLoans?.data.filter((loan) =>
-        ["REJECTED", "CANCELLED", "RETURNED"].includes(loan.status),
+        ["REJECTED", "CANCELLED", "RETURNED", "DEFAULTED"].includes(
+          loan.status,
+        ),
       ) || []
     )
   }, [communityLoans])

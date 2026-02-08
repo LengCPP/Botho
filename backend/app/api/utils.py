@@ -232,7 +232,7 @@ def check_item_availability(session: Session, item_id: uuid.UUID) -> bool:
     active_loan = session.exec(
         select(Loan).where(
             Loan.item_id == item_id,
-            Loan.status.in_([LoanStatus.ACTIVE, LoanStatus.PENDING, LoanStatus.ACCEPTED, LoanStatus.RETURN_PENDING, LoanStatus.EXTENSION_PENDING])
+            Loan.status.in_([LoanStatus.ACTIVE, LoanStatus.PENDING, LoanStatus.ACCEPTED, LoanStatus.RETURN_PENDING, LoanStatus.EXTENSION_PENDING, LoanStatus.DEFAULTED])
         )
     ).first()
     return active_loan is None
@@ -256,7 +256,7 @@ def check_possession(session: Session, user_id: uuid.UUID, item_id: uuid.UUID) -
     return bool(loan)
 
 
-def get_item_condition_data(session: Session, item_id: uuid.UUID) -> dict:
+def get_item_condition_data(session: Session, item_id: uuid.UUID) -> dict[str, Any]:
     ratings = session.exec(
         select(ItemConditionRating).where(ItemConditionRating.item_id == item_id)
     ).all()
@@ -265,6 +265,13 @@ def get_item_condition_data(session: Session, item_id: uuid.UUID) -> dict:
         return {"average_grade": 0.0, "notes": []}
 
     avg_grade = sum(r.grade for r in ratings) / len(ratings)
-    notes = [{"user_id": r.user_id, "note": r.notes, "created_at": r.created_at} for r in ratings if r.notes]
+    notes = [
+        {
+            "user_id": str(r.user_id),
+            "note": r.notes,
+            "created_at": r.created_at.isoformat() if r.created_at else None
+        }
+        for r in ratings if r.notes
+    ]
 
     return {"average_grade": avg_grade, "notes": notes}

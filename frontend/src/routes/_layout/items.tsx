@@ -14,7 +14,7 @@ import {
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import type React from "react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   FaBook,
   FaChevronLeft,
@@ -56,17 +56,27 @@ import { getImageUrl, groupItems } from "@/utils"
 
 const itemsSearchSchema = z.object({
   page: z.number().catch(1),
-  sort_by: z.string().catch("created_at"),
-  sort_order: z.string().catch("desc"),
-  limit: z.number().catch(12),
+  sort_by: z
+    .string()
+    .catch(() => localStorage.getItem("sort_by") || "created_at"),
+  sort_order: z
+    .string()
+    .catch(() => localStorage.getItem("sort_order") || "desc"),
+  limit: z.number().catch(() => Number(localStorage.getItem("limit")) || 12),
   category: z.string().optional(),
   genre: z.string().optional(),
-  view_mode: z.enum(["card", "list"]).catch("card"),
-  display_type: z.enum(["items", "collections"]).catch("collections"),
+  view_mode: z
+    .enum(["card", "list"])
+    .catch(() => (localStorage.getItem("view_mode") as any) || "card"),
+  display_type: z
+    .enum(["items", "collections"])
+    .catch(
+      () => (localStorage.getItem("display_type") as any) || "collections",
+    ),
   subject: z.string().optional(),
   organize_by: z
     .enum(["subject", "genre", "category", "author"])
-    .catch("subject"),
+    .catch(() => (localStorage.getItem("organize_by") as any) || "subject"),
   q: z.string().optional(),
 })
 
@@ -140,6 +150,15 @@ function ItemsTable() {
   const { user } = useAuth()
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
   const isMobile = useBreakpointValue({ base: true, md: false })
+
+  useEffect(() => {
+    localStorage.setItem("view_mode", view_mode)
+    localStorage.setItem("display_type", display_type)
+    localStorage.setItem("organize_by", organize_by)
+    localStorage.setItem("sort_by", sort_by)
+    localStorage.setItem("sort_order", sort_order)
+    localStorage.setItem("limit", String(limit))
+  }, [view_mode, display_type, organize_by, sort_by, sort_order, limit])
 
   const { data, isLoading, isPlaceholderData } = useQuery({
     ...getItemsQueryOptions({

@@ -75,12 +75,22 @@ function UserProfilePage() {
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
   // View State
-  const [viewMode, setViewMode] = useState<"card" | "list">("card")
-  const [displayType, setDisplayType] = useState<"items" | "collections">(
-    "items",
+  const [viewMode, setViewMode] = useState<"card" | "list">(
+    () => (localStorage.getItem("view_mode") as any) || "card",
   )
-  const [organizeBy, setOrganizeBy] = useState("subject")
+  const [displayType, setDisplayType] = useState<"items" | "collections">(
+    () => (localStorage.getItem("display_type") as any) || "items",
+  )
+  const [organizeBy, setOrganizeBy] = useState(
+    () => localStorage.getItem("organize_by") || "subject",
+  )
   const [subject, setSubject] = useState<string | undefined>(undefined)
+
+  useEffect(() => {
+    localStorage.setItem("view_mode", viewMode)
+    localStorage.setItem("display_type", displayType)
+    localStorage.setItem("organize_by", organizeBy)
+  }, [viewMode, displayType, organizeBy])
 
   const [sortBy, setSortBy] = useState("created_at")
   const [sortOrder, setSortOrder] = useState("desc")
@@ -121,7 +131,14 @@ function UserProfilePage() {
     queryKey: [
       "items",
       userId,
-      { excludeCollections: true, sortBy, sortOrder, category, genre, q: qParam },
+      {
+        excludeCollections: true,
+        sortBy,
+        sortOrder,
+        category,
+        genre,
+        q: qParam,
+      },
     ],
     queryFn: () =>
       ItemsService.readItems({

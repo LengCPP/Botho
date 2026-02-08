@@ -60,7 +60,10 @@ function LoansPage() {
   const borrowedItems = useMemo(
     () =>
       outgoing?.data.filter(
-        (l) => l.status === "ACTIVE" || l.status === "RETURN_PENDING" || l.status === "EXTENSION_PENDING",
+        (l) =>
+          l.status === "ACTIVE" ||
+          l.status === "RETURN_PENDING" ||
+          l.status === "EXTENSION_PENDING",
       ) || [],
     [outgoing],
   )
@@ -98,7 +101,7 @@ function LoansPage() {
     const combined = [
       ...(incoming?.data || []),
       ...(outgoing?.data || []),
-    ].filter((l) => ["CANCELLED", "RETURNED"].includes(l.status))
+    ].filter((l) => ["CANCELLED", "RETURNED", "DEFAULTED"].includes(l.status))
     return combined.sort(
       (a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
@@ -109,7 +112,9 @@ function LoansPage() {
     const now = new Date()
     return [...(incoming?.data || []), ...(outgoing?.data || [])].filter(
       (l) =>
-        (l.status === "ACTIVE" || l.status === "RETURN_PENDING" || l.status === "EXTENSION_PENDING") &&
+        (l.status === "ACTIVE" ||
+          l.status === "RETURN_PENDING" ||
+          l.status === "EXTENSION_PENDING") &&
         new Date(l.end_date) < now,
     )
   }, [incoming, outgoing])
@@ -117,7 +122,10 @@ function LoansPage() {
   const activeLending = useMemo(
     () =>
       incoming?.data.filter(
-        (l) => l.status === "ACTIVE" || l.status === "RETURN_PENDING" || l.status === "EXTENSION_PENDING",
+        (l) =>
+          l.status === "ACTIVE" ||
+          l.status === "RETURN_PENDING" ||
+          l.status === "EXTENSION_PENDING",
       ) || [],
     [incoming],
   )

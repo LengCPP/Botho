@@ -666,8 +666,8 @@ class ItemUpdate(SQLModel):
     author: str | None = Field(default=None, max_length=255)
     item_type: ItemType | None = None
     image_url: str | None = None
-    extra_data: dict | None = None
-    info: dict | None = None
+    extra_data: dict[str, Any] | None = None
+    info: dict[str, Any] | None = None
 
 
 class ItemOwnerPublic(SQLModel):

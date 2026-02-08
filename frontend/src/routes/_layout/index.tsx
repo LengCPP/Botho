@@ -106,7 +106,7 @@ function Dashboard() {
                 leftIcon={<FiUserPlus />}
                 variant="outline"
                 as={Link}
-                to="/search"
+                to="/friends"
               >
                 Find Friends
               </Button>

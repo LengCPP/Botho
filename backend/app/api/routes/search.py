@@ -125,6 +125,15 @@ def search(
     from app.api.utils import check_item_availability
     for item in meili_items_raw:
         is_avail = check_item_availability(session, item.id)
+        if not is_avail:
+            # Check if it's because of a loan status that should hide it
+            # If we want to hide defaulted items, we check the loan status
+            from app.models import Loan, LoanStatus
+            defaulted_loan = session.exec(
+                select(Loan).where(Loan.item_id == item.id, Loan.status == LoanStatus.DEFAULTED)
+            ).first()
+            if defaulted_loan:
+                continue
 
         owner_pub = None
         community_pub = None

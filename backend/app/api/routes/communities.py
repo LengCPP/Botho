@@ -546,13 +546,16 @@ def read_community_items(
     if not membership and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Must be a member to view community items")
 
+    # Exclude items with DEFAULTED loans
+    defaulted_item_ids = select(Loan.item_id).where(Loan.status == LoanStatus.DEFAULTED)
+
     if q:
         from app.search import client as meili_client
         try:
             index = meili_client.index("items")
             # Filter: item belongs to community (owned or pooled)
             # Meilisearch 'pooled_in' is an array, we check if community ID is in it
-            filter_expr = f'(owner_id = "{id}" OR pooled_in = "{id}")'
+            filter_expr = f'(owner_id = "{id}" OR pooled_in = "{id}") AND is_available = true'
             
             search_params = {
                 "limit": limit,
@@ -567,10 +570,14 @@ def read_community_items(
                 return ItemsPublic(data=[], count=0)
                 
             # Fetch from DB preserving order
-            items = session.exec(select(Item).where(Item.id.in_(item_ids))).all()
+            items = session.exec(
+                select(Item)
+                .where(Item.id.in_(item_ids))
+                .where(Item.id.not_in(defaulted_item_ids))
+            ).all()
             item_map = {item.id: item for item in items}
             items = [item_map[iid] for iid in item_ids if iid in item_map]
-            count = search_results["estimatedTotalHits"]
+            count = len(items)
         except Exception:
             # Fallback to SQL
             q_filter = or_(
@@ -586,33 +593,20 @@ def read_community_items(
                     ),
                     Item.owner_id == id
                 )
-            )
+            ).where(Item.id.not_in(defaulted_item_ids))
             count_stmt = select(func.count()).select_from(statement.subquery())
             count = session.exec(count_stmt).one()
             items = session.exec(statement.offset(skip).limit(limit)).all()
     else:
-        # Query for pooled items
-        pooled_stmt = (
-            select(Item)
-            .join(CommunityItem, Item.id == CommunityItem.item_id)
-            .where(CommunityItem.community_id == id)
-        )
-
-        # Query for exclusively community-owned items
-        owned_stmt = (
-            select(Item)
-            .where(
-                Item.owner_id == id
-            )
-        )
-
-        # Combine using OR
+        # Standard SQL query
         statement = select(Item).where(
             or_(
-                Item.id.in_(pooled_stmt.with_only_columns(Item.id)),
+                Item.id.in_(
+                    select(CommunityItem.item_id).where(CommunityItem.community_id == id)
+                ),
                 Item.owner_id == id
             )
-        )
+        ).where(Item.id.not_in(defaulted_item_ids))
 
         count_stmt = select(func.count()).select_from(statement.subquery())
         count = session.exec(count_stmt).one()

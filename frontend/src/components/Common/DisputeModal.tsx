@@ -109,4 +109,3 @@ const DisputeModal = ({ review, isOpen, onClose }: DisputeModalProps) => {
 }
 
 export default DisputeModal
-

@@ -377,7 +377,7 @@ const ItemCard = ({
       <Box
         aspectRatio={isBook ? 2 / 3 : 3 / 4}
         width="100%"
-        maxW="380px"
+        maxW="300px"
         mx="auto"
         minW="160px"
         cursor="pointer"

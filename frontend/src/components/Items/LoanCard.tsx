@@ -157,7 +157,9 @@ export function LoanCard({
       case "remind":
         return {
           title: "Send Return Reminder",
-          message: `Send an email reminder to ${loan.requester?.full_name || "the borrower"} for '${loan.item.title}'?`,
+          message: `Send an email reminder to ${
+            loan.requester?.full_name || "the borrower"
+          } for '${loan.item.title}'?`,
           onConfirm: () => remindMutation.mutate(),
           isLoading: remindMutation.isPending,
         }
@@ -194,14 +196,18 @@ export function LoanCard({
       case "respond":
         return {
           title: pendingResponse ? "Accept Request" : "Reject Request",
-          message: `Are you sure you want to ${pendingResponse ? "accept" : "reject"} the request for '${loan.item.title}'?`,
+          message: `Are you sure you want to ${
+            pendingResponse ? "accept" : "reject"
+          } the request for '${loan.item.title}'?`,
           onConfirm: () => respondMutation.mutate(pendingResponse!),
           isLoading: respondMutation.isPending,
         }
       case "extension_respond":
         return {
           title: pendingResponse ? "Accept Extension" : "Reject Extension",
-          message: `Are you sure you want to ${pendingResponse ? "accept" : "reject"} the extension request for '${loan.item.title}'?`,
+          message: `Are you sure you want to ${
+            pendingResponse ? "accept" : "reject"
+          } the extension request for '${loan.item.title}'?`,
           onConfirm: () => extensionMutation.mutate(pendingResponse!),
           isLoading: extensionMutation.isPending,
         }
@@ -385,7 +391,9 @@ export function LoanCard({
                       setPendingResponse(true)
                       setModalType("extension_respond")
                     }}
-                    loading={extensionMutation.isPending && pendingResponse === true}
+                    loading={
+                      extensionMutation.isPending && pendingResponse === true
+                    }
                     disabled={restrictionApplies}
                   >
                     <FiCheckCircle /> Accept
@@ -399,7 +407,9 @@ export function LoanCard({
                       setPendingResponse(false)
                       setModalType("extension_respond")
                     }}
-                    loading={extensionMutation.isPending && pendingResponse === false}
+                    loading={
+                      extensionMutation.isPending && pendingResponse === false
+                    }
                     disabled={restrictionApplies}
                   >
                     <FiXCircle /> Reject
