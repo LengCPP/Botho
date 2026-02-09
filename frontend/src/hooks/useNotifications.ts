@@ -53,12 +53,17 @@ export const useNotifications = (limit = 10) => {
       try {
         const message = JSON.parse(event.data)
         // Invalidate notifications if it's a notification-related message
-        if (!message.type || !["ping", "IMPORT_ITEM_PROCESSED"].includes(message.type)) {
+        if (
+          !message.type ||
+          !["ping", "IMPORT_ITEM_PROCESSED"].includes(message.type)
+        ) {
           queryClient.invalidateQueries({ queryKey: ["notifications"] })
         }
-        
+
         // Dispatch custom event for other components to listen to
-        window.dispatchEvent(new CustomEvent("websocket-message", { detail: message }))
+        window.dispatchEvent(
+          new CustomEvent("websocket-message", { detail: message }),
+        )
       } catch (e) {
         console.error("Error parsing websocket message:", e)
         queryClient.invalidateQueries({ queryKey: ["notifications"] })

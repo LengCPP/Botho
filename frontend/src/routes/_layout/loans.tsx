@@ -139,6 +139,9 @@ function LoansPage() {
       if (sortBy === "title") {
         valA = a.item.title.toLowerCase()
         valB = b.item.title.toLowerCase()
+      } else if (sortBy === "author") {
+        valA = (a.item.author || "").toLowerCase()
+        valB = (b.item.author || "").toLowerCase()
       } else {
         valA = new Date(a.created_at).getTime()
         valB = new Date(b.created_at).getTime()

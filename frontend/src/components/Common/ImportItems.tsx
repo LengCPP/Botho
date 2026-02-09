@@ -1,4 +1,14 @@
 import { ImportsService, type StagedItemPublic } from "@/client"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  DialogActionTrigger,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogRoot,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import useCustomToast from "@/hooks/useCustomToast"
 import {
   Box,
@@ -24,16 +34,6 @@ import {
   FaTrash,
 } from "react-icons/fa"
 import * as XLSX from "xlsx"
-import { Checkbox } from "@/components/ui/checkbox"
-import {
-  DialogActionTrigger,
-  DialogBody,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogRoot,
-  DialogTitle,
-} from "@/components/ui/dialog"
 
 interface ImportItemsProps {
   communityId?: string
@@ -71,7 +71,8 @@ export const ImportItems = ({ communityId }: ImportItemsProps) => {
       }
     }
     window.addEventListener("websocket-message", handleWsMessage)
-    return () => window.removeEventListener("websocket-message", handleWsMessage)
+    return () =>
+      window.removeEventListener("websocket-message", handleWsMessage)
   })
 
   const items = stagedItems?.data || []
@@ -79,18 +80,23 @@ export const ImportItems = ({ communityId }: ImportItemsProps) => {
   const processingCount = stagedItems?.processing_count || 0
   const completedCount = stagedItems?.completed_count || 0
   const failedCount = stagedItems?.failed_count || 0
-  
+
   const completedItems = items.filter((i) => i.status === "COMPLETED")
   const failedItems = items.filter((i) => i.status === "FAILED")
 
   const isProcessingBatch = processingCount > 0
   const activeItemsCount = processingCount + completedCount + failedCount
-  const progressValue = activeItemsCount > 0 
-    ? ((completedCount + failedCount) / activeItemsCount) * 100 
-    : 0
+  const progressValue =
+    activeItemsCount > 0
+      ? ((completedCount + failedCount) / activeItemsCount) * 100
+      : 0
 
   const stageMutation = useMutation({
-    mutationFn: (data: { data: any[]; mapping: string; communityId?: string }) =>
+    mutationFn: (data: {
+      data: any[]
+      mapping: string
+      communityId?: string
+    }) =>
       ImportsService.stageItems({
         requestBody: data.data,
         mapping: data.mapping,
@@ -105,8 +111,8 @@ export const ImportItems = ({ communityId }: ImportItemsProps) => {
       queryClient.invalidateQueries({ queryKey: ["stagedItems"] })
     },
     onError: (error: any) => {
-        showErrorToast(error.message || "Failed to stage items")
-    }
+      showErrorToast(error.message || "Failed to stage items")
+    },
   })
 
   const processMutation = useMutation({
@@ -123,9 +129,11 @@ export const ImportItems = ({ communityId }: ImportItemsProps) => {
 
   const cleanMutation = useMutation({
     mutationFn: (all: boolean) => {
-        if (all) return ImportsService.cleanStagedItems({ communityId })
-        const finishedIds = [...completedItems, ...failedItems].map(i => i.id)
-        return Promise.all(finishedIds.map(id => ImportsService.deleteStagedItem({ id })))
+      if (all) return ImportsService.cleanStagedItems({ communityId })
+      const finishedIds = [...completedItems, ...failedItems].map((i) => i.id)
+      return Promise.all(
+        finishedIds.map((id) => ImportsService.deleteStagedItem({ id })),
+      )
     },
     onSuccess: () => {
       showSuccessToast("Cleaned up items.")
@@ -209,7 +217,9 @@ export const ImportItems = ({ communityId }: ImportItemsProps) => {
                   variant="outline"
                   size="sm"
                   onClick={() => cleanMutation.mutate(false)}
-                  disabled={completedItems.length === 0 && failedItems.length === 0}
+                  disabled={
+                    completedItems.length === 0 && failedItems.length === 0
+                  }
                 >
                   <Icon as={FaTrash} mr={2} /> Clear Finished
                 </Button>
@@ -248,7 +258,12 @@ export const ImportItems = ({ communityId }: ImportItemsProps) => {
               <Text fontWeight="bold">Processing Items...</Text>
               <Text>{Math.round(progressValue)}%</Text>
             </HStack>
-            <Progress.Root value={progressValue} colorPalette="main" size="sm" animated>
+            <Progress.Root
+              value={progressValue}
+              colorPalette="main"
+              size="sm"
+              animated
+            >
               <Progress.Track>
                 <Progress.Range />
               </Progress.Track>
@@ -318,7 +333,9 @@ export const ImportItems = ({ communityId }: ImportItemsProps) => {
         {items.length > 0 ? (
           <VStack width="full" align="start" gap={4}>
             <HStack justify="space-between" width="full">
-              <Text fontWeight="bold">{stagedItems?.count || 0} Items Staged</Text>
+              <Text fontWeight="bold">
+                {stagedItems?.count || 0} Items Staged
+              </Text>
               <Button
                 bg="ui.hover"
                 size="sm"

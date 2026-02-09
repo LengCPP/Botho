@@ -1,6 +1,7 @@
 import { Box, Flex, Icon, Text } from "@chakra-ui/react"
 import { Link as RouterLink } from "@tanstack/react-router"
 import {
+  FiBook,
   FiBookOpen,
   FiBriefcase,
   FiGlobe,
@@ -36,7 +37,11 @@ const SidebarItems = ({ onClose }: SidebarItemsProps) => {
   const { user: currentUser } = useAuth()
 
   const finalItems: Item[] = currentUser?.is_superuser
-    ? [...items, { icon: FiUsers, title: "Admin", path: "/admin" }]
+    ? [
+        ...items,
+        { icon: FiBook, title: "Book Archive", path: "/book-archive" },
+        { icon: FiUsers, title: "Admin", path: "/admin" },
+      ]
     : items
 
   const listItems = finalItems.map(({ icon, title, path }) => (

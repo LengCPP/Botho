@@ -57,6 +57,23 @@ from app.storage import delete_image, upload_image, upload_image_from_url
 router = APIRouter(prefix="/items", tags=["items"])
 
 
+@router.get("/book-registry", response_model=list[WorkMetadataPublic])
+def list_book_registry(
+    session: SessionDep,
+    current_user: CurrentUser,
+    skip: int = 0,
+    limit: int = 100,
+) -> Any:
+    """
+    List all books in the global registry. Superuser only for now to avoid abuse.
+    """
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    
+    statement = select(WorkMetadata).offset(skip).limit(limit)
+    return session.exec(statement).all()
+
+
 @router.get("/book-registry/search", response_model=list[WorkMetadataPublic])
 def search_book_registry(session: SessionDep, current_user: CurrentUser, q: str, limit: int = 5) -> Any:
     """
@@ -505,6 +522,8 @@ def read_items(
         sort_column = Item.created_at
         if sort_by == "title":
             sort_column = Item.title
+        elif sort_by == "author":
+            sort_column = Item.author
 
         if sort_order == "desc":
             statement = statement.order_by(sort_column.desc())
@@ -1079,6 +1098,25 @@ async def update_work_metadata(
     await refresh_user_honor(session, current_user.id)
 
     return meta
+
+
+@router.delete("/work-metadata/{author}/{title}", response_model=Message)
+def delete_work_metadata(
+    *, session: SessionDep, current_user: CurrentUser, author: str, title: str
+) -> Any:
+    """
+    Delete metadata for a work. Superuser only.
+    """
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+
+    meta = session.get(WorkMetadata, (author, title))
+    if not meta:
+        raise HTTPException(status_code=404, detail="Work metadata not found")
+
+    session.delete(meta)
+    session.commit()
+    return Message(message="Work metadata deleted successfully")
 
 
 @router.post("/reviews", response_model=ItemReviewPublic)

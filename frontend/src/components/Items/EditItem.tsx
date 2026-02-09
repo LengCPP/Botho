@@ -356,15 +356,17 @@ const EditItem = ({
                           Select Genre
                         </option>
                         {selectedCategory &&
-                          BOOK_CLASSIFICATION[selectedCategory]?.map((genre) => (
-                            <option
-                              key={genre}
-                              value={genre}
-                              style={{ backgroundColor: selectBg }}
-                            >
-                              {genre}
-                            </option>
-                          ))}
+                          BOOK_CLASSIFICATION[selectedCategory]?.map(
+                            (genre) => (
+                              <option
+                                key={genre}
+                                value={genre}
+                                style={{ backgroundColor: selectBg }}
+                              >
+                                {genre}
+                              </option>
+                            ),
+                          )}
                       </select>
                     </Field>
                   </HStack>

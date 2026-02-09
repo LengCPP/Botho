@@ -416,12 +416,15 @@ function Items() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => updateSearch({ tab: tab === "import" ? "items" : "import" })}
+              onClick={() =>
+                updateSearch({ tab: tab === "import" ? "items" : "import" })
+              }
             >
-              <FaFileImport /> {tab === "import" ? "View Collection" : "Bulk Import"}
+              <FaFileImport />{" "}
+              {tab === "import" ? "View Collection" : "Bulk Import"}
             </Button>
           </HStack>
-          
+
           {tab !== "import" && (
             <ItemsViewOptions
               q={q}

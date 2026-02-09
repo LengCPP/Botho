@@ -115,6 +115,13 @@ export function ItemsViewOptions({
     width: "100%",
   }
 
+  // Labels for display
+  const sortLabels: Record<string, string> = {
+    created_at: "Date",
+    title: "Title",
+    author: "Author",
+  }
+
   return (
     <Flex gap={2} align="center" wrap="wrap">
       {/* Search Input */}
@@ -328,7 +335,7 @@ export function ItemsViewOptions({
         <MenuRoot>
           <MenuTrigger asChild>
             <Button variant="outline" size="sm">
-              <FaSortAmountDown /> Sort
+              <FaSortAmountDown /> {sortBy ? sortLabels[sortBy] : "Sort"}
             </Button>
           </MenuTrigger>
           <MenuContent>
@@ -339,7 +346,8 @@ export function ItemsViewOptions({
                   onValueChange={(e) => onChangeSortBy(e.value)}
                 >
                   <MenuRadioItem value="created_at">Date Created</MenuRadioItem>
-                  <MenuRadioItem value="title">Name</MenuRadioItem>
+                  <MenuRadioItem value="title">Title</MenuRadioItem>
+                  <MenuRadioItem value="author">Author</MenuRadioItem>
                 </MenuRadioItemGroup>
               </MenuItemGroup>
             )}
