@@ -38,6 +38,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../ui/dialog"
+import ConfirmationModal from "../Common/ConfirmationModal"
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from "../ui/menu"
 import { ExtensionRequestModal } from "./ExtensionRequestModal"
 import { LoanRequestModal } from "./LoanRequestModal"
@@ -64,6 +65,8 @@ export const FriendItemActionsMenu = ({
   const [isLoanModalOpen, setIsLoanModalOpen] = useState(false)
   const [isExtensionModalOpen, setIsExtensionModalOpen] = useState(false)
   const [isActionsModalOpen, setIsActionsModalOpen] = useState(false)
+  const [isDonateModalOpen, setIsDonateModalOpen] = useState(false)
+  const [isRemoveModalOpen, setIsRemoveModalOpen] = useState(false)
 
   const queryClient = useQueryClient()
   const { user: currentUser } = useAuth()
@@ -135,6 +138,7 @@ export const FriendItemActionsMenu = ({
       }),
     onSuccess: () => {
       showSuccessToast("Donation request sent!")
+      setIsDonateModalOpen(false)
       queryClient.invalidateQueries({
         queryKey: ["communityItems", communityId],
       })
@@ -166,6 +170,7 @@ export const FriendItemActionsMenu = ({
       }),
     onSuccess: () => {
       showSuccessToast("Item removed from community")
+      setIsRemoveModalOpen(false)
       queryClient.invalidateQueries({
         queryKey: ["communityItems", communityId],
       })
@@ -375,15 +380,7 @@ export const FriendItemActionsMenu = ({
                 variant="ghost"
                 justifyContent="center"
                 width="full"
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      "Donate this item to the community? You will lose personal ownership.",
-                    )
-                  ) {
-                    donateMutation.mutate()
-                  }
-                }}
+                onClick={() => setIsDonateModalOpen(true)}
               >
                 <FiHeart style={{ marginRight: "8px" }} />
                 Donate to Community
@@ -391,15 +388,7 @@ export const FriendItemActionsMenu = ({
             ) : (
               <MenuItem
                 value="donate"
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      "Donate this item to the community? You will lose personal ownership.",
-                    )
-                  ) {
-                    donateMutation.mutate()
-                  }
-                }}
+                onClick={() => setIsDonateModalOpen(true)}
               >
                 <FiHeart style={{ marginRight: "8px" }} />
                 Donate to Community
@@ -435,11 +424,7 @@ export const FriendItemActionsMenu = ({
                 justifyContent="center"
                 width="full"
                 color="red.500"
-                onClick={() => {
-                  if (window.confirm("Remove this item from community pool?")) {
-                    removeItemMutation.mutate()
-                  }
-                }}
+                onClick={() => setIsRemoveModalOpen(true)}
               >
                 <FiTrash2 style={{ marginRight: "8px" }} />
                 Remove from Community
@@ -448,11 +433,7 @@ export const FriendItemActionsMenu = ({
               <MenuItem
                 value="remove-from-community"
                 color="red.500"
-                onClick={() => {
-                  if (window.confirm("Remove this item from community pool?")) {
-                    removeItemMutation.mutate()
-                  }
-                }}
+                onClick={() => setIsRemoveModalOpen(true)}
               >
                 <FiTrash2 style={{ marginRight: "8px" }} />
                 Remove from Community
@@ -506,6 +487,24 @@ export const FriendItemActionsMenu = ({
             onClose={() => setIsExtensionModalOpen(false)}
           />
         )}
+
+        <ConfirmationModal
+          isOpen={isDonateModalOpen}
+          onClose={() => setIsDonateModalOpen(false)}
+          onConfirm={() => donateMutation.mutate()}
+          title="Donate to Community"
+          message="Are you sure you want to donate this item to the community pool? You will lose personal ownership of this copy."
+          isLoading={donateMutation.isPending}
+        />
+
+        <ConfirmationModal
+          isOpen={isRemoveModalOpen}
+          onClose={() => setIsRemoveModalOpen(false)}
+          onConfirm={() => removeItemMutation.mutate()}
+          title="Remove from Community"
+          message="Are you sure you want to remove this item from the community pool?"
+          isLoading={removeItemMutation.isPending}
+        />
       </>
     )
   }
@@ -537,6 +536,24 @@ export const FriendItemActionsMenu = ({
           onClose={() => setIsExtensionModalOpen(false)}
         />
       )}
+
+      <ConfirmationModal
+        isOpen={isDonateModalOpen}
+        onClose={() => setIsDonateModalOpen(false)}
+        onConfirm={() => donateMutation.mutate()}
+        title="Donate to Community"
+        message="Are you sure you want to donate this item to the community pool? You will lose personal ownership of this copy."
+        isLoading={donateMutation.isPending}
+      />
+
+      <ConfirmationModal
+        isOpen={isRemoveModalOpen}
+        onClose={() => setIsRemoveModalOpen(false)}
+        onConfirm={() => removeItemMutation.mutate()}
+        title="Remove from Community"
+        message="Are you sure you want to remove this item from the community pool?"
+        isLoading={removeItemMutation.isPending}
+      />
     </>
   )
 }

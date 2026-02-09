@@ -119,6 +119,40 @@ def mark_all_notifications_as_read(
     return Message(message="All notifications marked as read")
 
 
+@router.delete("/clear-read", response_model=Message)
+def clear_read_notifications(
+    *, session: SessionDep, current_user: CurrentUser
+) -> Any:
+    """
+    Delete all read notifications for the current user.
+    """
+    statement = select(Notification).where(
+        Notification.recipient_id == current_user.id, Notification.is_read == True
+    )
+    notifications = session.exec(statement).all()
+    for notification in notifications:
+        session.delete(notification)
+    session.commit()
+    return Message(message="Read notifications cleared")
+
+
+@router.delete("/delete-all", response_model=Message)
+def delete_all_notifications(
+    *, session: SessionDep, current_user: CurrentUser
+) -> Any:
+    """
+    Delete all notifications for the current user.
+    """
+    statement = select(Notification).where(
+        Notification.recipient_id == current_user.id
+    )
+    notifications = session.exec(statement).all()
+    for notification in notifications:
+        session.delete(notification)
+    session.commit()
+    return Message(message="All notifications deleted")
+
+
 @router.delete("/{id}", response_model=Message)
 def delete_notification(
     *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID

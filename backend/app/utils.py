@@ -172,17 +172,17 @@ def generate_loan_reminder_email(
 ) -> EmailData:
     project_name = settings.PROJECT_NAME
     subject = f"{project_name} - Reminder to return '{item_title}'"
-    html_content = f"""
-    <html>
-        <body>
-            <p>Hi,</p>
-            <p>This is a reminder from <strong>{lender_name}</strong> to return the item <strong>'{item_title}'</strong>.</p>
-            <p>It was due on <strong>{due_date.strftime('%Y-%m-%d')}</strong>.</p>
-            <p>Please return it as soon as possible to maintain your honor score.</p>
-            <p>Best regards,<br>{project_name} Team</p>
-        </body>
-    </html>
-    """
+    link = f"{settings.FRONTEND_HOST}/loans"
+    html_content = render_email_template(
+        template_name="loan_reminder.html",
+        context={
+            "project_name": project_name,
+            "lender_name": lender_name,
+            "item_title": item_title,
+            "due_date": due_date.strftime('%Y-%m-%d'),
+            "link": link,
+        },
+    )
     return EmailData(html_content=html_content, subject=subject)
 
 

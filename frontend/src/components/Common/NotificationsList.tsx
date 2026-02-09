@@ -1,7 +1,8 @@
-import { Box, Flex, Icon, Spinner, Text, VStack } from "@chakra-ui/react"
+import { Box, Flex, Icon, IconButton, Spinner, Text, VStack } from "@chakra-ui/react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
 import { FaCircle } from "react-icons/fa"
+import { FiTrash2 } from "react-icons/fi"
 import { NotificationsService } from "../../client"
 import { useNotifications } from "../../hooks/useNotifications"
 
@@ -18,6 +19,14 @@ const NotificationsList = ({ onItemClick, limit }: NotificationsListProps) => {
   const markAsReadMutation = useMutation({
     mutationFn: (id: string) =>
       NotificationsService.markNotificationAsRead({ id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) =>
+      NotificationsService.deleteNotification({ id }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notifications"] })
     },
@@ -79,6 +88,7 @@ const NotificationsList = ({ onItemClick, limit }: NotificationsListProps) => {
           cursor="pointer"
           borderBottomWidth="1px"
           transition="background 0.2s"
+          role="group"
         >
           <Flex gap={3} w="100%" align="start">
             <Box mt={1.5} w={2}>
@@ -100,6 +110,21 @@ const NotificationsList = ({ onItemClick, limit }: NotificationsListProps) => {
                 {new Date(notification.created_at).toLocaleString()}
               </Text>
             </VStack>
+            <IconButton
+              size="xs"
+              variant="ghost"
+              colorPalette="red"
+              aria-label="Delete notification"
+              opacity={0}
+              _groupHover={{ opacity: 1 }}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                deleteMutation.mutate(notification.id)
+              }}
+            >
+              <FiTrash2 />
+            </IconButton>
           </Flex>
         </Box>
       ))}

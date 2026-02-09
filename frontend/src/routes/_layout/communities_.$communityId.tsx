@@ -228,6 +228,7 @@ function MessageItem({
   queryClient,
 }: any) {
   const [isEditing, setIsEditing] = useState(false)
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [editContent, setEditEditing] = useState(msg.content)
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
@@ -238,6 +239,7 @@ function MessageItem({
         messageId: msg.id,
       }),
     onSuccess: () => {
+      setIsDeleteModalOpen(false)
       queryClient.invalidateQueries({
         queryKey: ["communityMessages", communityId],
       })
@@ -290,11 +292,7 @@ function MessageItem({
                 size="2xs"
                 variant="ghost"
                 colorPalette="red"
-                onClick={() => {
-                  if (window.confirm("Delete this message?")) {
-                    deleteMessageMutation.mutate()
-                  }
-                }}
+                onClick={() => setIsDeleteModalOpen(true)}
                 loading={deleteMessageMutation.isPending}
               >
                 <FiTrash2 size="10px" />
@@ -336,6 +334,15 @@ function MessageItem({
       ) : (
         <Text fontSize="sm">{msg.content}</Text>
       )}
+
+      <ConfirmationModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={() => deleteMessageMutation.mutate()}
+        title="Delete Message"
+        message="Are you sure you want to delete this message? This action cannot be undone."
+        isLoading={deleteMessageMutation.isPending}
+      />
     </Box>
   )
 }
@@ -439,6 +446,8 @@ function CommunityBoard() {
   const navigate = useNavigate({ from: Route.fullPath })
   const [message, setMessage] = useState("")
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false)
+  const [isRemoveMemberModalOpen, setIsRemoveMemberModalOpen] = useState(false)
+  const [memberToRemove, setMemberToRemove] = useState<{ id: string; name: string } | null>(null)
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
   const [selectedLoanForReview, setSelectedLoanForReview] =
     useState<LoanPublic | null>(null)
@@ -546,7 +555,7 @@ function CommunityBoard() {
   const { data: communityLoans, isLoading: isLoadingLoans } = useQuery({
     queryKey: ["communityLoans", communityId],
     queryFn: () => CommunitiesService.readCommunityLoans({ id: communityId }),
-    enabled: !!isAdmin,
+    enabled: !!isMember,
   })
 
   const activeLoans = useMemo(() => {
@@ -630,6 +639,8 @@ function CommunityBoard() {
       CommunitiesService.leaveCommunity({ id: communityId, userId }),
     onSuccess: () => {
       showSuccessToast("Member removed")
+      setIsRemoveMemberModalOpen(false)
+      setMemberToRemove(null)
       queryClient.invalidateQueries({
         queryKey: ["communityMembers", communityId],
       })
@@ -1586,18 +1597,13 @@ function CommunityBoard() {
                                             colorPalette="red"
                                             variant="outline"
                                             onClick={() => {
-                                              if (
-                                                window.confirm(
-                                                  `Are you sure you want to remove ${
-                                                    member.full_name ||
-                                                    member.email
-                                                  }?`,
-                                                )
-                                              ) {
-                                                removeMemberMutation.mutate(
-                                                  member.id,
-                                                )
-                                              }
+                                              setMemberToRemove({
+                                                id: member.id,
+                                                name:
+                                                  member.full_name ||
+                                                  member.email,
+                                              })
+                                              setIsRemoveMemberModalOpen(true)
                                             }}
                                           >
                                             <FiUserMinus /> Remove
@@ -1625,6 +1631,18 @@ function CommunityBoard() {
         title="Leave Community"
         message="Are you sure you want to leave this community?"
         isLoading={leaveMutation.isPending}
+      />
+
+      <ConfirmationModal
+        isOpen={isRemoveMemberModalOpen}
+        onClose={() => {
+          setIsRemoveMemberModalOpen(false)
+          setMemberToRemove(null)
+        }}
+        onConfirm={() => removeMemberMutation.mutate(memberToRemove!.id)}
+        title="Remove Member"
+        message={`Are you sure you want to remove ${memberToRemove?.name} from this community?`}
+        isLoading={removeMemberMutation.isPending}
       />
 
       {selectedLoanForReview && (

@@ -30,6 +30,7 @@ const CommunityCard = ({ community }: CommunityCardProps) => {
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const { user: currentUser } = useAuth()
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false)
+  const [isDisbandModalOpen, setIsDisbandModalOpen] = useState(false)
 
   const bgColor = useColorModeValue("accent.50", "gray.800")
   const borderColor = useColorModeValue("accent.200", "gray.600")
@@ -56,6 +57,7 @@ const CommunityCard = ({ community }: CommunityCardProps) => {
     mutationFn: () => CommunitiesService.deleteCommunity({ id: community.id }),
     onSuccess: () => {
       showSuccessToast("Community disbanded")
+      setIsDisbandModalOpen(false)
       queryClient.invalidateQueries({ queryKey: ["communities"] })
       queryClient.invalidateQueries({ queryKey: ["search"] })
     },
@@ -125,15 +127,7 @@ const CommunityCard = ({ community }: CommunityCardProps) => {
                 <Button
                   size="xs"
                   variant={"danger" as any}
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        "Are you sure you want to disband this community?",
-                      )
-                    ) {
-                      disbandMutation.mutate()
-                    }
-                  }}
+                  onClick={() => setIsDisbandModalOpen(true)}
                   title="Disband Community"
                 >
                   <FiTrash2 />
@@ -191,6 +185,15 @@ const CommunityCard = ({ community }: CommunityCardProps) => {
         title="Apply to Join Community"
         message={`By applying to join ${community.name}, please be aware that your personal privacy settings (such as hiding your full name or contact details) will not apply within this community. All accepted members will be able to see your full profile details.`}
         isLoading={joinMutation.isPending}
+      />
+
+      <ConfirmationModal
+        isOpen={isDisbandModalOpen}
+        onClose={() => setIsDisbandModalOpen(false)}
+        onConfirm={() => disbandMutation.mutate()}
+        title="Disband Community"
+        message={`Are you sure you want to disband ${community.name}? This action is permanent and cannot be undone.`}
+        isLoading={disbandMutation.isPending}
       />
     </>
   )

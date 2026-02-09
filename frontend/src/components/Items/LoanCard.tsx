@@ -1,5 +1,6 @@
 import BorrowerReportCard from "@/components/Common/BorrowerReportCard"
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
+import ForgiveModal from "@/components/Common/ForgiveModal"
 import {
   Badge,
   Box,
@@ -115,16 +116,6 @@ export function LoanCard({
     },
   })
 
-  const forgiveMutation = useMutation({
-    mutationFn: () => LoansService.forgiveLoan({ id: loan.id }),
-    onSuccess: () => {
-      showSuccessToast("Loan forgiven")
-      queryClient.invalidateQueries({ queryKey: ["loans"] })
-      queryClient.invalidateQueries({ queryKey: ["communityLoans"] })
-      setModalType(null)
-    },
-  })
-
   const remindMutation = useMutation({
     mutationFn: () => LoansService.sendReturnReminder({ id: loan.id }),
     onSuccess: () => {
@@ -172,12 +163,7 @@ export function LoanCard({
           isLoading: defaultMutation.isPending,
         }
       case "forgive":
-        return {
-          title: "Forgive Default",
-          message: `By forgiving this default, you acknowledge that the item is lost but wish to remove the delinquency status from the borrower's profile. Their honor score will still reflect the loss, but they will be able to participate in the community again.`,
-          onConfirm: () => forgiveMutation.mutate(),
-          isLoading: forgiveMutation.isPending,
-        }
+        return null // Handled by separate ForgiveModal
       case "return":
         return {
           title: "Confirm Return",
@@ -372,13 +358,13 @@ export function LoanCard({
           <Box
             mb={4}
             p={2}
-            bg="orange.50"
+            bg="orange.subtle"
             borderWidth="1px"
-            borderColor="orange.200"
+            borderColor="orange.muted"
             borderRadius="md"
           >
             <VStack align="start" gap={2}>
-              <Text fontSize="xs" fontWeight="bold" color="orange.800">
+              <Text fontSize="xs" fontWeight="bold" color="orange.fg">
                 Extension requested until:{" "}
                 {format(new Date(loan.pending_extension_date!), "MMM d, yyyy")}
               </Text>
@@ -425,12 +411,12 @@ export function LoanCard({
           <Box
             mb={4}
             p={2}
-            bg="red.50"
+            bg="red.subtle"
             borderWidth="1px"
-            borderColor="red.200"
+            borderColor="red.muted"
             borderRadius="md"
           >
-            <Text fontSize="xs" fontWeight="bold" color="red.800">
+            <Text fontSize="xs" fontWeight="bold" color="red.fg">
               This item was marked as unrecoverable.
             </Text>
             {type === "incoming" && !loan.is_forgiven && (
@@ -441,7 +427,6 @@ export function LoanCard({
                 width="full"
                 mt={2}
                 onClick={() => setModalType("forgive")}
-                loading={forgiveMutation.isPending}
                 disabled={restrictionApplies}
               >
                 Forgive Borrower
@@ -575,7 +560,7 @@ export function LoanCard({
 
       {modalConfig && (
         <ConfirmationModal
-          isOpen={modalType !== null}
+          isOpen={modalType !== null && modalType !== "forgive"}
           onClose={() => {
             setModalType(null)
             setPendingResponse(null)
@@ -586,6 +571,12 @@ export function LoanCard({
           isLoading={modalConfig.isLoading}
         />
       )}
+
+      <ForgiveModal 
+        loan={loan}
+        isOpen={modalType === "forgive"}
+        onClose={() => setModalType(null)}
+      />
     </>
   )
 }

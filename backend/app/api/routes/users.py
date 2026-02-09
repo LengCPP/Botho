@@ -20,6 +20,7 @@ from app.models import (
     CommunityMemberRole,
     CommunityMemberStatus,
     Contribution,
+    ForgivenessReason,
     Friendship,
     FriendshipStatus,
     Interest,
@@ -56,21 +57,30 @@ def calculate_honor_score(session: Session, user: User) -> dict[str, Any]:
     """
     Calculate honor score based on user activity.
     """
-    # 1. Defaulted/Returned Penalty: defaulted/total_returned * 2 * -100
+    # 1. Defaulted/Returned Penalty: defaulted/total_returned * -100
     returned_count = session.exec(
         select(func.count()).select_from(Loan).where(Loan.requester_id == user.id, Loan.status == LoanStatus.RETURNED)
     ).one()
     
+    # Only count defaults that are NOT forgiven, OR forgiven for "OTHER" reasons
+    # (GOOD_REASON, FOUND_AND_RETURNED, REPLACED_ITEM clear the penalty)
     defaulted_count = session.exec(
-        select(func.count()).select_from(Loan).where(Loan.requester_id == user.id, Loan.status == LoanStatus.DEFAULTED)
+        select(func.count()).select_from(Loan).where(
+            Loan.requester_id == user.id, 
+            Loan.status == LoanStatus.DEFAULTED,
+            or_(
+                Loan.is_forgiven == False,
+                Loan.forgiveness_reason == ForgivenessReason.OTHER
+            )
+        )
     ).one()
     
-    total_returned_or_defaulted = returned_count + defaulted_count
+    total_returned_or_penalized_default = returned_count + defaulted_count
     
     default_penalty = 0
-    if total_returned_or_defaulted > 0:
-        # Penalty is proportional to default rate, capped at -200 (though final score caps at 0)
-        default_penalty = (defaulted_count / total_returned_or_defaulted) * 2 * -100
+    if total_returned_or_penalized_default > 0:
+        # Penalty is proportional to default rate, capped at -100
+        default_penalty = (defaulted_count / total_returned_or_penalized_default) * -100
         
     # 2. Community Pooling: (pooled / owned) * 15 (capped at 6 items)
     owned_count = session.exec(

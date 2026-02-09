@@ -13,6 +13,8 @@ from app.models import (
     CommunityMember,
     CommunityMemberRole,
     CommunityMemberStatus,
+    ForgivenessReason,
+    ForgivenessRequest,
     Friendship,
     FriendshipStatus,
     Item,
@@ -26,6 +28,7 @@ from app.models import (
     User,
 )
 from app.notifications import notify_user
+from app.search import delete_item_from_search, sync_item_to_search
 from app.utils import generate_loan_reminder_email, send_email
 
 router = APIRouter(prefix="/loans", tags=["loans"])
@@ -307,7 +310,7 @@ async def respond_to_loan_request(
         title=f"Loan Request {status_msg.capitalize()}",
         message=f"Your request for '{loan.item.title}' has been {status_msg}.",
         type=NotificationType.SUCCESS if accept else NotificationType.WARNING,
-        link=f"/communities/{loan.community_id}?tab=loans" if loan.community_id else "/loans"
+        link="/loans"
     )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
@@ -351,8 +354,8 @@ async def cancel_loan(
     session.refresh(loan)
 
     # Notify the other party
-    notif_link = f"/communities/{loan.community_id}?tab=loans" if loan.community_id else "/loans"
     if is_requester:
+        notif_link = f"/communities/{loan.community_id}?tab=loans" if loan.community_id else "/loans"
         # Notify owner or admins
         if loan.community_id:
             admin_statement = select(CommunityMember).where(
@@ -386,7 +389,7 @@ async def cancel_loan(
             title="Loan Request Cancelled",
             message=f"The owner/admin has cancelled the loan for '{loan.item.title}'.",
             type=NotificationType.WARNING,
-            link=notif_link
+            link="/loans"
         )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
@@ -426,7 +429,7 @@ async def ratify_loan(
                 title="Loan Ratified",
                 message=f"{current_user.full_name or current_user.email} confirmed receipt of '{loan.item.title}' from the community.",
                 type=NotificationType.INFO,
-                link="/loans"
+                link=f"/communities/{loan.community_id}?tab=loans"
             )
     elif loan.owner_id:
         await notify_user(
@@ -475,7 +478,7 @@ async def signal_return(
                 title="Return Signaled",
                 message=f"{current_user.full_name or current_user.email} signaled that they have returned '{loan.item.title}' to the community.",
                 type=NotificationType.INFO,
-                link="/loans"
+                link=f"/communities/{loan.community_id}?tab=loans"
             )
     elif loan.owner_id:
         await notify_user(
@@ -603,7 +606,7 @@ async def create_extension_request(
                 title="Extension Requested",
                 message=message_text,
                 type=NotificationType.INFO,
-                link="/loans"
+                link=f"/communities/{loan.community_id}?tab=loans"
             )
     elif loan.owner_id:
         await notify_user(
@@ -749,10 +752,16 @@ async def mark_loan_defaulted(
 
 @router.post("/{id}/forgive", response_model=LoanPublic)
 async def forgive_loan(
-    *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID
+    *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, forgiveness_in: ForgivenessRequest
 ) -> Any:
     """
-    Forgive a defaulted loan (Lender only).
+    Forgive a defaulted loan (Lender or Community Admin).
+    
+    Reasons:
+    - GOOD_REASON: Borrower has good reason (clears default count penalty)
+    - FOUND_AND_RETURNED: Item recovered (clears penalty, item returned to inventory)
+    - REPLACED_ITEM: New item provided (clears penalty, new item added)
+    - OTHER: Just forgive (keeps default count penalty)
     """
     loan = session.get(Loan, id)
     if not loan:
@@ -779,11 +788,42 @@ async def forgive_loan(
         raise HTTPException(status_code=400, detail="Only defaulted loans can be forgiven")
 
     loan.is_forgiven = True
+    loan.forgiveness_reason = forgiveness_in.reason
+
+    # Handle Item Recovery/Replacement
+    if forgiveness_in.reason == ForgivenessReason.FOUND_AND_RETURNED:
+        # Effectively treat as returned
+        loan.status = LoanStatus.RETURNED
+        loan.returned_at = datetime.now(timezone.utc)
+    
+    elif forgiveness_in.reason == ForgivenessReason.REPLACED_ITEM:
+        if not forgiveness_in.new_item_specs:
+            raise HTTPException(status_code=400, detail="Replacement item specs required")
+        
+        # Create new item based on specs
+        # Ensure owner_id is set correctly (User or Community)
+        new_item = Item(
+            **forgiveness_in.new_item_specs,
+            owner_id=loan.owner_id or loan.community_id,
+        )
+        session.add(new_item)
+        session.flush() # Get ID
+        
+        # If it was in a community pool, we might need CommunityItem entry
+        # But for now, simple owner_id assignment works for both types in Botho
+        
+        # Update loan to reflect it's "returned" via replacement
+        loan.status = LoanStatus.RETURNED
+        loan.returned_at = datetime.now(timezone.utc)
+        
+        # Sync the new item to search
+        sync_item_to_search(new_item)
+
     session.add(loan)
     session.commit()
     session.refresh(loan)
 
-    # Refresh borrower honor to remove delinquency
+    # Refresh borrower honor
     await refresh_user_honor(session, loan.requester_id)
 
     # Notify borrower
@@ -791,7 +831,7 @@ async def forgive_loan(
         session=session,
         recipient_id=loan.requester_id,
         title="Loan Forgiven",
-        message=f"The lender has forgiven the defaulted loan for '{loan.item.title}'.",
+        message=f"The lender has forgiven the defaulted loan for '{loan.item.title}'. Reason: {loan.forgiveness_reason.value}.",
         type=NotificationType.SUCCESS,
         link="/loans"
     )

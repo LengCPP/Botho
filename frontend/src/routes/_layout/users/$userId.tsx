@@ -38,6 +38,7 @@ import {
   ItemsService,
   UsersService,
 } from "@/client"
+import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
 import { GroupCard } from "@/components/Items/GroupCard"
 import ItemCard from "@/components/Items/ItemCard"
@@ -73,6 +74,7 @@ function UserProfilePage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
+  const [isRemoveFriendModalOpen, setIsRemoveFriendModalOpen] = useState(false)
 
   // View State
   const [viewMode, setViewMode] = useState<"card" | "list">(
@@ -168,6 +170,7 @@ function UserProfilePage() {
       FriendsService.removeFriend({ friendId: userId }),
     onSuccess: () => {
       showSuccessToast("Friend removed")
+      setIsRemoveFriendModalOpen(false)
       queryClient.invalidateQueries({ queryKey: ["user", userId] })
       queryClient.invalidateQueries({ queryKey: ["friends"] })
     },
@@ -280,15 +283,7 @@ function UserProfilePage() {
                 <MenuItem
                   value="remove-friend"
                   color="red.500"
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        "Are you sure you want to remove this friend?",
-                      )
-                    ) {
-                      removeFriendMutation.mutate(user.id)
-                    }
-                  }}
+                  onClick={() => setIsRemoveFriendModalOpen(true)}
                 >
                   <FiUserMinus style={{ marginRight: "8px" }} /> Remove Friend
                 </MenuItem>
@@ -434,6 +429,17 @@ function UserProfilePage() {
         isOpen={!!selectedItem}
         onClose={() => setSelectedItem(null)}
       />
+
+      <ConfirmationModal
+        isOpen={isRemoveFriendModalOpen}
+        onClose={() => setIsRemoveFriendModalOpen(false)}
+        onConfirm={() => removeFriendMutation.mutate(user.id)}
+        title="Remove Friend"
+        message={`Are you sure you want to remove ${user.full_name || user.email} from your friends list?`}
+        isLoading={removeFriendMutation.isPending}
+      />
     </Container>
   )
 }
+
+export default UserProfilePage

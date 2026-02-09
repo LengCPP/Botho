@@ -60,6 +60,13 @@ class ReadingLogStatus(str, Enum):
     DROPPED = "DROPPED"
 
 
+class ForgivenessReason(str, Enum):
+    GOOD_REASON = "GOOD_REASON"  # Borrower has good reason for losing item
+    FOUND_AND_RETURNED = "FOUND_AND_RETURNED"  # Found and returned item
+    REPLACED_ITEM = "REPLACED_ITEM"  # Borrower replaced item
+    OTHER = "OTHER"  # My choice (keeps the count)
+
+
 class UserRoleReviewed(str, Enum):
     BORROWER = "BORROWER"
     OWNER = "OWNER"
@@ -187,6 +194,7 @@ class Loan(SQLModel, table=True):
         sa_column=Column(DateTime(timezone=True), nullable=True)
     )
     is_forgiven: bool = Field(default=False)
+    forgiveness_reason: ForgivenessReason | None = Field(default=None)
     created_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -755,6 +763,11 @@ class LoanCreate(SQLModel):
     end_date: datetime
 
 
+class ForgivenessRequest(SQLModel):
+    reason: ForgivenessReason
+    new_item_specs: Optional[dict[str, Any]] = None
+
+
 class LoanPublic(SQLModel):
     id: uuid.UUID
     item_id: uuid.UUID
@@ -767,6 +780,7 @@ class LoanPublic(SQLModel):
     pending_extension_date: datetime | None = None
     returned_at: datetime | None = None
     is_forgiven: bool = False
+    forgiveness_reason: ForgivenessReason | None = None
     created_at: datetime
     item: "ItemPublic"
     owner: Optional["UserPublic"]

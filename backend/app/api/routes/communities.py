@@ -1153,34 +1153,41 @@ def read_community_loans(
     *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, skip: int = 0, limit: int = 100
 ) -> Any:
     """
-    Get loans for a community (Staff only).
+    Get loans for a community. Staff see all, members see their own.
     """
     community = session.get(Community, id)
     if not community:
         raise HTTPException(status_code=404, detail="Community not found")
 
-    # Staff check
-    statement = select(CommunityMember).where(
+    # Get current user's membership
+    my_membership_stmt = select(CommunityMember).where(
         CommunityMember.community_id == id,
         CommunityMember.user_id == current_user.id,
-        CommunityMember.role.in_([CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]),
-        CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+        CommunityMember.status == CommunityMemberStatus.ACCEPTED
     )
-    membership = session.exec(statement).first()
-    if not membership and not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="Only staff can view community loans")
+    my_membership = session.exec(my_membership_stmt).first()
+    
+    if not my_membership and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Must be a member to view community loans")
 
-    count_statement = select(func.count()).select_from(Loan).where(Loan.community_id == id)
+    is_staff = current_user.is_superuser or (my_membership and my_membership.role in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR])
+
+    base_stmt = select(Loan).where(Loan.community_id == id)
+    
+    if not is_staff:
+        # Members only see their own loans in this community
+        base_stmt = base_stmt.where(Loan.requester_id == current_user.id)
+
+    count_statement = select(func.count()).select_from(base_stmt.subquery())
     count = session.exec(count_statement).one()
 
     statement = (
-        select(Loan)
-        .where(Loan.community_id == id)
+        base_stmt
         .order_by(Loan.created_at.desc())
         .offset(skip)
         .limit(limit)
     )
-    loans = session.exec(statement.offset(skip).limit(limit)).all()
+    loans = session.exec(statement).all()
     return LoansPublic(
         data=[filter_loan_privacy(l, current_user.id, is_admin=current_user.is_superuser, session=session) for l in loans],
         count=count
