@@ -158,8 +158,8 @@ async def create_loan_request(
     session.refresh(db_loan)
 
     # Notify owner or admins
-    if community_id:
-        # Notify all admins of the community
+    if community_id and not owner_id:
+        # Notify all admins of the community (Community-owned item)
         community = session.get(Community, community_id)
         admin_statement = select(CommunityMember).where(
             CommunityMember.community_id == community_id,
@@ -178,7 +178,8 @@ async def create_loan_request(
                 link=f"/communities/{community_id}?tab=loans"
             )
     elif owner_id:
-        # Notify single owner
+        # Notify single owner (Personal or Pooled item)
+        # Even if community_id is present, if owner_id exists, it's a personal loan
         await notify_user(
             session=session,
             recipient_id=owner_id,
