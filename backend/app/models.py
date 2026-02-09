@@ -319,9 +319,7 @@ class UserUpdate(SQLModel):
     reliability_rate: float | None = None
     is_delinquent: bool | None = None
     ai_honor_summary: str | None = None
-    # ai_improvement_tips: Any = None
-
-    @field_validator("email", mode="before")
+    ai_improvement_tips: list[str] | None = None
     @classmethod
     def validate_email(cls, v: EmailStr | None) -> str | None:
         if isinstance(v, str):
@@ -660,7 +658,7 @@ class UserPublic(UserBase):
     reliability_rate: float = 0.0
     is_delinquent: bool = False
     ai_honor_summary: str | None = None
-    # ai_improvement_tips: Any = None
+    ai_improvement_tips: list[str] | None = None
 
 
 class CommunityMemberUpdate(SQLModel):
@@ -722,6 +720,11 @@ class WorkMetadataUpdate(SQLModel):
     tags: list[str] | None = None
 
 
+class WorksMetadataPublic(SQLModel):
+    data: list[WorkMetadataPublic]
+    count: int
+
+
 class ItemPublic(ItemBase):
     id: uuid.UUID
     owner_id: uuid.UUID
@@ -749,6 +752,8 @@ class BooksPublic(SQLModel):
 class ItemsPublic(SQLModel):
     data: list["ItemPublic"]
     count: int
+    facets: dict[str, dict[str, int]] | None = None
+    facet_stats: dict[str, dict[str, Any]] | None = None
 
 
 class StagedItemPublic(SQLModel):
@@ -1003,7 +1008,7 @@ class UserReputationSchema(SQLModel):
     reliability_rate: float
     is_delinquent: bool
     ai_honor_summary: str | None
-    # ai_improvement_tips: Any
+    ai_improvement_tips: list[str] | None
     review_count: int
 
 

@@ -214,6 +214,7 @@ export const CompactItemCard = ({
                 objectFit="cover"
                 width="100%"
                 height="100%"
+                loading="lazy"
               />
             ) : (
               <Flex align="center" justify="center" h="100%" bg="gray.400">

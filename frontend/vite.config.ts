@@ -17,7 +17,7 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       "/api": {
-        target: "http://localhost",
+        target: "http://backend:8000",
         changeOrigin: true,
         secure: false,
         headers: {
@@ -25,7 +25,7 @@ export default defineConfig({
         },
       },
       "/docs": {
-        target: "http://localhost",
+        target: "http://backend:8000",
         changeOrigin: true,
         secure: false,
         headers: {
@@ -33,7 +33,7 @@ export default defineConfig({
         },
       },
       "/openapi.json": {
-        target: "http://localhost",
+        target: "http://backend:8000",
         changeOrigin: true,
         secure: false,
         headers: {

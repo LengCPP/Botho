@@ -8,29 +8,21 @@ import {
   HStack,
   Heading,
   SimpleGrid,
-  Tabs,
   Text,
   VStack,
   useBreakpointValue,
 } from "@chakra-ui/react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import type React from "react"
 import { useEffect, useMemo, useState } from "react"
 import {
-  FaBook,
   FaChevronLeft,
   FaFileImport,
-  FaFilter,
-  FaFolder,
-  FaList,
-  FaSortAmountDown,
-  FaThLarge,
 } from "react-icons/fa"
 import { FiSearch } from "react-icons/fi"
 import { z } from "zod"
 
-import { type ItemPublic, ItemsService } from "@/client"
+import { type ItemPublic, ItemsService, LoansService } from "@/client"
 import { ImportItems } from "@/components/Common/ImportItems"
 import AddItem from "@/components/Items/AddItem"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
@@ -39,24 +31,14 @@ import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
 import PendingItems from "@/components/Pending/PendingItems"
-import { useColorModeValue } from "@/components/ui/color-mode"
-import {
-  MenuContent,
-  MenuItemGroup,
-  MenuRadioItem,
-  MenuRadioItemGroup,
-  MenuRoot,
-  MenuTrigger,
-} from "@/components/ui/menu"
 import {
   PaginationItems,
   PaginationNextTrigger,
   PaginationPrevTrigger,
   PaginationRoot,
 } from "@/components/ui/pagination"
-import { BOOK_CLASSIFICATION } from "@/constants"
 import useAuth from "@/hooks/useAuth"
-import { getImageUrl, groupItems } from "@/utils"
+import { groupItems } from "@/utils"
 
 const itemsSearchSchema = z.object({
   page: z.number().catch(1),
@@ -66,7 +48,7 @@ const itemsSearchSchema = z.object({
   sort_order: z
     .string()
     .catch(() => localStorage.getItem("sort_order") || "desc"),
-  limit: z.number().catch(() => Number(localStorage.getItem("limit")) || 12),
+  limit: z.number().catch(() => Number(localStorage.getItem("limit")) || 8),
   category: z.string().optional(),
   genre: z.string().optional(),
   view_mode: z
@@ -139,6 +121,7 @@ export const Route = createFileRoute("/_layout/items")({
 
 function ItemsTable() {
   const navigate = useNavigate({ from: Route.fullPath })
+  const queryClient = useQueryClient()
   const {
     page,
     sort_by,
@@ -154,7 +137,6 @@ function ItemsTable() {
   } = Route.useSearch()
   const { user } = useAuth()
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
-  const isMobile = useBreakpointValue({ base: true, md: false })
 
   useEffect(() => {
     localStorage.setItem("view_mode", view_mode)
@@ -177,6 +159,32 @@ function ItemsTable() {
       q,
     }),
     placeholderData: (prevData) => prevData,
+    enabled: !!user,
+  })
+
+  // Prefetch next page
+  useEffect(() => {
+    if (data?.data.length === limit) {
+      const nextPage = page + 1
+      queryClient.prefetchQuery(
+        getItemsQueryOptions({
+          page: nextPage,
+          sort_by,
+          sort_order,
+          limit,
+          ownerId: user?.id,
+          category,
+          genre,
+          q,
+        })
+      )
+    }
+  }, [data, page, limit, queryClient, sort_by, sort_order, user?.id, category, genre, q])
+
+  // Fetch outgoing loans once for all cards
+  useQuery({
+    queryKey: ["loans", "outgoing"],
+    queryFn: () => LoansService.readOutgoingLoanRequests({}),
     enabled: !!user,
   })
 
@@ -381,7 +389,9 @@ function ItemsTable() {
 
 function Items() {
   const navigate = useNavigate({ from: Route.fullPath })
+  const { user } = useAuth()
   const {
+    page,
     sort_by,
     sort_order,
     limit,
@@ -393,6 +403,20 @@ function Items() {
     q,
     tab,
   } = Route.useSearch()
+
+  const { data } = useQuery({
+    ...getItemsQueryOptions({
+      page,
+      sort_by,
+      sort_order,
+      limit,
+      ownerId: user?.id,
+      category,
+      genre,
+      q,
+    }),
+    enabled: !!user && tab !== "import",
+  })
 
   const updateSearch = (newParams: any) => {
     navigate({
@@ -410,8 +434,15 @@ function Items() {
           wrap="wrap"
           gap={4}
         >
-          <HStack gap={4}>
-            <Heading size="lg">My Items</Heading>
+          <HStack gap={4} align="baseline">
+            <VStack align="start" gap={0}>
+              <Heading size="lg">My Items</Heading>
+              {data && (
+                <Text fontSize="sm" color="gray.500" fontWeight="medium">
+                  Total: {data.count} items
+                </Text>
+              )}
+            </VStack>
             <AddItem />
             <Button
               variant="outline"

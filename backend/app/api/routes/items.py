@@ -2,7 +2,7 @@ import json
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, BackgroundTasks
 from sqlmodel import col, func, or_, select
 
 from app.api.deps import CurrentUser, SessionDep
@@ -12,7 +12,9 @@ from app.api.utils import (
     filter_owner_privacy,
     get_item_condition_data,
     get_work_metadata,
-    ensure_work_metadata
+    ensure_work_metadata,
+    maintenance_bulk_classify,
+    sync_item_to_archive
 )
 from app.core.config import settings
 from app.models import (
@@ -52,12 +54,46 @@ from app.search import (
     sync_item_to_search,
     sync_work_metadata_to_search,
 )
+from app.ai import classify_book
 from app.storage import delete_image, upload_image, upload_image_from_url
 
 router = APIRouter(prefix="/items", tags=["items"])
 
 
-@router.get("/book-registry", response_model=list[WorkMetadataPublic])
+@router.post("/maintenance/bulk-classify", response_model=Message)
+def trigger_bulk_classify(
+    *, session: SessionDep, current_user: CurrentUser, background_tasks: BackgroundTasks
+) -> Any:
+    """
+    Trigger a background task to bulk classify all books and clean up polluted ISBNs.
+    Superuser only.
+    """
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    
+    background_tasks.add_task(maintenance_bulk_classify)
+    return Message(message="Bulk classification and cleanup started in background.")
+
+
+@router.post("/{id}/sync-to-archive", response_model=Message)
+async def trigger_sync_to_archive(
+    *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID
+) -> Any:
+    """
+    Sync a specific item's metadata to the global registry.
+    """
+    item = session.get(Item, id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    if item.owner_id != current_user.id and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    
+    await sync_item_to_archive(session, id)
+    return Message(message="Item synced to archive.")
+
+
+@router.get("/book-registry", response_model=WorksMetadataPublic)
 def list_book_registry(
     session: SessionDep,
     current_user: CurrentUser,
@@ -70,8 +106,13 @@ def list_book_registry(
     if not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Not enough permissions")
     
+    count_statement = select(func.count()).select_from(WorkMetadata)
+    count = session.exec(count_statement).one()
+
     statement = select(WorkMetadata).offset(skip).limit(limit)
-    return session.exec(statement).all()
+    books = session.exec(statement).all()
+    
+    return WorksMetadataPublic(data=books, count=count)
 
 
 @router.get("/book-registry/search", response_model=list[WorkMetadataPublic])
@@ -415,50 +456,62 @@ def read_items(
         
         allowed_community_ids = list(set(my_community_ids + public_community_ids))
 
-    # Use Meilisearch if q is provided
-    if q:
-        from app.search import client as meili_client
-        try:
-            index = meili_client.index("items")
-            filters = []
-            if target_owner_id:
-                filters.append(f"owner_id = '{target_owner_id}'")
-            if category:
-                filters.append(f"category = '{category}'")
-            if genre:
-                filters.append(f"genre = '{genre}'")
-            if item_type:
-                filters.append(f"item_type = '{item_type.value}'")
-            if feed_mode:
-                if allowed_community_ids:
-                    allowed_ids_str = "[" + ", ".join([f"'{cid}'" for cid in allowed_community_ids]) + "]"
-                    filters.append(f"(owner_id IN {allowed_ids_str} OR pooled_in IN {allowed_ids_str})")
-                else:
-                    return ItemsPublic(data=[], count=0)
+    # Use Meilisearch for all listings to support facets and global filtering
+    from app.search import client as meili_client
+    meili_success = False
+    facets = None
+    facet_stats = None
 
-            search_params = {
-                "limit": limit,
-                "offset": skip,
-                "filter": " AND ".join(filters) if filters else None
-            }
-            
-            search_results = index.search(q, search_params)
-            item_ids = [uuid.UUID(hit["id"]) for hit in search_results["hits"]]
-            
-            if not item_ids:
+    try:
+        index = meili_client.index("items")
+        filters = []
+        if target_owner_id:
+            filters.append(f"owner_id = '{target_owner_id}'")
+        if category:
+            filters.append(f"category = '{category}'")
+        if genre:
+            filters.append(f"genre = '{genre}'")
+        if item_type:
+            filters.append(f"item_type = '{item_type.value}'")
+        if feed_mode:
+            if allowed_community_ids:
+                allowed_ids_str = "[" + ", ".join([f"'{cid}'" for cid in allowed_community_ids]) + "]"
+                filters.append(f"(owner_id IN {allowed_ids_str} OR pooled_in IN {allowed_ids_str})")
+            else:
                 return ItemsPublic(data=[], count=0)
 
-            # Fetch from DB preserving order
-            items = session.exec(
-                select(Item)
-                .where(Item.id.in_(item_ids))
-                .where(~Item.id.in_(defaulted_item_ids))
-            ).all()
-            item_map = {item.id: item for item in items}
-            items = [item_map[iid] for iid in item_ids if iid in item_map]
-            count = len(items) # estimatedTotalHits might be wrong if we filtered in DB
-        except Exception:
-            # Fallback to SQL if Meilisearch fails
+        search_params = {
+            "limit": limit,
+            "offset": skip,
+            "filter": " AND ".join(filters) if filters else None,
+            "facets": ["category", "genre", "author", "item_type"],
+            "sort": [f"{sort_by if sort_by != 'created_at' else 'id'}:{sort_order}"]
+        }
+        
+        search_results = index.search(q or "", search_params)
+        item_ids = [uuid.UUID(hit["id"]) for hit in search_results["hits"]]
+        count = search_results.get("totalHits", len(item_ids))
+        facets = search_results.get("facetDistribution")
+        facet_stats = search_results.get("facetStats")
+
+        if not item_ids:
+            return ItemsPublic(data=[], count=count, facets=facets, facet_stats=facet_stats)
+
+        # Fetch from DB preserving order
+        db_items = session.exec(
+            select(Item)
+            .where(Item.id.in_(item_ids))
+            .where(~Item.id.in_(defaulted_item_ids))
+        ).all()
+        item_map = {item.id: item for item in db_items}
+        items = [item_map[iid] for iid in item_ids if iid in item_map]
+        meili_success = True
+    except Exception:
+        meili_success = False
+
+    if not meili_success:
+        # Fallback to SQL if Meilisearch fails or is not applicable
+        if q:
             q_filter = or_(
                 col(Item.title).ilike(f"%{q}%"),
                 col(Item.description).ilike(f"%{q}%"),
@@ -487,66 +540,136 @@ def read_items(
             count_stmt = select(func.count()).select_from(statement.subquery())
             count = session.exec(count_stmt).one()
             items = session.exec(statement.offset(skip).limit(limit)).all()
-    else:
-        # Standard SQL filtering
-        if feed_mode:
-            statement = select(Item).where(
-                or_(
-                    Item.owner_id.in_(allowed_community_ids),
-                    Item.community_owner.has(Community.id.in_(allowed_community_ids))
+        else:
+            # Standard SQL filtering
+            if feed_mode:
+                statement = select(Item).where(
+                    or_(
+                        Item.owner_id.in_(allowed_community_ids),
+                        Item.community_owner.has(Community.id.in_(allowed_community_ids))
+                    )
                 )
+            else:
+                statement = select(Item).where(Item.owner_id == target_owner_id)
+
+            statement = statement.where(Item.id.not_in(defaulted_item_ids))
+
+            if category:
+                statement = statement.where(
+                    func.json_extract_path_text(Item.extra_data, 'category') == category
+                )
+
+            if genre:
+                statement = statement.where(
+                    func.json_extract_path_text(Item.extra_data, 'genre') == genre
+                )
+
+            if item_type:
+                statement = statement.where(Item.item_type == item_type)
+
+            # Count total
+            count_stmt = select(func.count()).select_from(statement.subquery())
+            count = session.exec(count_stmt).one()
+
+            # Apply sorting
+            sort_column = Item.created_at
+            if sort_by == "title":
+                sort_column = Item.title
+            elif sort_by == "author":
+                sort_column = Item.author
+
+            if sort_order == "desc":
+                statement = statement.order_by(sort_column.desc())
+            else:
+                statement = statement.order_by(sort_column.asc())
+
+            items = session.exec(statement.offset(skip).limit(limit)).all()
+
+    # Assemble public items
+    if not items:
+        return ItemsPublic(data=[], count=0)
+
+    # 1. Collect identifiers for bulk fetching
+    item_ids = [item.id for item in items]
+    # Unique (author, title) pairs for WorkMetadata
+    work_keys = {(item.author, item.title) for item in items if item.author and item.title}
+    
+    # 2. Bulk fetch WorkMetadata
+    work_meta_map = {}
+    if work_keys:
+        from sqlalchemy import tuple_
+        work_metas = session.exec(
+            select(WorkMetadata).where(
+                tuple_(WorkMetadata.author, WorkMetadata.title).in_(list(work_keys))
             )
-        else:
-            statement = select(Item).where(Item.owner_id == target_owner_id)
+        ).all()
+        for wm in work_metas:
+            work_meta_map[(wm.author, wm.title)] = wm
 
-        statement = statement.where(Item.id.not_in(defaulted_item_ids))
+    # 3. Bulk fetch active loans for availability
+    # Item is available if NO active/pending loan exists
+    active_loan_item_ids = set(session.exec(
+        select(Loan.item_id).where(
+            Loan.item_id.in_(item_ids),
+            Loan.status.in_([
+                LoanStatus.ACTIVE, LoanStatus.PENDING, LoanStatus.ACCEPTED, 
+                LoanStatus.RETURN_PENDING, LoanStatus.EXTENSION_PENDING, LoanStatus.DEFAULTED
+            ])
+        )
+    ).all())
 
-        if category:
-            statement = statement.where(
-                func.json_extract_path_text(Item.extra_data, 'category') == category
-            )
+    # 4. Bulk fetch possession history for current user
+    # User had possession if they are owner OR had a loan in certain statuses
+    # We already know if they are owner from item.owner_id
+    possession_loan_item_ids = set(session.exec(
+        select(Loan.item_id).where(
+            Loan.item_id.in_(item_ids),
+            Loan.requester_id == current_user.id,
+            Loan.status.in_([
+                LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING, 
+                LoanStatus.RETURNED, LoanStatus.EXTENSION_PENDING
+            ])
+        )
+    ).all())
 
-        if genre:
-            statement = statement.where(
-                func.json_extract_path_text(Item.extra_data, 'genre') == genre
-            )
+    # 5. Bulk fetch condition ratings
+    condition_ratings = session.exec(
+        select(ItemConditionRating).where(ItemConditionRating.item_id.in_(item_ids))
+    ).all()
+    
+    condition_data_map = {} # item_id -> {"sum": float, "count": int, "notes": []}
+    for r in condition_ratings:
+        if r.item_id not in condition_data_map:
+            condition_data_map[r.item_id] = {"sum": 0.0, "count": 0, "notes": []}
+        
+        condition_data_map[r.item_id]["sum"] += r.grade
+        condition_data_map[r.item_id]["count"] += 1
+        if r.notes:
+            condition_data_map[r.item_id]["notes"].append({
+                "user_id": str(r.user_id),
+                "note": r.notes,
+                "created_at": r.created_at.isoformat() if r.created_at else None
+            })
 
-        if item_type:
-            statement = statement.where(Item.item_type == item_type)
-
-        # Count total
-        count_stmt = select(func.count()).select_from(statement.subquery())
-        count = session.exec(count_stmt).one()
-
-        # Apply sorting
-        sort_column = Item.created_at
-        if sort_by == "title":
-            sort_column = Item.title
-        elif sort_by == "author":
-            sort_column = Item.author
-
-        if sort_order == "desc":
-            statement = statement.order_by(sort_column.desc())
-        else:
-            statement = statement.order_by(sort_column.asc())
-
-        items = session.exec(statement.offset(skip).limit(limit)).all()
-
+    # 6. Build final list
     public_items = []
     for item in items:
-        is_avail = check_item_availability(session, item.id)
-
+        is_avail = item.id not in active_loan_item_ids
+        
         owner_pub = None
         community_pub = None
-
         if item.user_owner:
             owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser)
             owner_pub.is_available = is_avail
         elif item.community_owner:
             community_pub = item.community_owner
 
-        cond_data = get_item_condition_data(session, item.id)
-        had_possession = check_possession(session, current_user.id, item.id)
+        # Condition enrichment
+        cond_stats = condition_data_map.get(item.id, {"sum": 0.0, "count": 0, "notes": []})
+        avg_grade = cond_stats["sum"] / cond_stats["count"] if cond_stats["count"] > 0 else 0.0
+        
+        # Possession enrichment
+        had_possession = item.owner_id == current_user.id or item.id in possession_loan_item_ids
 
         item_pub = ItemPublic(
             id=item.id,
@@ -559,15 +682,15 @@ def read_items(
             extra_data=item.extra_data,
             info={
                 **(item.info or {}),
-                "average_condition_grade": cond_data["average_grade"],
-                "physical_notes": cond_data["notes"]
+                "average_condition_grade": avg_grade,
+                "physical_notes": cond_stats["notes"]
             },
             count=item.count,
             created_at=item.created_at,
             owner=owner_pub,
             community_owner=community_pub,
             is_available=is_avail,
-            work_metadata=get_work_metadata(session, item.author, item.title),
+            work_metadata=work_meta_map.get((item.author, item.title)),
             had_possession=had_possession
         )
         public_items.append(item_pub)
@@ -684,6 +807,18 @@ async def create_item(
             final_author = parsed_extra.get("author") or parsed_extra.get("authors")
             if isinstance(final_author, list):
                 final_author = ", ".join(final_author)
+
+        # AI Classification for books if category/genre is missing
+        if item_type == ItemType.book:
+            current_cat = parsed_extra.get("category") or (", ".join(parsed_extra.get("categories")) if isinstance(parsed_extra.get("categories"), list) else parsed_extra.get("categories"))
+            current_genre = parsed_extra.get("genre")
+            
+            if not current_cat or not current_genre:
+                ai_cat, ai_genre = await classify_book(title, final_author or "", description)
+                if not current_cat and ai_cat:
+                    parsed_extra["category"] = ai_cat
+                if not current_genre and ai_genre:
+                    parsed_extra["genre"] = ai_genre
 
         # Handle image upload
         final_image_url = image_url
@@ -871,6 +1006,18 @@ async def update_item(
                 db_item.extra_data = json.loads(extra_data)
             except json.JSONDecodeError:
                 raise HTTPException(status_code=400, detail="Invalid JSON in extra_data")
+        
+        # AI Classification for books if category/genre is missing after update
+        if (item_type == ItemType.book or db_item.item_type == ItemType.book):
+            extra = db_item.extra_data or {}
+            if not extra.get("category") or not extra.get("genre"):
+                ai_cat, ai_genre = await classify_book(db_item.title, db_item.author or "", db_item.description)
+                if not extra.get("category") and ai_cat:
+                    extra["category"] = ai_cat
+                if not extra.get("genre") and ai_genre:
+                    extra["genre"] = ai_genre
+                db_item.extra_data = extra
+
         if info is not None:
             try:
                 db_item.info = json.loads(info)

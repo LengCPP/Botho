@@ -106,6 +106,7 @@ export function GroupCard({ name, type, groups, onOpen }: GroupCardProps) {
                       borderRadius="sm"
                       boxShadow="xl"
                       border="1px solid white"
+                      loading="lazy"
                     />
                   ) : (
                     <Box

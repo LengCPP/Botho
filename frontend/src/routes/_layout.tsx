@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/drawer"
 import useAuth, { isLoggedIn } from "@/hooks/useAuth"
 import useInactivityLogout from "@/hooks/useInactivityLogout"
+import { useNotifications } from "@/hooks/useNotifications"
 
 export const Route = createFileRoute("/_layout")({
   component: Layout,
@@ -38,6 +39,7 @@ export const Route = createFileRoute("/_layout")({
 
 function Layout() {
   useInactivityLogout()
+  useNotifications()
   const { user: currentUser } = useAuth()
   const [open, setOpen] = useState(false)
 

@@ -57,8 +57,9 @@ export const ImportItems = ({ communityId }: ImportItemsProps) => {
     queryKey: ["stagedItems", communityId],
     queryFn: () => ImportsService.readStagedItems({ communityId }),
     refetchInterval: (query) => {
-      const items = query.state.data?.data || []
-      return items.some((item) => item.status === "PROCESSING") ? 2000 : false
+      const data = query.state.data
+      const isProcessing = data?.processing_count && data.processing_count > 0
+      return isProcessing ? 1000 : 5000 // Poll faster during processing, slower otherwise
     },
   })
 

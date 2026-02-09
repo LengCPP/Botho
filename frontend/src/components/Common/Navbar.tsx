@@ -1,15 +1,12 @@
-import { Box, Link as ChakraLink, Flex, HStack, Image } from "@chakra-ui/react"
+import { Box, Flex, HStack, Image } from "@chakra-ui/react"
 import { Link } from "@tanstack/react-router"
 
-import useAuth from "@/hooks/useAuth"
 import Logo from "/assets/images/botho-logo.png"
 import { ColorModeButton } from "../ui/color-mode"
 import NotificationsMenu from "./NotificationsMenu"
 import UserMenu from "./UserMenu"
 
 function Navbar() {
-  const { user: currentUser } = useAuth()
-
   return (
     <Box
       position="sticky"
@@ -29,18 +26,6 @@ function Navbar() {
               maxW="150px"
             />
           </Link>
-          {currentUser?.is_superuser && (
-            <ChakraLink
-              asChild
-              display={{ base: "none", md: "block" }}
-              fontWeight="medium"
-              fontSize="sm"
-              color="ui.main"
-              _hover={{ color: "ui.hover", textDecoration: "none" }}
-            >
-              <Link to="/book-archive">Book Archive</Link>
-            </ChakraLink>
-          )}
         </HStack>
 
         {/* Right Side: Theme Toggle, Notifications, User Avatar */}

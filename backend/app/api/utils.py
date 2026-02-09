@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from typing import Any
 
@@ -9,6 +10,7 @@ from app.models import (
     Item,
     ItemConditionRating,
     ItemOwnerPublic,
+    ItemType,
     Loan,
     LoanPublic,
     LoanStatus,
@@ -18,6 +20,90 @@ from app.models import (
     WorkMetadata,
 )
 
+async def maintenance_bulk_classify():
+    """Background task to classify all books and clean up polluted ISBNs."""
+    from app.ai import classify_book
+    from app.search import sync_item_to_search
+    from app.core.db import engine
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting maintenance bulk classification and cleanup...")
+    print("DEBUG: Starting maintenance bulk classification and cleanup...")
+
+    with Session(engine) as session:
+        # 1. Clean up polluted ISBNs in Item extra_data and WorkMetadata
+        # Some ISBNs are stored as "[]" or empty strings
+        items_to_fix = session.exec(select(Item).where(Item.item_type == ItemType.book)).all()
+        fixed_items = 0
+        for item in items_to_fix:
+            extra = item.extra_data or {}
+            isbn = extra.get("isbn")
+            if isbn == "[]" or isbn == "" or isbn == []:
+                extra["isbn"] = None
+                item.extra_data = extra
+                session.add(item)
+                fixed_items += 1
+        
+        works_to_fix = session.exec(select(WorkMetadata)).all()
+        fixed_works = 0
+        for work in works_to_fix:
+            if work.isbn == "[]" or work.isbn == "" or work.isbn == []:
+                work.isbn = None
+                session.add(work)
+                fixed_works += 1
+        
+        session.flush()
+        logger.info(f"ISBN Cleanup: Fixed {fixed_items} items and {fixed_works} work metadata entries.")
+        print(f"DEBUG: ISBN Cleanup: Fixed {fixed_items} items and {fixed_works} work metadata entries.")
+
+        # 2. Bulk Classify
+        statement = select(Item).where(Item.item_type == ItemType.book)
+        books = session.exec(statement).all()
+        
+        classified_count = 0
+        for book in books:
+            extra = book.extra_data or {}
+            # Re-classify if generic or missing
+            is_generic = extra.get("category") in ["Fiction", "Non-Fiction", None] or extra.get("genre") is None
+            
+            if is_generic:
+                logger.info(f"Classifying: {book.title} by {book.author}")
+                print(f"DEBUG: Classifying: {book.title} by {book.author}")
+                cat, gen = await classify_book(book.title, book.author or "", book.description)
+                if cat or gen:
+                    if cat: extra["category"] = cat
+                    if gen: extra["genre"] = gen
+                    book.extra_data = extra
+                    session.add(book)
+                    session.flush()
+                    sync_item_to_search(book)
+                    # Ensure WorkMetadata also gets updated
+                    ensure_work_metadata(session, book.author, book.title, category=cat)
+                    classified_count += 1
+                
+                await asyncio.sleep(0.5) # Throttle Gemini usage
+        
+        session.commit()
+        logger.info(f"Maintenance complete: Classified {classified_count} books.")
+        print(f"DEBUG: Maintenance complete: Classified {classified_count} books.")
+
+async def sync_item_to_archive(session: Session, item_id: uuid.UUID):
+    """Sync a specific item's metadata to the global WorkMetadata archive."""
+    item = session.get(Item, item_id)
+    if not item or item.item_type != ItemType.book:
+        return
+    
+    ensure_work_metadata(
+        session, 
+        item.author, 
+        item.title, 
+        isbn=item.extra_data.get("isbn") if item.extra_data else None,
+        description=item.description,
+        category=item.extra_data.get("category") if item.extra_data else None,
+        image_url=item.image_url
+    )
+    session.commit()
 
 def get_work_metadata(session: Session, author: str | None, title: str) -> WorkMetadata | None:
     if not author:

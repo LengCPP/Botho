@@ -71,7 +71,14 @@ import { CompactItemCard } from "@/components/Items/CompactItemCard"
 import { GroupCard } from "@/components/Items/GroupCard"
 import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
+import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
 import { LoanCard } from "@/components/Items/LoanCard"
+import {
+  PaginationItems,
+  PaginationNextTrigger,
+  PaginationPrevTrigger,
+  PaginationRoot,
+} from "@/components/ui/pagination"
 import { useColorModeValue } from "@/components/ui/color-mode"
 import {
   DialogBody,
@@ -100,6 +107,8 @@ const communitySearchSchema = z.object({
     .enum(["board", "items", "members", "loans", "manage", "import"])
     .catch("board"),
   q: z.string().optional(),
+  page: z.number().catch(1),
+  limit: z.number().catch(8),
 })
 
 export const Route = createFileRoute("/_layout/communities/$communityId")({
@@ -443,7 +452,7 @@ function DonationManagement({
 
 function CommunityBoard() {
   const { communityId } = Route.useParams()
-  const { tab, q: qParam } = Route.useSearch()
+  const { tab, q: qParam, page, limit } = Route.useSearch()
   const { user: currentUser } = useAuth()
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const queryClient = useQueryClient()
@@ -539,16 +548,20 @@ function CommunityBoard() {
   })
 
   const { data: communityItems, isLoading: isLoadingItems } = useQuery({
-    queryKey: ["communityItems", communityId, qParam],
+    queryKey: ["communityItems", communityId, { q: qParam, page, limit }],
     queryFn: () =>
-      CommunitiesService.readCommunityItems({ id: communityId, q: qParam }),
+      CommunitiesService.readCommunityItems({
+        id: communityId,
+        q: qParam,
+        skip: (page - 1) * limit,
+        limit,
+      }),
     enabled: !!isMember,
   })
 
-  const { data: messages, isLoading: isLoadingMessages } = useQuery({
-    queryKey: ["communityMessages", communityId],
-    queryFn: () =>
-      CommunitiesService.readCommunityMessages({ id: communityId }),
+  const { data: communityLoans, isLoading: isLoadingLoans } = useQuery({
+    queryKey: ["communityLoans", communityId],
+    queryFn: () => CommunitiesService.readCommunityLoans({ id: communityId }),
     enabled: !!isMember,
   })
 
@@ -559,11 +572,18 @@ function CommunityBoard() {
     enabled: !!isMember,
   })
 
-  const { data: communityLoans, isLoading: isLoadingLoans } = useQuery({
-    queryKey: ["communityLoans", communityId],
-    queryFn: () => CommunitiesService.readCommunityLoans({ id: communityId }),
+  const { data: messages, isLoading: isLoadingMessages } = useQuery({
+    queryKey: ["communityMessages", communityId],
+    queryFn: () =>
+      CommunitiesService.readCommunityMessages({ id: communityId }),
     enabled: !!isMember,
   })
+
+  const updateSearch = (params: Partial<{ page: number; limit: number }>) => {
+    navigate({
+      search: (prev) => ({ ...prev, ...params }),
+    })
+  }
 
   const activeLoans = useMemo(() => {
     return (
@@ -774,8 +794,6 @@ function CommunityBoard() {
       })}
     </SimpleGrid>
   )
-
-  const groupCardType = organizeBy
 
   return (
     <Container maxW="full">
@@ -1043,19 +1061,15 @@ function CommunityBoard() {
                 />
               )}
               <Flex justify="space-between" align="center" wrap="wrap" gap={4}>
-                <HStack gap={2}>
-                  {/* Search Input */}
-                  <Box width={{ base: "full", sm: "200px", md: "250px" }}>
-                    <InputGroup flex="1" startElement={<FiSearch />}>
-                      <Input
-                        placeholder="Find in community..."
-                        size="sm"
-                        variant="subtle"
-                        value={q}
-                        onChange={(e) => setQ(e.target.value)}
-                      />
-                    </InputGroup>
-                  </Box>
+                <HStack gap={4} align="baseline">
+                  <VStack align="start" gap={0}>
+                    <Heading size="md">Items</Heading>
+                    {communityItems && (
+                      <Text fontSize="sm" color="gray.500" fontWeight="medium">
+                        Total: {communityItems.count} items
+                      </Text>
+                    )}
+                  </VStack>
                   {/* Organize Button */}
                   {displayType === "collections" && !selectedGroup && (
                     <Popover.Root>
@@ -1113,7 +1127,22 @@ function CommunityBoard() {
                     </Popover.Root>
                   )}
                 </HStack>
-                <AddItem communityId={communityId} isAdmin={isAdmin} />
+
+                <HStack gap={2}>
+                  <ItemsViewOptions
+                    q={q}
+                    onChangeQ={setQ}
+                    limit={limit}
+                    onChangeLimit={(val) =>
+                      updateSearch({ limit: val, page: 1 })
+                    }
+                    showSearch={true}
+                    showLimit={true}
+                    showSort={false}
+                    showViewToggle={false}
+                  />
+                  <AddItem communityId={communityId} isAdmin={isAdmin} />
+                </HStack>
               </Flex>
 
               {isLoadingItems ? (
@@ -1148,7 +1177,22 @@ function CommunityBoard() {
                       ))}
                     </SimpleGrid>
                   ) : displayType === "items" ? (
-                    renderGroup(groupItems(items))
+                    <VStack align="stretch" gap={8}>
+                      {renderGroup(groupItems(items))}
+                      <Flex justifyContent="center">
+                        <PaginationRoot
+                          count={communityItems?.count || 0}
+                          pageSize={limit}
+                          onPageChange={({ page }) => updateSearch({ page })}
+                        >
+                          <Flex>
+                            <PaginationPrevTrigger />
+                            <PaginationItems />
+                            <PaginationNextTrigger />
+                          </Flex>
+                        </PaginationRoot>
+                      </Flex>
+                    </VStack>
                   ) : (
                     <Box>
                       {selectedGroup && (
@@ -1196,9 +1240,24 @@ function CommunityBoard() {
                       {Object.entries(organizedItems)
                         .filter(([name]) => name === selectedGroup)
                         .map(([name, data]) => (
-                          <Box key={name}>
+                          <VStack key={name} align="stretch" gap={8}>
                             {renderGroup([...data.pooled, ...data.owned])}
-                          </Box>
+                            <Flex justifyContent="center">
+                              <PaginationRoot
+                                count={data.pooled.length + data.owned.length}
+                                pageSize={limit}
+                                onPageChange={({ page }) =>
+                                  updateSearch({ page })
+                                }
+                              >
+                                <Flex>
+                                  <PaginationPrevTrigger />
+                                  <PaginationItems />
+                                  <PaginationNextTrigger />
+                                </Flex>
+                              </PaginationRoot>
+                            </Flex>
+                          </VStack>
                         ))}
                     </Box>
                   )}

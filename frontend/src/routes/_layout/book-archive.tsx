@@ -1,6 +1,7 @@
 import {
   Badge,
   Box,
+  Button,
   Container,
   Flex,
   HStack,
@@ -9,10 +10,11 @@ import {
   Image,
   Table,
   Text,
+  VStack,
 } from "@chakra-ui/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import { FiTrash2 } from "react-icons/fi"
+import { FiRefreshCw, FiTrash2 } from "react-icons/fi"
 import { z } from "zod"
 
 import { ItemsService } from "@/client"
@@ -53,13 +55,16 @@ function BooksTable() {
   const { page } = Route.useSearch()
 
   const {
-    data: books,
+    data,
     isLoading,
     isPlaceholderData,
   } = useQuery({
     ...getBooksQueryOptions({ page }),
     placeholderData: (prevData) => prevData,
   })
+
+  const books = data?.data
+  const totalCount = data?.count || 0
 
   const deleteMutation = useMutation({
     mutationFn: ({ author, title }: { author: string; title: string }) =>
@@ -98,6 +103,7 @@ function BooksTable() {
             <Table.ColumnHeader w="80px">Cover</Table.ColumnHeader>
             <Table.ColumnHeader>Title</Table.ColumnHeader>
             <Table.ColumnHeader>Author</Table.ColumnHeader>
+            <Table.ColumnHeader>Category</Table.ColumnHeader>
             <Table.ColumnHeader>ISBN</Table.ColumnHeader>
             <Table.ColumnHeader textAlign="right">Actions</Table.ColumnHeader>
           </Table.Row>
@@ -123,6 +129,11 @@ function BooksTable() {
               </Table.Cell>
               <Table.Cell fontWeight="medium">{book.title}</Table.Cell>
               <Table.Cell>{book.author}</Table.Cell>
+              <Table.Cell>
+                <Badge variant="subtle" colorPalette="accent">
+                  {book.category || "N/A"}
+                </Badge>
+              </Table.Cell>
               <Table.Cell>{book.isbn || "N/A"}</Table.Cell>
               <Table.Cell textAlign="right">
                 <IconButton
@@ -141,29 +152,67 @@ function BooksTable() {
         </Table.Body>
       </Table.Root>
 
-      <Flex justifyContent="flex-end" mt={4}>
-        <PaginationRoot
-          count={1000} // We don't have total count yet, but let's assume many
-          pageSize={PER_PAGE}
-          onPageChange={({ page }) => setPage(page)}
-        >
-          <Flex>
-            <PaginationPrevTrigger />
-            <PaginationItems />
-            <PaginationNextTrigger />
-          </Flex>
-        </PaginationRoot>
-      </Flex>
+      {totalCount > PER_PAGE && (
+        <Flex justifyContent="flex-end" mt={4}>
+          <PaginationRoot
+            count={totalCount}
+            pageSize={PER_PAGE}
+            onPageChange={({ page }) => setPage(page)}
+          >
+            <Flex>
+              <PaginationPrevTrigger />
+              <PaginationItems />
+              <PaginationNextTrigger />
+            </Flex>
+          </PaginationRoot>
+        </Flex>
+      )}
     </>
   )
 }
 
 function BookArchive() {
+  const { page } = Route.useSearch()
+  const { data } = useQuery(getBooksQueryOptions({ page }))
+  const totalCount = data?.count || 0
+
+  const { showSuccessToast, showErrorToast } = useCustomToast()
+  const maintenanceMutation = useMutation({
+    mutationFn: () => ItemsService.triggerBulkClassify(),
+    onSuccess: () => {
+      showSuccessToast("Maintenance task started in background")
+    },
+    onError: () => {
+      showErrorToast("Failed to start maintenance task")
+    },
+  })
+
   return (
     <Container maxW="full">
-      <Heading size="lg" pt={12} pb={6}>
-        Book Archive Management
-      </Heading>
+      <Flex justify="space-between" align="baseline" pt={12} pb={6} wrap="wrap" gap={4}>
+        <HStack align="baseline" gap={4}>
+          <Heading size="lg">
+            Book Archive Management
+          </Heading>
+          <Badge variant="subtle" colorPalette="blue" size="md">
+            {totalCount} Total Books
+          </Badge>
+        </HStack>
+        <Box border="1px solid" borderColor="border.subtle" p={4} rounded="md" bg="bg.muted">
+          <VStack align="start" gap={2}>
+            <Text fontSize="xs" fontWeight="bold" color="fg.muted">Maintenance Actions</Text>
+            <Button 
+              size="xs" 
+              colorPalette="orange" 
+              variant="solid" 
+              onClick={() => maintenanceMutation.mutate()}
+              loading={maintenanceMutation.isPending}
+            >
+              <FiRefreshCw /> Trigger AI Bulk Classification & Cleanup
+            </Button>
+          </VStack>
+        </Box>
+      </Flex>
       <BooksTable />
     </Container>
   )

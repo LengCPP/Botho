@@ -370,9 +370,10 @@ export function ItemsViewOptions({
                   value={String(limit)}
                   onValueChange={(e) => onChangeLimit(Number(e.value))}
                 >
-                  <MenuRadioItem value="12">12</MenuRadioItem>
-                  <MenuRadioItem value="24">24</MenuRadioItem>
-                  <MenuRadioItem value="10000">All</MenuRadioItem>
+                  <MenuRadioItem value="4">4</MenuRadioItem>
+                  <MenuRadioItem value="8">8</MenuRadioItem>
+                  <MenuRadioItem value="16">16</MenuRadioItem>
+                  <MenuRadioItem value="32">32</MenuRadioItem>
                 </MenuRadioItemGroup>
               </MenuItemGroup>
             )}

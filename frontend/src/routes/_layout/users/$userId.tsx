@@ -44,6 +44,12 @@ import { GroupCard } from "@/components/Items/GroupCard"
 import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
+import {
+  PaginationItems,
+  PaginationNextTrigger,
+  PaginationPrevTrigger,
+  PaginationRoot,
+} from "@/components/ui/pagination"
 import UserInformation from "@/components/UserSettings/UserInformation"
 import UserProfilePicture from "@/components/UserSettings/UserProfilePicture"
 import { useColorModeValue } from "@/components/ui/color-mode"
@@ -60,6 +66,8 @@ import { formatPublicId, getImageUrl, groupItems, handleError } from "@/utils"
 
 const userSearchSchema = z.object({
   q: z.string().optional(),
+  page: z.number().catch(1),
+  limit: z.number().catch(8),
 })
 
 export const Route = createFileRoute("/_layout/users/$userId")({
@@ -69,7 +77,7 @@ export const Route = createFileRoute("/_layout/users/$userId")({
 
 function UserProfilePage() {
   const { userId } = Route.useParams()
-  const { q: qParam } = Route.useSearch()
+  const { q: qParam, page, limit } = Route.useSearch()
   const { user: currentUser } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -103,12 +111,20 @@ function UserProfilePage() {
   useEffect(() => {
     const timer = setTimeout(() => {
       navigate({
-        search: (prev) => ({ ...prev, q: q || undefined }),
+        search: (prev) => ({ ...prev, q: q || undefined, page: 1 }),
         replace: true,
       })
     }, 500)
     return () => clearTimeout(timer)
   }, [q, navigate])
+
+  const updateSearch = (newParams: any) => {
+    navigate({
+      search: (prev: any) => ({ ...prev, ...newParams }),
+    })
+  }
+
+  const setPage = (page: number) => updateSearch({ page })
 
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
   const isMobile = useBreakpointValue({ base: true, md: false })
@@ -140,6 +156,8 @@ function UserProfilePage() {
         category,
         genre,
         q: qParam,
+        page,
+        limit,
       },
     ],
     queryFn: () =>
@@ -151,6 +169,8 @@ function UserProfilePage() {
         category,
         genre,
         q: qParam,
+        skip: (page - 1) * limit,
+        limit,
       }),
     enabled: canSeeAll,
   })
@@ -315,7 +335,7 @@ function UserProfilePage() {
                     ? `Items with unspecified ${organizeBy}`
                     : `Items in ${subject}`
                   : "Item Collections"
-                : `Items (${userItems.length})`}
+                : `Items (${items?.count || 0})`}
             </Heading>
 
             <ItemsViewOptions
@@ -337,13 +357,15 @@ function UserProfilePage() {
               onChangeSortBy={setSortBy}
               sortOrder={sortOrder}
               onChangeSortOrder={setSortOrder}
+              limit={limit}
+              onChangeLimit={(val) => updateSearch({ limit: val, page: 1 })}
               category={category}
               onChangeCategory={setCategory}
               genre={genre}
               onChangeGenre={setGenre}
               showDisplayToggle={true}
               showViewToggle={displayType === "items" || !!subject}
-              showLimit={false}
+              showLimit={true}
               showFilter={displayType === "items"}
               showSort={displayType === "items"}
             />
@@ -383,28 +405,44 @@ function UserProfilePage() {
                 </SimpleGrid>
               ) : (
                 /* Render Items Grid */
-                <SimpleGrid
-                  columns={viewMode === "list" ? 1 : { base: 2, sm: 3, md: 4 }}
-                  gap={viewMode === "list" ? 2 : { base: 2, md: 6 }}
-                >
-                  {activeGroups.map((group) => {
-                    const firstItem = group[0]
-                    return viewMode === "list" ? (
-                      <CompactItemCard
-                        key={firstItem.id}
-                        item={group}
-                        onShowDetails={() => setSelectedItem(firstItem)}
-                      />
-                    ) : (
-                      <ItemCard
-                        key={firstItem.id}
-                        item={group}
-                        displayOwnerId={userId}
-                        onShowDetails={() => setSelectedItem(firstItem)}
-                      />
-                    )
-                  })}
-                </SimpleGrid>
+                <VStack align="stretch" gap={8}>
+                  <SimpleGrid
+                    columns={viewMode === "list" ? 1 : { base: 2, sm: 3, md: 4 }}
+                    gap={viewMode === "list" ? 2 : { base: 2, md: 6 }}
+                  >
+                    {activeGroups.map((group) => {
+                      const firstItem = group[0]
+                      return viewMode === "list" ? (
+                        <CompactItemCard
+                          key={firstItem.id}
+                          item={group}
+                          onShowDetails={() => setSelectedItem(firstItem)}
+                        />
+                      ) : (
+                        <ItemCard
+                          key={firstItem.id}
+                          item={group}
+                          displayOwnerId={userId}
+                          onShowDetails={() => setSelectedItem(firstItem)}
+                        />
+                      )
+                    })}
+                  </SimpleGrid>
+
+                  <Flex justifyContent="center">
+                    <PaginationRoot
+                      count={subject ? activeGroups.length : (items?.count || 0)}
+                      pageSize={limit}
+                      onPageChange={({ page }) => setPage(page)}
+                    >
+                      <Flex>
+                        <PaginationPrevTrigger />
+                        <PaginationItems />
+                        <PaginationNextTrigger />
+                      </Flex>
+                    </PaginationRoot>
+                  </Flex>
+                </VStack>
               )}
             </>
           )}
