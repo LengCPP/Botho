@@ -10,7 +10,8 @@ import NotificationsList from "./NotificationsList"
 
 const NotificationsMenu = () => {
   const queryClient = useQueryClient()
-  const { data: notifications } = useNotifications()
+  const [limit, setLimit] = useState(10)
+  const { data: notifications } = useNotifications(limit)
   const [isDeleteAllModalOpen, setIsDeleteAllModalOpen] = useState(false)
 
   const markAllAsReadMutation = useMutation({
@@ -41,7 +42,7 @@ const NotificationsMenu = () => {
   const hasReadNotifications = hasNotifications && totalCount > unreadCount
 
   return (
-    <MenuRoot size="sm" positioning={{ placement: "bottom-end" }}>
+    <MenuRoot size="sm" positioning={{ placement: "bottom-end", offset: { mainAxis: 20 } }}>
       <MenuTrigger asChild>
         <Box position="relative">
           <IconButton variant="ghost" aria-label="Notifications" rounded="full">
@@ -97,7 +98,11 @@ const NotificationsMenu = () => {
             )}
           </Flex>
           
-          <NotificationsList />
+          <NotificationsList 
+            limit={limit} 
+            onLoadMore={() => setLimit(prev => prev + 10)}
+            hasMore={(notifications?.data?.length || 0) < totalCount}
+          />
 
           {hasNotifications && (
             <Flex

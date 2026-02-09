@@ -293,12 +293,6 @@ def recommend_items(
             cond_data = get_item_condition_data(session, item.id)
             had_possession = check_possession(session, current_user.id, item.id)
             
-            # Stringify UUIDs/datetimes in condition data for JSON safety
-            serializable_notes = [
-                {**n, "user_id": str(n["user_id"]), "created_at": n["created_at"].isoformat() if n["created_at"] else None}
-                for n in cond_data["notes"]
-            ]
-
             item_pub = ItemPublic(
                 id=item.id,
                 owner_id=item.owner_id,
@@ -311,7 +305,7 @@ def recommend_items(
                 info={
                     **(item.info or {}),
                     "average_condition_grade": cond_data["average_grade"],
-                    "physical_notes": serializable_notes
+                    "physical_notes": cond_data["notes"]
                 },
                 count=item.count,
                 created_at=item.created_at,

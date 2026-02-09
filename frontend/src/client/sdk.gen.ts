@@ -1711,6 +1711,32 @@ export class NotificationsService {
             url: '/api/v1/notifications/read-all'
         });
     }
+
+    /**
+     * Clear Read Notifications
+     * Delete all read notifications for the current user.
+     * @returns Message Successful Response
+     * @throws ApiError
+     */
+    public static clearReadNotifications(): CancelablePromise<Message> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/notifications/clear-read'
+        });
+    }
+
+    /**
+     * Delete All Notifications
+     * Delete all notifications for the current user.
+     * @returns Message Successful Response
+     * @throws ApiError
+     */
+    public static deleteAllNotifications(): CancelablePromise<Message> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/notifications/delete-all'
+        });
+    }
     
     /**
      * Delete Notification

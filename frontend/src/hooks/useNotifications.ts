@@ -4,14 +4,14 @@ import { NotificationsService } from "../client"
 import { OpenAPI } from "../client/core/OpenAPI"
 import useAuth from "./useAuth"
 
-export const useNotifications = () => {
+export const useNotifications = (limit = 10) => {
   const queryClient = useQueryClient()
   const { user } = useAuth()
   const token = localStorage.getItem("access_token")
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["notifications"],
-    queryFn: () => NotificationsService.readNotifications({}),
+    queryKey: ["notifications", limit],
+    queryFn: () => NotificationsService.readNotifications({ limit }),
     enabled: !!user,
   })
 
