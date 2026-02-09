@@ -1,4 +1,12 @@
 import {
+  type ForgivenessReason,
+  type ForgivenessRequest,
+  type LoanPublic,
+  LoansService,
+} from "@/client"
+import { RadioGroup as ChakraRadioGroup, Radio } from "@/components/ui/radio"
+import useCustomToast from "@/hooks/useCustomToast"
+import {
   Button,
   DialogBody,
   DialogCloseTrigger,
@@ -8,22 +16,14 @@ import {
   DialogRoot,
   DialogTitle,
   Field,
-  VStack,
-  Text,
-  Input,
-  Textarea,
   HStack,
+  Input,
+  Text,
+  Textarea,
+  VStack,
 } from "@chakra-ui/react"
-import { useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { 
-  type LoanPublic, 
-  LoansService, 
-  type ForgivenessReason,
-  type ForgivenessRequest 
-} from "@/client"
-import useCustomToast from "@/hooks/useCustomToast"
-import { Radio, RadioGroup as ChakraRadioGroup } from "@/components/ui/radio"
+import { useState } from "react"
 
 interface ForgiveModalProps {
   loan: LoanPublic
@@ -35,14 +35,14 @@ const ForgiveModal = ({ loan, isOpen, onClose }: ForgiveModalProps) => {
   const queryClient = useQueryClient()
   const { showSuccessToast } = useCustomToast()
   const [reason, setReason] = useState<ForgivenessReason>("OTHER")
-  
+
   // Specs for replacement item
   const [title, setTitle] = useState(loan.item.title)
   const [author, setAuthor] = useState(loan.item.author || "")
   const [description, setDescription] = useState(loan.item.description || "")
 
   const forgiveMutation = useMutation({
-    mutationFn: (data: ForgivenessRequest) => 
+    mutationFn: (data: ForgivenessRequest) =>
       LoansService.forgiveLoan({ id: loan.id, requestBody: data }),
     onSuccess: () => {
       showSuccessToast("Loan forgiven successfully")
@@ -54,7 +54,7 @@ const ForgiveModal = ({ loan, isOpen, onClose }: ForgiveModalProps) => {
 
   const handleConfirm = () => {
     const data: ForgivenessRequest = { reason }
-    
+
     if (reason === "REPLACED_ITEM") {
       data.new_item_specs = {
         title,
@@ -64,7 +64,7 @@ const ForgiveModal = ({ loan, isOpen, onClose }: ForgiveModalProps) => {
         // Carry over image if same? Maybe not if it's a replacement
       }
     }
-    
+
     forgiveMutation.mutate(data)
   }
 
@@ -77,13 +77,16 @@ const ForgiveModal = ({ loan, isOpen, onClose }: ForgiveModalProps) => {
         <DialogBody>
           <VStack align="stretch" gap={4}>
             <Text fontSize="sm">
-              Select a reason for forgiving this default. This will remove the delinquency status from the borrower's profile.
+              Select a reason for forgiving this default. This will remove the
+              delinquency status from the borrower's profile.
             </Text>
-            
+
             <Field.Root label="Forgiveness Reason">
-              <ChakraRadioGroup 
-                value={reason} 
-                onValueChange={(details) => setReason(details.value as ForgivenessReason)}
+              <ChakraRadioGroup
+                value={reason}
+                onValueChange={(details) =>
+                  setReason(details.value as ForgivenessReason)
+                }
               >
                 <VStack align="start" gap={2}>
                   <Radio value="GOOD_REASON">
@@ -103,29 +106,38 @@ const ForgiveModal = ({ loan, isOpen, onClose }: ForgiveModalProps) => {
             </Field.Root>
 
             {reason === "REPLACED_ITEM" && (
-              <VStack align="stretch" gap={3} p={3} borderWidth="1px" borderRadius="md" bg="bg.muted">
-                <Text fontWeight="bold" fontSize="xs">REPLACEMENT ITEM SPECS</Text>
+              <VStack
+                align="stretch"
+                gap={3}
+                p={3}
+                borderWidth="1px"
+                borderRadius="md"
+                bg="bg.muted"
+              >
+                <Text fontWeight="bold" fontSize="xs">
+                  REPLACEMENT ITEM SPECS
+                </Text>
                 <Field.Root label="Title">
-                  <Input 
-                    size="sm" 
-                    value={title} 
-                    onChange={(e) => setTitle(e.target.value)} 
+                  <Input
+                    size="sm"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
                     placeholder="New item title"
                   />
                 </Field.Root>
                 <Field.Root label="Author (Optional)">
-                  <Input 
-                    size="sm" 
-                    value={author} 
-                    onChange={(e) => setAuthor(e.target.value)} 
+                  <Input
+                    size="sm"
+                    value={author}
+                    onChange={(e) => setAuthor(e.target.value)}
                     placeholder="Author"
                   />
                 </Field.Root>
                 <Field.Root label="Description">
-                  <Textarea 
-                    size="sm" 
-                    value={description} 
-                    onChange={(e) => setDescription(e.target.value)} 
+                  <Textarea
+                    size="sm"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
                     placeholder="Physical condition, etc."
                   />
                 </Field.Root>
@@ -135,9 +147,11 @@ const ForgiveModal = ({ loan, isOpen, onClose }: ForgiveModalProps) => {
         </DialogBody>
         <DialogFooter>
           <HStack gap={3}>
-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button 
-              colorPalette="green" 
+            <Button variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              colorPalette="green"
               onClick={handleConfirm}
               loading={forgiveMutation.isPending}
             >

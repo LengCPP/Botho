@@ -42,7 +42,10 @@ const NotificationsMenu = () => {
   const hasReadNotifications = hasNotifications && totalCount > unreadCount
 
   return (
-    <MenuRoot size="sm" positioning={{ placement: "bottom-end", offset: { mainAxis: 20 } }}>
+    <MenuRoot
+      size="sm"
+      positioning={{ placement: "bottom-end", offset: { mainAxis: 20 } }}
+    >
       <MenuTrigger asChild>
         <Box position="relative">
           <IconButton variant="ghost" aria-label="Notifications" rounded="full">
@@ -97,20 +100,15 @@ const NotificationsMenu = () => {
               </Text>
             )}
           </Flex>
-          
-          <NotificationsList 
-            limit={limit} 
-            onLoadMore={() => setLimit(prev => prev + 10)}
+
+          <NotificationsList
+            limit={limit}
+            onLoadMore={() => setLimit((prev) => prev + 10)}
             hasMore={(notifications?.data?.length || 0) < totalCount}
           />
 
           {hasNotifications && (
-            <Flex
-              justify="center"
-              p={2}
-              borderTopWidth="1px"
-              bg="bg.panel"
-            >
+            <Flex justify="center" p={2} borderTopWidth="1px" bg="bg.panel">
               <HStack gap={4}>
                 {hasReadNotifications && (
                   <Text

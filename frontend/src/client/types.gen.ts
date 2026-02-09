@@ -330,6 +330,29 @@ export type SearchResults = {
     communities: Array<CommunityPublic>;
 };
 
+export type StagedItemPublic = {
+    id: string;
+    owner_id: string;
+    community_id: (string | null);
+    status: StagedItemStatus;
+    raw_data: {
+        [key: string]: unknown;
+    };
+    error_log: (string | null);
+    created_at: string;
+};
+
+export type StagedItemsPublic = {
+    data: Array<StagedItemPublic>;
+    count: number;
+    pending_count?: number;
+    processing_count?: number;
+    completed_count?: number;
+    failed_count?: number;
+};
+
+export type StagedItemStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+
 export type Token = {
     access_token: string;
     token_type?: string;
@@ -695,6 +718,52 @@ export type FriendsRemoveFriendData = {
 
 export type FriendsRemoveFriendResponse = (Message);
 
+export type ImportsStageItemsData = {
+    communityId?: (string | null);
+    mapping: string;
+    requestBody: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+export type ImportsStageItemsResponse = (unknown);
+
+export type ImportsReadStagedItemsData = {
+    communityId?: (string | null);
+    limit?: number;
+    skip?: number;
+};
+
+export type ImportsReadStagedItemsResponse = (StagedItemsPublic);
+
+export type ImportsUpdateStagedItemData = {
+    id: string;
+    requestBody: {
+        [key: string]: unknown;
+    };
+};
+
+export type ImportsUpdateStagedItemResponse = (StagedItemPublic);
+
+export type ImportsDeleteStagedItemData = {
+    id: string;
+};
+
+export type ImportsDeleteStagedItemResponse = (Message);
+
+export type ImportsCleanStagedItemsData = {
+    communityId?: (string | null);
+};
+
+export type ImportsCleanStagedItemsResponse = (Message);
+
+export type ImportsProcessStagedItemsData = {
+    communityId?: (string | null);
+    requestBody: Array<(string)>;
+};
+
+export type ImportsProcessStagedItemsResponse = (unknown);
+
 export type InterestsReadInterestsData = {
     limit?: number;
     q?: (string | null);
@@ -968,6 +1037,10 @@ export type NotificationsMarkNotificationAsReadData = {
 export type NotificationsMarkNotificationAsReadResponse = (NotificationPublic);
 
 export type NotificationsMarkAllNotificationsAsReadResponse = (Message);
+
+export type NotificationsClearReadNotificationsResponse = (Message);
+
+export type NotificationsDeleteAllNotificationsResponse = (Message);
 
 export type NotificationsDeleteNotificationData = {
     id: string;

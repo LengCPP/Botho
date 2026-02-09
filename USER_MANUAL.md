@@ -38,6 +38,7 @@ Communities are private groups where you can share items with trusted members.
 ### 5. Adding Items
 You can add items to your personal collection or directly to a community.
 - **Book Search**: When adding a book, use the integrated search (Google Books) to automatically fetch metadata like Author, Title, and Cover Image.
+- **Bulk Import**: Quickly add your existing collection by uploading an Excel (.xlsx) or CSV file. Map your file's columns to fields like **Title**, **Author**, and **ISBN**. The system will automatically enrich your books with descriptions and covers from Google Books in the background.
 - **General Items**: For other resources (tools, games, etc.), manually enter the details and upload an image.
 - **Collections**: Organize your items into groups (e.g., "Fiction", "DIY Tools") for easier browsing.
 

@@ -25,6 +25,7 @@ import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useEffect, useMemo, useState } from "react"
 import {
   FaChevronLeft,
+  FaFileImport,
   FaFilter,
   FaFolder,
   FaList,
@@ -63,6 +64,7 @@ import {
   type LoanPublic,
 } from "@/client"
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
+import { ImportItems } from "@/components/Common/ImportItems"
 import ReviewModal from "@/components/Common/ReviewModal"
 import AddItem from "@/components/Items/AddItem"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
@@ -94,7 +96,9 @@ import useCustomToast from "@/hooks/useCustomToast"
 import { getImageUrl, groupItems } from "@/utils"
 
 const communitySearchSchema = z.object({
-  tab: z.enum(["board", "items", "members", "loans", "manage"]).catch("board"),
+  tab: z
+    .enum(["board", "items", "members", "loans", "manage", "import"])
+    .catch("board"),
   q: z.string().optional(),
 })
 
@@ -447,7 +451,10 @@ function CommunityBoard() {
   const [message, setMessage] = useState("")
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false)
   const [isRemoveMemberModalOpen, setIsRemoveMemberModalOpen] = useState(false)
-  const [memberToRemove, setMemberToRemove] = useState<{ id: string; name: string } | null>(null)
+  const [memberToRemove, setMemberToRemove] = useState<{
+    id: string
+    name: string
+  } | null>(null)
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
   const [selectedLoanForReview, setSelectedLoanForReview] =
     useState<LoanPublic | null>(null)
@@ -906,6 +913,11 @@ function CommunityBoard() {
             {isStaff && (
               <Tabs.Trigger value="manage" justifyContent="center">
                 <FiShield /> Manage
+              </Tabs.Trigger>
+            )}
+            {isAdmin && (
+              <Tabs.Trigger value="import" justifyContent="center">
+                <FaFileImport /> Import
               </Tabs.Trigger>
             )}
           </Tabs.List>
@@ -1620,6 +1632,12 @@ function CommunityBoard() {
                   </Box>
                 </VStack>
               </Tabs.Content>
+
+              {isAdmin && (
+                <Tabs.Content value="import" pt={6}>
+                  <ImportItems communityId={communityId} />
+                </Tabs.Content>
+              )}
             </>
           )}
         </Tabs.Root>

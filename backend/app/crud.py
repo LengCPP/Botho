@@ -17,6 +17,8 @@ from app.models import (
     ItemCreate,
     Notification,
     NotificationType,
+    StagedItem,
+    StagedItemStatus,
     User,
     UserCreate,
     UserProfile,
@@ -274,3 +276,33 @@ def delete_community(*, session: Session, community_id: uuid.UUID) -> None:
         session.delete(db_community)
         session.commit()
         delete_community_from_search(community_id)
+
+
+def create_staged_item(
+    *,
+    session: Session,
+    owner_id: uuid.UUID,
+    raw_data: dict[str, Any],
+    community_id: uuid.UUID | None = None,
+) -> StagedItem:
+    db_obj = StagedItem(
+        owner_id=owner_id,
+        community_id=community_id,
+        raw_data=raw_data,
+        status=StagedItemStatus.PENDING,
+    )
+    session.add(db_obj)
+    session.commit()
+    session.refresh(db_obj)
+    return db_obj
+
+
+def get_staged_item(*, session: Session, id: uuid.UUID) -> StagedItem | None:
+    return session.get(StagedItem, id)
+
+
+def delete_staged_item(*, session: Session, id: uuid.UUID) -> None:
+    db_obj = session.get(StagedItem, id)
+    if db_obj:
+        session.delete(db_obj)
+        session.commit()

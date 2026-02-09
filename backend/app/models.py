@@ -60,6 +60,13 @@ class ReadingLogStatus(str, Enum):
     DROPPED = "DROPPED"
 
 
+class StagedItemStatus(str, Enum):
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+
 class ForgivenessReason(str, Enum):
     GOOD_REASON = "GOOD_REASON"  # Borrower has good reason for losing item
     FOUND_AND_RETURNED = "FOUND_AND_RETURNED"  # Found and returned item
@@ -208,6 +215,19 @@ class Loan(SQLModel, table=True):
         sa_relationship_kwargs={"foreign_keys": "Loan.requester_id", "back_populates": "loans_in"}
     )
     community: "Community" = Relationship(back_populates="loans")
+
+
+class StagedItem(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    owner_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
+    community_id: uuid.UUID | None = Field(default=None, foreign_key="community.id", ondelete="CASCADE", index=True)
+    status: StagedItemStatus = Field(default=StagedItemStatus.PENDING)
+    raw_data: dict[str, Any] = Field(default={}, sa_column=Column(JSON))
+    error_log: str | None = Field(default=None, max_length=1000)
+    created_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    )
 
 
 # Main Models (Circular references handled by strings)
@@ -729,6 +749,25 @@ class BooksPublic(SQLModel):
 class ItemsPublic(SQLModel):
     data: list["ItemPublic"]
     count: int
+
+
+class StagedItemPublic(SQLModel):
+    id: uuid.UUID
+    owner_id: uuid.UUID
+    community_id: uuid.UUID | None
+    status: StagedItemStatus
+    raw_data: dict[str, Any]
+    error_log: str | None
+    created_at: datetime
+
+
+class StagedItemsPublic(SQLModel):
+    data: list[StagedItemPublic]
+    count: int
+    pending_count: int = 0
+    processing_count: int = 0
+    completed_count: int = 0
+    failed_count: int = 0
 
 
 class ItemReviewCreate(SQLModel):

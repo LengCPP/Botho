@@ -25,8 +25,8 @@ export const Toaster = () => {
           const baseColor = isSuccess ? "main" : isError ? "accent" : "gray"
 
           return (
-            <Toast.Root 
-              width={{ md: "sm" }} 
+            <Toast.Root
+              width={{ md: "sm" }}
               bg="bg.panel"
               borderWidth="1px"
               borderColor={`${baseColor}.muted`}

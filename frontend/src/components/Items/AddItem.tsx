@@ -506,7 +506,7 @@ const AddItem = ({
                     Select Genre
                   </option>
                   {selectedCategory &&
-                    BOOK_CLASSIFICATION[selectedCategory].map((genre) => (
+                    BOOK_CLASSIFICATION[selectedCategory]?.map((genre) => (
                       <option
                         key={genre}
                         value={genre}

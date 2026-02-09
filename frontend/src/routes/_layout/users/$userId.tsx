@@ -435,7 +435,9 @@ function UserProfilePage() {
         onClose={() => setIsRemoveFriendModalOpen(false)}
         onConfirm={() => removeFriendMutation.mutate(user.id)}
         title="Remove Friend"
-        message={`Are you sure you want to remove ${user.full_name || user.email} from your friends list?`}
+        message={`Are you sure you want to remove ${
+          user.full_name || user.email
+        } from your friends list?`}
         isLoading={removeFriendMutation.isPending}
       />
     </Container>

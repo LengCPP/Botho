@@ -16,6 +16,7 @@ from app.api.routes import (
     storage,
     users,
     utils,
+    imports,
 )
 from app.core.config import settings
 
@@ -24,6 +25,7 @@ api_router.include_router(login.router)
 api_router.include_router(users.router)
 api_router.include_router(utils.router)
 api_router.include_router(items.router)
+api_router.include_router(imports.router)
 api_router.include_router(communities.router, prefix="/communities", tags=["communities"])
 api_router.include_router(friends.router, prefix="/friends", tags=["friends"])
 api_router.include_router(search.router)

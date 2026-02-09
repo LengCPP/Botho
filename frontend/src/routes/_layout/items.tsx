@@ -5,8 +5,10 @@ import {
   EmptyState,
   Flex,
   Grid,
+  HStack,
   Heading,
   SimpleGrid,
+  Tabs,
   Text,
   VStack,
   useBreakpointValue,
@@ -18,6 +20,7 @@ import { useEffect, useMemo, useState } from "react"
 import {
   FaBook,
   FaChevronLeft,
+  FaFileImport,
   FaFilter,
   FaFolder,
   FaList,
@@ -28,6 +31,7 @@ import { FiSearch } from "react-icons/fi"
 import { z } from "zod"
 
 import { type ItemPublic, ItemsService } from "@/client"
+import { ImportItems } from "@/components/Common/ImportItems"
 import AddItem from "@/components/Items/AddItem"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
 import { GroupCard } from "@/components/Items/GroupCard"
@@ -78,6 +82,7 @@ const itemsSearchSchema = z.object({
     .enum(["subject", "genre", "category", "author"])
     .catch(() => (localStorage.getItem("organize_by") as any) || "subject"),
   q: z.string().optional(),
+  tab: z.enum(["items", "import"]).catch("items"),
 })
 
 function getItemsQueryOptions({
@@ -386,6 +391,7 @@ function Items() {
     display_type,
     organize_by,
     q,
+    tab,
   } = Route.useSearch()
 
   const updateSearch = (newParams: any) => {
@@ -404,42 +410,55 @@ function Items() {
           wrap="wrap"
           gap={4}
         >
-          <Heading size="lg">My Items</Heading>
-          <ItemsViewOptions
-            q={q}
-            onChangeQ={(val) => updateSearch({ q: val })}
-            viewMode={view_mode}
-            onChangeViewMode={(mode) => updateSearch({ view_mode: mode })}
-            displayType={display_type}
-            onChangeDisplayType={(type) =>
-              updateSearch({ display_type: type, subject: undefined })
-            }
-            sortBy={sort_by}
-            onChangeSortBy={(val) => updateSearch({ sort_by: val })}
-            sortOrder={sort_order}
-            onChangeSortOrder={(val) => updateSearch({ sort_order: val })}
-            limit={limit}
-            onChangeLimit={(val) => updateSearch({ limit: val })}
-            category={category}
-            onChangeCategory={(val) =>
-              updateSearch({ category: val, genre: undefined })
-            }
-            genre={genre}
-            onChangeGenre={(val) => updateSearch({ genre: val })}
-            organizeBy={organize_by}
-            onChangeOrganizeBy={(val) =>
-              updateSearch({ organize_by: val, subject: undefined })
-            }
-            showDisplayToggle={true}
-            showViewToggle={true}
-            showFilter={true}
-            showSort={true}
-            showLimit={true}
-          />
+          <HStack gap={4}>
+            <Heading size="lg">My Items</Heading>
+            <AddItem />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => updateSearch({ tab: tab === "import" ? "items" : "import" })}
+            >
+              <FaFileImport /> {tab === "import" ? "View Collection" : "Bulk Import"}
+            </Button>
+          </HStack>
+          
+          {tab !== "import" && (
+            <ItemsViewOptions
+              q={q}
+              onChangeQ={(val) => updateSearch({ q: val })}
+              viewMode={view_mode}
+              onChangeViewMode={(mode) => updateSearch({ view_mode: mode })}
+              displayType={display_type}
+              onChangeDisplayType={(type) =>
+                updateSearch({ display_type: type, subject: undefined })
+              }
+              sortBy={sort_by}
+              onChangeSortBy={(val) => updateSearch({ sort_by: val })}
+              sortOrder={sort_order}
+              onChangeSortOrder={(val) => updateSearch({ sort_order: val })}
+              limit={limit}
+              onChangeLimit={(val) => updateSearch({ limit: val })}
+              category={category}
+              onChangeCategory={(val) =>
+                updateSearch({ category: val, genre: undefined })
+              }
+              genre={genre}
+              onChangeGenre={(val) => updateSearch({ genre: val })}
+              organizeBy={organize_by}
+              onChangeOrganizeBy={(val) =>
+                updateSearch({ organize_by: val, subject: undefined })
+              }
+              showDisplayToggle={true}
+              showViewToggle={true}
+              showFilter={true}
+              showSort={true}
+              showLimit={true}
+            />
+          )}
         </Flex>
-        <AddItem />
       </VStack>
-      <ItemsTable />
+
+      {tab === "import" ? <ImportItems /> : <ItemsTable />}
     </Container>
   )
 }

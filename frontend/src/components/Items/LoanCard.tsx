@@ -572,7 +572,7 @@ export function LoanCard({
         />
       )}
 
-      <ForgiveModal 
+      <ForgiveModal
         loan={loan}
         isOpen={modalType === "forgive"}
         onClose={() => setModalType(null)}

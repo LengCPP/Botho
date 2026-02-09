@@ -97,7 +97,7 @@ const NotificationsList = ({
     if (!touchStart) return
     const currentTouch = e.targetTouches[0].clientX
     const diff = touchStart - currentTouch
-    
+
     // Only allow swiping left (diff > 0)
     if (diff > 0) {
       setSwipeOffset(Math.min(diff, 80))
@@ -106,7 +106,7 @@ const NotificationsList = ({
 
   const onTouchEnd = () => {
     if (!touchStart) return
-    
+
     if (swipeOffset > 70) {
       // Keep it open to show delete button
       setSwipeOffset(80)
@@ -173,7 +173,10 @@ const NotificationsList = ({
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
             style={{
-              transform: swipingId === notification.id ? `translateX(-${swipeOffset}px)` : "translateX(0)",
+              transform:
+                swipingId === notification.id
+                  ? `translateX(-${swipeOffset}px)`
+                  : "translateX(0)",
               transition: touchStart ? "none" : "transform 0.2s ease-out",
             }}
             _hover={{ bg: "bg.muted" }}
@@ -203,7 +206,7 @@ const NotificationsList = ({
                   {new Date(notification.created_at).toLocaleString()}
                 </Text>
               </VStack>
-              
+
               {/* Desktop Delete Button */}
               <IconButton
                 size="xs"

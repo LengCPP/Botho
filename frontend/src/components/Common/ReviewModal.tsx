@@ -77,7 +77,7 @@ const ReviewModal = ({ loan, isOpen, onClose }: ReviewModalProps) => {
       queryClient.invalidateQueries({ queryKey: ["reputation"] })
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
       queryClient.invalidateQueries({ queryKey: ["recent-activity"] })
-      
+
       reset()
       onClose()
     },
