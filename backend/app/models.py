@@ -477,7 +477,7 @@ class WorkMetadata(SQLModel, table=True):
     author: str = Field(primary_key=True, max_length=255)
     title: str = Field(primary_key=True, max_length=255)
     isbn: str | None = Field(default=None, index=True)
-    description: str | None = Field(default=None, max_length=2000)
+    description: str | None = Field(default=None, max_length=10000)
     category: str | None = Field(default=None, max_length=255)
     image_url: str | None = Field(default=None, max_length=512)
     tags: list[str] = Field(default=[], sa_column=Column(JSON))
@@ -541,7 +541,7 @@ class ItemConditionRatingPublic(SQLModel):
 
 class ItemBase(SQLModel):
     title: str = Field(min_length=0, max_length=255)
-    description: str | None = Field(default=None, max_length=1600)
+    description: str | None = Field(default=None, max_length=10000)
     author: str | None = Field(default=None, max_length=255)
     item_type: ItemType = Field(default=ItemType.general)
     image_url: str | None = Field(default=None, max_length=512)
@@ -690,7 +690,7 @@ class BookCreate(ItemCreate):
 
 class ItemUpdate(SQLModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
-    description: str | None = Field(default=None, max_length=1600)
+    description: str | None = Field(default=None, max_length=10000)
     author: str | None = Field(default=None, max_length=255)
     item_type: ItemType | None = None
     image_url: str | None = None

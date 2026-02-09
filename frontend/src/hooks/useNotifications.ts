@@ -50,9 +50,19 @@ export const useNotifications = (limit = 10) => {
     const socket = new WebSocket(wsUrl)
 
     socket.onmessage = (event) => {
-      // In a real app, you might want to check the message content
-      // and maybe show a toast or update the cache directly
-      queryClient.invalidateQueries({ queryKey: ["notifications"] })
+      try {
+        const message = JSON.parse(event.data)
+        // Invalidate notifications if it's a notification-related message
+        if (!message.type || !["ping", "IMPORT_ITEM_PROCESSED"].includes(message.type)) {
+          queryClient.invalidateQueries({ queryKey: ["notifications"] })
+        }
+        
+        // Dispatch custom event for other components to listen to
+        window.dispatchEvent(new CustomEvent("websocket-message", { detail: message }))
+      } catch (e) {
+        console.error("Error parsing websocket message:", e)
+        queryClient.invalidateQueries({ queryKey: ["notifications"] })
+      }
     }
 
     socket.onerror = (err) => {

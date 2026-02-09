@@ -249,27 +249,29 @@ async def websocket_endpoint(
 
     from app.core.db import engine
 
-    with Session(engine) as session:
-        try:
+    # Authenticate and get user, then release session immediately
+    try:
+        with Session(engine) as session:
             user = await get_current_user_ws(session=session, token=token)
-        except HTTPException:
-            if websocket.client_state == WebSocketState.CONNECTING:
-                await websocket.accept()
-            await websocket.close(code=1008)
-            return
+            user_id = user.id
+    except HTTPException:
+        if websocket.client_state == WebSocketState.CONNECTING:
+            await websocket.accept()
+        await websocket.close(code=1008)
+        return
 
-        await notification_manager.connect(websocket, user.id)
-        try:
-            while True:
-                # Use a small sleep/heartbeat to keep connection alive and detect disconnects
-                # We don't necessarily expect messages from client
-                try:
-                    # Try to receive with a timeout to detect disconnects while allowing server pushes
-                    data = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
-                except asyncio.TimeoutError:
-                    # Send a ping or just continue to keep loop alive
-                    if websocket.client_state == WebSocketState.CONNECTED:
-                        await websocket.send_json({"type": "ping"})
-                    continue
-        except (WebSocketDisconnect, Exception):
-            notification_manager.disconnect(websocket, user.id)
+    await notification_manager.connect(websocket, user_id)
+    try:
+        while True:
+            # Use a small sleep/heartbeat to keep connection alive and detect disconnects
+            # We don't necessarily expect messages from client
+            try:
+                # Try to receive with a timeout to detect disconnects while allowing server pushes
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+            except asyncio.TimeoutError:
+                # Send a ping or just continue to keep loop alive
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await websocket.send_json({"type": "ping"})
+                continue
+    except (WebSocketDisconnect, Exception):
+        notification_manager.disconnect(websocket, user_id)

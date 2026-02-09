@@ -62,6 +62,18 @@ export const ImportItems = ({ communityId }: ImportItemsProps) => {
     },
   })
 
+  // Listen for real-time processing updates via WebSocket event bus
+  useState(() => {
+    const handleWsMessage = (event: any) => {
+      const message = event.detail
+      if (message.type === "IMPORT_ITEM_PROCESSED") {
+        queryClient.invalidateQueries({ queryKey: ["stagedItems"] })
+      }
+    }
+    window.addEventListener("websocket-message", handleWsMessage)
+    return () => window.removeEventListener("websocket-message", handleWsMessage)
+  })
+
   const items = stagedItems?.data || []
   const totalStaged = stagedItems?.count || 0
   const processingCount = stagedItems?.processing_count || 0
