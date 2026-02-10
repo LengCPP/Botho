@@ -172,6 +172,7 @@ function BooksTable() {
 }
 
 function BookArchive() {
+  const queryClient = useQueryClient()
   const { page } = Route.useSearch()
   const { data } = useQuery(getBooksQueryOptions({ page }))
   const totalCount = data?.count || 0
@@ -184,6 +185,18 @@ function BookArchive() {
     },
     onError: () => {
       showErrorToast("Failed to start maintenance task")
+    },
+  })
+
+  const syncRegistryMutation = useMutation({
+    queryKey: ["sync-registry"],
+    mutationFn: () => (ItemsService as any).syncItemsToRegistry(),
+    onSuccess: () => {
+      showSuccessToast("Registry sync started")
+      queryClient.invalidateQueries({ queryKey: ["book-archive"] })
+    },
+    onError: () => {
+      showErrorToast("Failed to start registry sync")
     },
   })
 
@@ -201,15 +214,26 @@ function BookArchive() {
         <Box border="1px solid" borderColor="border.subtle" p={4} rounded="md" bg="bg.muted">
           <VStack align="start" gap={2}>
             <Text fontSize="xs" fontWeight="bold" color="fg.muted">Maintenance Actions</Text>
-            <Button 
-              size="xs" 
-              colorPalette="orange" 
-              variant="solid" 
-              onClick={() => maintenanceMutation.mutate()}
-              loading={maintenanceMutation.isPending}
-            >
-              <FiRefreshCw /> Trigger AI Bulk Classification & Cleanup
-            </Button>
+            <HStack gap={2}>
+              <Button 
+                size="xs" 
+                colorPalette="orange" 
+                variant="solid" 
+                onClick={() => maintenanceMutation.mutate()}
+                loading={maintenanceMutation.isPending}
+              >
+                <FiRefreshCw /> Trigger AI Bulk Classification
+              </Button>
+              <Button 
+                size="xs" 
+                colorPalette="blue" 
+                variant="solid" 
+                onClick={() => syncRegistryMutation.mutate()}
+                loading={syncRegistryMutation.isPending}
+              >
+                <FiRefreshCw /> Sync Registry from Items
+              </Button>
+            </HStack>
           </VStack>
         </Box>
       </Flex>

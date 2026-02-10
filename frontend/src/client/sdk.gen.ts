@@ -979,6 +979,20 @@ export class ItemsService {
      * @returns Message Successful Response
      * @throws ApiError
      */
+    /**
+     * Sync Items To Registry
+     * Scan all items and ensure they are recorded in the WorkMetadata registry.
+     * Superuser only. Processes in background.
+     * @returns Message Successful Response
+     * @throws ApiError
+     */
+    public static syncItemsToRegistry(): CancelablePromise<Message> {
+        return __request(OpenAPI, {
+            method: "POST",
+            url: "/api/v1/items/book-registry/sync"
+        });
+    }
+
     public static triggerSyncToArchive(data: ItemsTriggerSyncToArchiveData): CancelablePromise<ItemsTriggerSyncToArchiveResponse> {
         return __request(OpenAPI, {
             method: 'POST',

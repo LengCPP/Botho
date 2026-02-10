@@ -225,6 +225,7 @@ def login_google_init():
         f"&response_type=code"
         f"&scope=openid%20email%20profile"
         f"&redirect_uri={callback_url}"
+        f"&prompt=select_account"
     )
 
     return RedirectResponse(google_auth_url)

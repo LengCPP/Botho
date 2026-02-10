@@ -252,9 +252,9 @@ async def process_all_staged_items(
 import logging
 
 logger = logging.getLogger(__name__)
-google_books_semaphore = asyncio.Semaphore(5) # Throttling for external APIs
+google_books_semaphore = asyncio.Semaphore(2) # Throttling for external APIs
 # Limit concurrent enrichment tasks to avoid exhausting DB pool
-enrichment_semaphore = asyncio.Semaphore(10)
+enrichment_semaphore = asyncio.Semaphore(5)
 
 async def enrich_and_import_item(
     session_factory: Any,
@@ -336,6 +336,11 @@ async def enrich_and_import_item(
                         logger.info(f"Searching Google Books: {url}")
                         async with httpx.AsyncClient() as client:
                             response = await client.get(url, timeout=10.0)
+                            if response.status_code == 429:
+                                logger.warning("Google Books API Rate Limit hit (429). Waiting 5 seconds...")
+                                await asyncio.sleep(5.0)
+                                response = await client.get(url, timeout=10.0)
+
                             if response.status_code == 200:
                                 res_json = response.json()
                                 if res_json.get("items"):
@@ -434,6 +439,12 @@ async def enrich_and_import_item(
                     ol_authors = [a["name"] for a in open_library_data.get("authors", [])]
                     final_author = ", ".join(ol_authors) if ol_authors else author
                     
+                    # Handle Open Library description (can be string or dict with 'value')
+                    ol_desc = open_library_data.get("description")
+                    if isinstance(ol_desc, dict):
+                        ol_desc = ol_desc.get("value")
+                    final_description = ol_desc or open_library_data.get("notes") or final_description
+                    
                     ol_cover = open_library_data.get("cover", {})
                     thumb = ol_cover.get("large") or ol_cover.get("medium") or ol_cover.get("small")
                     if thumb:
@@ -491,6 +502,7 @@ async def enrich_and_import_item(
                 staged.status = StagedItemStatus.COMPLETED
                 session.add(staged)
                 session.commit()
+                session.refresh(db_item)
                 sync_item_to_search(db_item)
                 logger.info(f"Successfully imported and enriched: {final_title}")
                 

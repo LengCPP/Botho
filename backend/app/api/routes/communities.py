@@ -517,6 +517,132 @@ def update_community_notifications(
     return Message(message=f"Notifications {'enabled' if enabled else 'disabled'}")
 
 
+@router.get("/{id}/item-facets")
+def read_community_item_facets(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    group_by: str = "category",  # category, genre, author
+    q: str | None = None,
+) -> Any:
+    """
+    Get unique values and counts for a specific facet (category, genre, author)
+    belonging to a community. Leverages Meilisearch for high performance.
+    """
+    community = session.get(Community, id)
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    # Access check: member or admin
+    statement = select(CommunityMember).where(
+        CommunityMember.community_id == id,
+        CommunityMember.user_id == current_user.id,
+        CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+    )
+    membership = session.exec(statement).first()
+    if not membership and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Must be a member to view community items")
+
+    # Map 'subject' to 'tags' for Meilisearch indexing
+    facet_field = "tags" if group_by == "subject" else group_by
+
+    from app.search import client as meili_client
+    meili_success = False
+    try:
+        index = meili_client.index("items")
+        filters = [f'(owner_id = "{id}" OR pooled_in = "{id}")']
+        filters.append("is_available = true")
+        
+        search_params = {
+            "limit": 0,  # We only care about facets
+            "filter": " AND ".join(filters),
+            "facets": [facet_field]
+        }
+        
+        search_results = index.search(q or "", search_params)
+        facet_distribution = search_results.get("facetDistribution", {})
+        counts = facet_distribution.get(facet_field, {})
+        
+        # Get sample images for top 50 facets to avoid performance issues
+        results = []
+        sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:50]
+        
+        for name, count in sorted_counts:
+            sample_params = {
+                "limit": 1,
+                "filter": f'{facet_field} = "{name}" AND {" AND ".join(filters)}'
+            }
+            sample_res = index.search(q or "", sample_params)
+            sample_image = None
+            if sample_res["hits"]:
+                sample_image = sample_res["hits"][0].get("image_url")
+            
+            results.append({
+                "name": name, 
+                "count": count,
+                "sample_image": sample_image
+            })
+        
+        # Check if there are items that are not captured by facets (uncategorized/untagged)
+        others_filter = filters + [f"({facet_field} IS NULL OR {facet_field} IS EMPTY OR {facet_field} NOT EXISTS)"]
+        try:
+            others_res = index.search(q or "", {"limit": 1, "filter": " AND ".join(others_filter)})
+            others_count = others_res.get("totalHits") or others_res.get("estimatedTotalHits", 0)
+            
+            if others_count > 0:
+                results.append({
+                    "name": "Others",
+                    "count": others_count,
+                    "sample_image": others_res["hits"][0].get("image_url") if others_res["hits"] else None
+                })
+        except:
+            pass
+            
+        meili_success = True
+        return results
+    except Exception:
+        meili_success = False
+
+    if not meili_success:
+        # Fallback to SQL for facets
+        results = []
+        # Filter for items in this community (owned or pooled)
+        comm_item_ids = select(CommunityItem.item_id).where(CommunityItem.community_id == id)
+        base_filter = or_(Item.owner_id == id, Item.id.in_(comm_item_ids))
+        
+        if group_by == "author":
+            stmt = select(Item.author, func.count(Item.id), func.max(Item.image_url)).where(base_filter).group_by(Item.author)
+            rows = session.exec(stmt).all()
+            for author, count, img in rows:
+                results.append({"name": author or "Others", "count": count, "sample_image": img})
+        elif group_by in ["category", "genre"]:
+            json_field = group_by
+            stmt = select(
+                func.json_extract_path_text(Item.extra_data, json_field).label("name"),
+                func.count(Item.id).label("count"),
+                func.max(Item.image_url).label("sample_image")
+            ).where(base_filter).group_by("name")
+            rows = session.exec(stmt).all()
+            for name, count, img in rows:
+                results.append({"name": name or "Others", "count": count, "sample_image": img})
+        elif group_by == "subject":
+            stmt = select(
+                func.json_array_elements_text(WorkMetadata.tags).label("name"),
+                func.count(Item.id).label("count"),
+                func.max(Item.image_url).label("sample_image")
+            ).join(
+                WorkMetadata, (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title)
+            ).where(base_filter).group_by("name")
+            try:
+                rows = session.exec(stmt).all()
+                for name, count, img in rows:
+                    results.append({"name": name, "count": count, "sample_image": img})
+            except Exception:
+                pass
+        return results
+
+
 @router.get("/{id}/items", response_model=ItemsPublic)
 def read_community_items(
     *,
@@ -525,12 +651,17 @@ def read_community_items(
     id: uuid.UUID,
     skip: int = 0,
     limit: int = 100,
+    sort_by: str = "created_at",
+    sort_order: str = "desc",
+    category: str | None = None,
+    genre: str | None = None,
+    subject: str | None = None,
     q: str | None = None,
 ) -> Any:
     """
     Get items belonging to a community.
     Includes both pooled items (via CommunityItem) and exclusively community-owned items.
-    Supports searching via 'q' using Meilisearch.
+    Supports searching, sorting, and filtering via Meilisearch.
     """
     community = session.get(Community, id)
     if not community:
@@ -549,37 +680,56 @@ def read_community_items(
     # Exclude items with DEFAULTED loans
     defaulted_item_ids = select(Loan.item_id).where(Loan.status == LoanStatus.DEFAULTED)
 
-    if q:
-        from app.search import client as meili_client
-        try:
-            index = meili_client.index("items")
-            # Filter: item belongs to community (owned or pooled)
-            # Meilisearch 'pooled_in' is an array, we check if community ID is in it
-            filter_expr = f'(owner_id = "{id}" OR pooled_in = "{id}") AND is_available = true'
+    from app.search import client as meili_client
+    meili_success = False
+    
+    try:
+        index = meili_client.index("items")
+        # Filter: item belongs to community (owned or pooled)
+        # Meilisearch 'pooled_in' is an array, we check if community ID is in it
+        filters = [f'(owner_id = "{id}" OR pooled_in = "{id}")']
+        filters.append("is_available = true")
+        
+        if category:
+            filters.append(f"category = '{category}'")
+        if genre:
+            filters.append(f"genre = '{genre}'")
+        if subject:
+            filters.append(f"tags = '{subject}'")
             
-            search_params = {
-                "limit": limit,
-                "offset": skip,
-                "filter": filter_expr
-            }
-            
-            search_results = index.search(q, search_params)
-            item_ids = [uuid.UUID(hit["id"]) for hit in search_results["hits"]]
-            
-            if not item_ids:
-                return ItemsPublic(data=[], count=0)
+        search_params = {
+            "limit": limit,
+            "offset": skip,
+            "filter": " AND ".join(filters),
+            "sort": [f"{sort_by if sort_by != 'created_at' else 'id'}:{sort_order}"]
+        }
+        
+        search_results = index.search(q or "", search_params)
+        item_ids = [uuid.UUID(hit["id"]) for hit in search_results["hits"]]
+        count = search_results.get("totalHits", len(item_ids))
+        facets = search_results.get("facetDistribution")
+        facet_stats = search_results.get("facetStats")
+        
+        if not item_ids:
+            return ItemsPublic(data=[], count=count, facets=facets, facet_stats=facet_stats)
                 
-            # Fetch from DB preserving order
-            items = session.exec(
-                select(Item)
-                .where(Item.id.in_(item_ids))
-                .where(Item.id.not_in(defaulted_item_ids))
-            ).all()
-            item_map = {item.id: item for item in items}
-            items = [item_map[iid] for iid in item_ids if iid in item_map]
-            count = len(items)
-        except Exception:
-            # Fallback to SQL
+        # Fetch from DB preserving order
+        db_items = session.exec(
+            select(Item)
+            .where(Item.id.in_(item_ids))
+            .where(Item.id.not_in(defaulted_item_ids))
+        ).all()
+        item_map = {item.id: item for item in db_items}
+        items = [item_map[iid] for iid in item_ids if iid in item_map]
+        meili_success = True
+    except Exception:
+        meili_success = False
+
+    if not meili_success:
+        facets = {}
+        facet_stats = {}
+        # Fallback to SQL
+        if q:
             q_filter = or_(
                 col(Item.title).ilike(f"%{q}%"),
                 col(Item.description).ilike(f"%{q}%"),
@@ -594,23 +744,46 @@ def read_community_items(
                     Item.owner_id == id
                 )
             ).where(Item.id.not_in(defaulted_item_ids))
-            count_stmt = select(func.count()).select_from(statement.subquery())
-            count = session.exec(count_stmt).one()
-            items = session.exec(statement.offset(skip).limit(limit)).all()
-    else:
-        # Standard SQL query
-        statement = select(Item).where(
-            or_(
-                Item.id.in_(
-                    select(CommunityItem.item_id).where(CommunityItem.community_id == id)
-                ),
-                Item.owner_id == id
+        else:
+            statement = select(Item).where(
+                or_(
+                    Item.id.in_(
+                        select(CommunityItem.item_id).where(CommunityItem.community_id == id)
+                    ),
+                    Item.owner_id == id
+                )
+            ).where(Item.id.not_in(defaulted_item_ids))
+
+        # Basic SQL filtering
+        if category:
+            statement = statement.where(
+                func.json_extract_path_text(Item.extra_data, "category") == category
             )
-        ).where(Item.id.not_in(defaulted_item_ids))
+        if genre:
+            statement = statement.where(
+                func.json_extract_path_text(Item.extra_data, "genre") == genre
+            )
+        if subject:
+            # We filter by subject in SQL by checking the WorkMetadata tags via a join
+            statement = statement.join(
+                WorkMetadata, 
+                (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title)
+            ).where(func.json_extract_path_text(WorkMetadata.tags, '$') .ilike(f'%"{subject}"%'))
+
+        # Apply sorting
+        sort_column = Item.created_at
+        if sort_by == "title":
+            sort_column = Item.title
+        elif sort_by == "author":
+            sort_column = Item.author
+
+        if sort_order == "desc":
+            statement = statement.order_by(sort_column.desc())
+        else:
+            statement = statement.order_by(sort_column.asc())
 
         count_stmt = select(func.count()).select_from(statement.subquery())
         count = session.exec(count_stmt).one()
-
         items = session.exec(statement.offset(skip).limit(limit)).all()
 
     # Get all CommunityItem meta for pooled items in this batch
@@ -623,10 +796,33 @@ def read_community_items(
     ).all()
     comm_item_map = {ci.item_id: ci for ci in comm_items}
 
+    # Bulk fetch WorkMetadata
+    work_keys = {(item.author, item.title) for item in items if item.author and item.title}
+    work_meta_map = {}
+    if work_keys:
+        from sqlalchemy import tuple_
+        work_metas = session.exec(
+            select(WorkMetadata).where(
+                tuple_(WorkMetadata.author, WorkMetadata.title).in_(list(work_keys))
+            )
+        ).all()
+        for wm in work_metas:
+            work_meta_map[(wm.author, wm.title)] = wm
+
+    # Bulk fetch active loans for availability
+    active_loan_item_ids = set(session.exec(
+        select(Loan.item_id).where(
+            Loan.item_id.in_(item_ids),
+            Loan.status.in_([
+                LoanStatus.ACTIVE, LoanStatus.PENDING, LoanStatus.ACCEPTED, 
+                LoanStatus.RETURN_PENDING, LoanStatus.EXTENSION_PENDING, LoanStatus.DEFAULTED
+            ])
+        )
+    ).all())
+
     items_public = []
     for item in items:
-        # Check availability
-        is_avail = check_item_availability(session, item.id)
+        is_avail = item.id not in active_loan_item_ids
 
         owner_pub = None
         community_pub = None
@@ -635,13 +831,6 @@ def read_community_items(
             owner_pub.is_available = is_avail
         elif item.community_owner:
             community_pub = item.community_owner
-
-        cond_data = {
-            "average_grade": 0.0,
-            "notes": []
-        }
-        # We could import get_item_condition_data from items.py but for now let's keep it simple
-        # or just use a default since it's Optional
 
         item_pub = ItemPublic(
             id=item.id,
@@ -658,8 +847,8 @@ def read_community_items(
             owner=owner_pub,
             community_owner=community_pub,
             is_available=is_avail,
-            work_metadata=session.get(WorkMetadata, (item.author, item.title)) if item.author else None,
-            had_possession=False # Simplified
+            work_metadata=work_meta_map.get((item.author, item.title)) if item.author else None,
+            had_possession=item.owner_id == current_user.id # Simplified
         )
 
         # Add pooling metadata if applicable
@@ -670,7 +859,7 @@ def read_community_items(
 
         items_public.append(item_pub)
 
-    return ItemsPublic(data=items_public, count=count)
+    return ItemsPublic(data=items_public, count=count, facets=facets, facet_stats=facet_stats)
 
 
 
@@ -720,6 +909,9 @@ def add_item_to_community(
     session.add(comm_item)
 
     session.commit()
+    from app.search import sync_item_to_search
+    session.refresh(item)
+    sync_item_to_search(item)
     return Message(message="Item added to community pool")
 
 
@@ -858,6 +1050,9 @@ async def ratify_donation(
     session.add(item)
     session.add(comm_item)
     session.commit()
+    from app.search import sync_item_to_search
+    session.refresh(item)
+    sync_item_to_search(item)
 
     # Notify donor
     await notify_user(
@@ -915,14 +1110,20 @@ def remove_item_from_community(
     if not is_admin and not is_adder:
         raise HTTPException(status_code=403, detail="Not enough permissions to remove this item")
 
+    from app.search import delete_item_from_search, sync_item_to_search
     if is_owned:
         # If community owns it, delete the item itself (cascades to CommunityItem)
+        item_id_to_del = item.id
         session.delete(item)
+        session.commit()
+        delete_item_from_search(item_id_to_del)
     else:
         # Just remove pooling metadata
         session.delete(comm_item)
+        session.commit()
+        session.refresh(item)
+        sync_item_to_search(item)
 
-    session.commit()
     return Message(message="Item removed from community")
 
 

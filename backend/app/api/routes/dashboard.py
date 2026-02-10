@@ -16,7 +16,10 @@ from app.models import (
     LoanStatus,
     User,
     ItemsPublic,
-    ItemPublic
+    ItemPublic,
+    WorkMetadata,
+    ItemConditionRating,
+    ItemOwnerPublic
 )
 from app.api.utils import (
     check_item_availability, 
@@ -142,10 +145,70 @@ def get_recent_activity(
     
     items = session.exec(statement).all()
     
+    if not items:
+        return ItemsPublic(data=[], count=0)
+
+    # 3. Bulk Enrichment (Optimized)
+    item_ids = [item.id for item in items]
+    work_keys = {(item.author, item.title) for item in items if item.author and item.title}
+    
+    # 3.1 Bulk fetch WorkMetadata
+    work_meta_map = {}
+    if work_keys:
+        from sqlalchemy import tuple_
+        work_metas = session.exec(
+            select(WorkMetadata).where(
+                tuple_(WorkMetadata.author, WorkMetadata.title).in_(list(work_keys))
+            )
+        ).all()
+        for wm in work_metas:
+            work_meta_map[(wm.author, wm.title)] = wm
+
+    # 3.2 Bulk fetch active loans for availability
+    active_loan_item_ids = set(session.exec(
+        select(Loan.item_id).where(
+            Loan.item_id.in_(item_ids),
+            Loan.status.in_([
+                LoanStatus.ACTIVE, LoanStatus.PENDING, LoanStatus.ACCEPTED, 
+                LoanStatus.RETURN_PENDING, LoanStatus.EXTENSION_PENDING, LoanStatus.DEFAULTED
+            ])
+        )
+    ).all())
+
+    # 3.3 Bulk fetch possession history for current user
+    possession_loan_item_ids = set(session.exec(
+        select(Loan.item_id).where(
+            Loan.item_id.in_(item_ids),
+            Loan.requester_id == current_user.id,
+            Loan.status.in_([
+                LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING, 
+                LoanStatus.RETURNED, LoanStatus.EXTENSION_PENDING
+            ])
+        )
+    ).all())
+
+    # 3.4 Bulk fetch condition ratings
+    condition_ratings = session.exec(
+        select(ItemConditionRating).where(ItemConditionRating.item_id.in_(item_ids))
+    ).all()
+    
+    from app.models import ItemConditionRating
+    condition_data_map = {} 
+    for r in condition_ratings:
+        if r.item_id not in condition_data_map:
+            condition_data_map[r.item_id] = {"sum": 0.0, "count": 0, "notes": []}
+        condition_data_map[r.item_id]["sum"] += r.grade
+        condition_data_map[r.item_id]["count"] += 1
+        if r.notes:
+            condition_data_map[r.item_id]["notes"].append({
+                "user_id": str(r.user_id),
+                "note": r.notes,
+                "created_at": r.created_at.isoformat() if r.created_at else None
+            })
+
     public_items = []
     for item in items:
-        # Standard enrichment from items.py logic
-        is_avail = check_item_availability(session, item.id)
+        is_avail = item.id not in active_loan_item_ids
         owner_pub = None
         community_pub = None
         
@@ -155,8 +218,9 @@ def get_recent_activity(
         elif item.community_owner:
             community_pub = item.community_owner
             
-        cond_data = get_item_condition_data(session, item.id)
-        had_possession = check_possession(session, current_user.id, item.id)
+        cond_stats = condition_data_map.get(item.id, {"sum": 0.0, "count": 0, "notes": []})
+        avg_grade = cond_stats["sum"] / cond_stats["count"] if cond_stats["count"] > 0 else 0.0
+        had_possession = item.owner_id == current_user.id or item.id in possession_loan_item_ids
         
         item_pub = ItemPublic(
             id=item.id,
@@ -169,15 +233,15 @@ def get_recent_activity(
             extra_data=item.extra_data,
             info={
                 **(item.info or {}),
-                "average_condition_grade": cond_data["average_grade"],
-                "physical_notes": cond_data["notes"]
+                "average_condition_grade": avg_grade,
+                "physical_notes": cond_stats["notes"]
             },
             count=item.count,
             created_at=item.created_at,
             owner=owner_pub,
             community_owner=community_pub,
             is_available=is_avail,
-            work_metadata=get_work_metadata(session, item.author, item.title),
+            work_metadata=work_meta_map.get((item.author, item.title)),
             had_possession=had_possession
         )
         public_items.append(item_pub)

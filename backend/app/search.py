@@ -5,7 +5,32 @@ import meilisearch
 from app.core.config import settings
 from app.models import Community, Item, WorkMetadata
 
-client = meilisearch.Client(settings.MEILI_URL, settings.MEILI_MASTER_KEY)
+client = meilisearch.Client(settings.MEILI_URL, settings.MEILI_MASTER_KEY, timeout=5)
+
+def configure_search():
+    """Set up Meilisearch indexes with correct filterable and sortable attributes."""
+    items_index = client.index("items")
+    items_index.update_filterable_attributes([
+        "owner_id", 
+        "pooled_in", 
+        "category", 
+        "genre", 
+        "tags",
+        "item_type", 
+        "is_available"
+    ])
+    items_index.update_sortable_attributes([
+        "title", 
+        "author", 
+        "created_at"
+    ])
+
+    works_index = client.index("works")
+    works_index.update_filterable_attributes(["isbn", "category", "tags"])
+    works_index.update_sortable_attributes(["title", "author"])
+
+    communities_index = client.index("communities")
+    communities_index.update_filterable_attributes(["id"])
 
 def sync_item_to_search(item: Item):
     index = client.index("items")
@@ -19,6 +44,16 @@ def sync_item_to_search(item: Item):
         
     # Get pooled communities
     pooled_in = [str(c.id) for c in item.communities]
+
+    # Fetch tags from WorkMetadata registry
+    tags = []
+    from app.core.db import engine
+    from sqlmodel import Session, select
+    if item.author and item.title:
+        with Session(engine) as session:
+            meta = session.get(WorkMetadata, (item.author, item.title))
+            if meta:
+                tags = meta.tags
     
     document = {
         "id": str(item.id),
@@ -26,11 +61,14 @@ def sync_item_to_search(item: Item):
         "description": item.description,
         "author": item.author,
         "item_type": str(item.item_type.value) if hasattr(item.item_type, 'value') else str(item.item_type),
-        "info": item.info,
+        "image_url": item.image_url,
         "owner_id": str(item.owner_id),
         "pooled_in": pooled_in,
         "category": category,
         "genre": genre,
+        "tags": tags,
+        "created_at": int(item.created_at.timestamp()) if item.created_at else None,
+        "is_available": True
     }
     index.add_documents([document])
 

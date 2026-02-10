@@ -24,7 +24,7 @@ Welcome to **Botho**, your platform for sharing, lending, and managing resources
 Communities are private groups where you can share items with trusted members.
 - **Join a Community**: Search for communities and click **Join**. If a community requires approval, your request will be sent to the administrators.
 - **Create a Community**: Start your own community, set its privacy (Public or Private), and decide if new members need approval.
-- **Collections**: Community 'bucket' collections allow for organized sharing with auto-cleanup and member ownership.
+- **Collections**: Frontend-only collections allow for quick filtering and organizing items by subject, genre, category, or author.
 - **Management**: Community admins can manage members, post announcements, and moderate shared items.
 
 ### 4. Friends

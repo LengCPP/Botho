@@ -71,41 +71,98 @@ const fetchBooks = async (
   )}&maxResults=5&printType=books${apiKey ? `&key=${apiKey}` : ""}`
 
   const response = await fetch(url)
-  if (!response.ok) throw new Error("Failed to fetch books")
-  const data = await response.json()
+  let googleResults: BookResult[] = []
 
-  const googleResults = (data.items || []).map((item: any) => {
-    const volumeInfo = item.volumeInfo
-    const isbns = volumeInfo.industryIdentifiers || []
-    const isbn13 = isbns.find((id: any) => id.type === "ISBN_13")?.identifier
-    const isbn10 = isbns.find((id: any) => id.type === "ISBN_10")?.identifier
+  if (response.status === 429) {
+    console.warn("Google Books API Rate Limit hit, falling back to Open Library")
+  } else if (!response.ok) {
+    console.error("Google Books API failed, falling back to Open Library")
+  } else {
+    const data = await response.json()
+    googleResults = (data.items || []).map((item: any) => {
+      const volumeInfo = item.volumeInfo
+      const isbns = volumeInfo.industryIdentifiers || []
+      const isbn13 = isbns.find((id: any) => id.type === "ISBN_13")?.identifier
+      const isbn10 = isbns.find((id: any) => id.type === "ISBN_10")?.identifier
 
-    const imageLinks = volumeInfo.imageLinks
-    let thumbnail =
-      imageLinks?.medium ||
-      imageLinks?.small ||
-      imageLinks?.smallThumbnail ||
-      FALLBACK_BOOK_COVER
+      const imageLinks = volumeInfo.imageLinks
+      let thumbnail =
+        imageLinks?.medium ||
+        imageLinks?.small ||
+        imageLinks?.smallThumbnail ||
+        FALLBACK_BOOK_COVER
 
-    if (thumbnail && thumbnail !== FALLBACK_BOOK_COVER) {
-      thumbnail = thumbnail
-        .replace("http://", "https://")
-        .replace("zoom=1", "zoom=2")
-        .replace("&edge=curl", "")
+      if (thumbnail && thumbnail !== FALLBACK_BOOK_COVER) {
+        thumbnail = thumbnail
+          .replace("http://", "https://")
+          .replace("zoom=1", "zoom=2")
+          .replace("&edge=curl", "")
+      }
+
+      return {
+        title: volumeInfo.title,
+        authors: volumeInfo.authors || [],
+        description: volumeInfo.description || "",
+        isbn: isbn13 || isbn10 || "",
+        thumbnail: thumbnail,
+        categories: volumeInfo.categories || [],
+        source: "google",
+      }
+    })
+  }
+
+  // Fallback to Open Library if Google failed or returned nothing
+  if (googleResults.length === 0) {
+    try {
+      const olUrl =
+        searchType === "isbn"
+          ? `https://openlibrary.org/api/books?bibkeys=ISBN:${query}&format=json&jscmd=data`
+          : `https://openlibrary.org/search.json?title=${encodeURIComponent(
+              query,
+            )}&limit=5`
+
+      const olResponse = await fetch(olUrl)
+      if (olResponse.ok) {
+        const olData = await olResponse.json()
+        if (searchType === "isbn") {
+          const key = `ISBN:${query}`
+          if (olData[key]) {
+            const b = olData[key]
+            let desc = b.description
+            if (typeof desc === "object" && desc?.value) {
+              desc = desc.value
+            }
+            googleResults.push({
+              title: b.title,
+              authors: (b.authors || []).map((a: any) => a.name),
+              description: desc || b.notes || "",
+              isbn: query,
+              thumbnail:
+                b.cover?.large || b.cover?.medium || FALLBACK_BOOK_COVER,
+              categories: (b.subjects || []).map((s: any) => s.name),
+              source: "openlibrary",
+            })
+          }
+        } else {
+          googleResults = (olData.docs || []).map((doc: any) => ({
+            title: doc.title,
+            authors: doc.author_name || [],
+            description: "",
+            isbn: (doc.isbn || [])[0] || "",
+            thumbnail: doc.cover_i
+              ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
+              : FALLBACK_BOOK_COVER,
+            categories: (doc.subject || []).slice(0, 3),
+            source: "openlibrary",
+          }))
+        }
+      }
+    } catch (e) {
+      console.error("Open Library fallback failed", e)
     }
+  }
 
-    return {
-      title: volumeInfo.title,
-      authors: volumeInfo.authors || [],
-      description: volumeInfo.description || "",
-      isbn: isbn13 || isbn10 || "",
-      thumbnail: thumbnail,
-      categories: volumeInfo.categories || [],
-      source: "google",
-    }
-  }) as BookResult[]
-
-  // De-duplicate: Prefer local over Google if ISBN matches
+  // De-duplicate: Prefer local over external if ISBN matches
   const combined = [...localResults]
   const localIsbns = new Set(localResults.map((r) => r.isbn).filter((i) => i))
 

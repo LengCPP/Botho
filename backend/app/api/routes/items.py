@@ -47,6 +47,7 @@ from app.models import (
     UsersPublic,
     WorkMetadata,
     WorkMetadataPublic,
+    WorksMetadataPublic,
     WorkMetadataUpdate,
 )
 from app.search import (
@@ -91,6 +92,43 @@ async def trigger_sync_to_archive(
     
     await sync_item_to_archive(session, id)
     return Message(message="Item synced to archive.")
+
+
+@router.post("/book-registry/sync", response_model=Message)
+async def sync_items_to_registry(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
+) -> Any:
+    """
+    Scan all items and ensure they are recorded in the WorkMetadata registry.
+    Superuser only. Processes in background.
+    """
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+
+    async def sync_task():
+        # Using a new session for background task
+        from app.core.db import engine
+        from sqlmodel import Session
+        with Session(engine) as bg_session:
+            items = bg_session.exec(select(Item).where(Item.item_type == ItemType.book)).all()
+            for item in items:
+                # Use existing helper to populate registry
+                ensure_work_metadata(
+                    bg_session,
+                    item.author,
+                    item.title,
+                    isbn=item.extra_data.get("isbn") if item.extra_data else None,
+                    description=item.description,
+                    category=item.extra_data.get("category") if item.extra_data else None,
+                    image_url=item.image_url
+                )
+            bg_session.commit()
+
+    background_tasks.add_task(sync_task)
+    return Message(message=f"Global registry sync started in background.")
 
 
 @router.get("/book-registry", response_model=WorksMetadataPublic)
@@ -378,6 +416,135 @@ def recommend_items(
     return ItemsPublic(data=ordered_items, count=len(ordered_items))
 
 
+@router.get("/facets")
+def read_item_facets(
+    session: SessionDep,
+    current_user: CurrentUser,
+    group_by: str = "category",
+    owner_id: uuid.UUID | None = None,
+    q: str | None = None,
+) -> Any:
+    """
+    Get unique values and counts for a specific facet for user or community items.
+    """
+    target_owner_id = owner_id or current_user.id
+    
+    # Simple permission check (same as read_items)
+    if target_owner_id != current_user.id and not current_user.is_superuser:
+        is_community = session.exec(
+            select(CommunityMember).where(
+                CommunityMember.community_id == target_owner_id,
+                CommunityMember.user_id == current_user.id,
+                CommunityMember.status == CommunityMemberStatus.ACCEPTED
+            )
+        ).first()
+        if not is_community:
+            raise HTTPException(status_code=403, detail="Not enough permissions")
+
+    # Map 'subject' to 'tags' for Meilisearch indexing
+    facet_field = "tags" if group_by == "subject" else group_by
+
+    from app.search import client as meili_client
+    meili_success = False
+    try:
+        index = meili_client.index("items")
+        filters = [f"owner_id = '{target_owner_id}'"]
+        
+        search_params = {
+            "limit": 0,
+            "filter": " AND ".join(filters),
+            "facets": [facet_field]
+        }
+        
+        # Use a short timeout for facet retrieval to avoid hanging
+        search_results = index.search(q or "", search_params)
+        facet_distribution = search_results.get("facetDistribution", {})
+        counts = facet_distribution.get(facet_field, {})
+        
+        results = []
+        # Limit to top 50 facets to avoid performance issues with sample images
+        sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:50]
+        
+        for name, count in sorted_counts:
+            # For each facet, we want ONE sample image. 
+            # To optimize, we could use multi-search, but let's just limit the loop for now.
+            sample_params = {
+                "limit": 1,
+                "filter": f"{facet_field} = \"{name}\" AND {' AND '.join(filters)}"
+            }
+            sample_res = index.search(q or "", sample_params)
+            sample_image = None
+            if sample_res["hits"]:
+                sample_image = sample_res["hits"][0].get("image_url")
+            
+            results.append({
+                "name": name, 
+                "count": count,
+                "sample_image": sample_image
+            })
+            
+        # Check for uncategorized items
+        others_filter = filters + [f"({facet_field} IS NULL OR {facet_field} IS EMPTY OR {facet_field} NOT EXISTS)"]
+        try:
+            others_res = index.search(q or "", {"limit": 1, "filter": " AND ".join(others_filter)})
+            others_count = others_res.get("totalHits") or others_res.get("estimatedTotalHits", 0)
+            if others_count > 0:
+                results.append({
+                    "name": "Others",
+                    "count": others_count,
+                    "sample_image": others_res["hits"][0].get("image_url") if others_res["hits"] else None
+                })
+        except:
+            pass
+
+        meili_success = True
+        return results
+    except Exception:
+        meili_success = False
+
+    if not meili_success:
+        # SQL Fallback for facets
+        results = []
+        if group_by == "author":
+            # Group by author
+            stmt = select(Item.author, func.count(Item.id), func.max(Item.image_url)).where(Item.owner_id == target_owner_id).group_by(Item.author)
+            rows = session.exec(stmt).all()
+            for author, count, img in rows:
+                if author:
+                    results.append({"name": author, "count": count, "sample_image": img})
+                else:
+                    results.append({"name": "Others", "count": count, "sample_image": img})
+        elif group_by in ["category", "genre"]:
+            # Group by JSON field
+            json_field = group_by
+            stmt = select(
+                func.json_extract_path_text(Item.extra_data, json_field).label("name"),
+                func.count(Item.id).label("count"),
+                func.max(Item.image_url).label("sample_image")
+            ).where(Item.owner_id == target_owner_id).group_by("name")
+            rows = session.exec(stmt).all()
+            for name, count, img in rows:
+                results.append({"name": name or "Others", "count": count, "sample_image": img})
+        elif group_by == "subject":
+            # Subjects (tags) are in WorkMetadata, requires join
+            stmt = select(
+                func.json_array_elements_text(WorkMetadata.tags).label("name"),
+                func.count(Item.id).label("count"),
+                func.max(Item.image_url).label("sample_image")
+            ).join(
+                WorkMetadata, (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title)
+            ).where(Item.owner_id == target_owner_id).group_by("name")
+            try:
+                rows = session.exec(stmt).all()
+                for name, count, img in rows:
+                    results.append({"name": name, "count": count, "sample_image": img})
+            except Exception:
+                # complex JSON array grouping might fail on some DBs
+                pass
+        
+        return results
+
+
 @router.get("/", response_model=ItemsPublic)
 def read_items(
     session: SessionDep,
@@ -389,6 +556,7 @@ def read_items(
     sort_order: str = "desc",
     category: str | None = None,
     genre: str | None = None,
+    subject: str | None = None,
     item_type: ItemType | None = None,
     enable_feed: bool = False,
     q: str | None = None,
@@ -471,6 +639,8 @@ def read_items(
             filters.append(f"category = '{category}'")
         if genre:
             filters.append(f"genre = '{genre}'")
+        if subject:
+            filters.append(f"tags = '{subject}'")
         if item_type:
             filters.append(f"item_type = '{item_type.value}'")
         if feed_mode:
@@ -484,7 +654,7 @@ def read_items(
             "limit": limit,
             "offset": skip,
             "filter": " AND ".join(filters) if filters else None,
-            "facets": ["category", "genre", "author", "item_type"],
+            "facets": ["category", "genre", "author", "item_type", "tags"],
             "sort": [f"{sort_by if sort_by != 'created_at' else 'id'}:{sort_order}"]
         }
         
@@ -511,6 +681,8 @@ def read_items(
 
     if not meili_success:
         # Fallback to SQL if Meilisearch fails or is not applicable
+        facets = {} # SQL fallback doesn't easily calculate all facets
+        facet_stats = {}
         if q:
             q_filter = or_(
                 col(Item.title).ilike(f"%{q}%"),
@@ -534,6 +706,11 @@ def read_items(
                 statement = statement.where(func.json_extract_path_text(Item.extra_data, 'category') == category)
             if genre:
                 statement = statement.where(func.json_extract_path_text(Item.extra_data, 'genre') == genre)
+            if subject:
+                statement = statement.join(
+                    WorkMetadata, 
+                    (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title)
+                ).where(func.json_extract_path_text(WorkMetadata.tags, '$').ilike(f'%"{subject}"%'))
             if item_type:
                 statement = statement.where(Item.item_type == item_type)
 
@@ -564,6 +741,12 @@ def read_items(
                     func.json_extract_path_text(Item.extra_data, 'genre') == genre
                 )
 
+            if subject:
+                statement = statement.join(
+                    WorkMetadata, 
+                    (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title)
+                ).where(func.json_extract_path_text(WorkMetadata.tags, '$').ilike(f'%"{subject}"%'))
+
             if item_type:
                 statement = statement.where(Item.item_type == item_type)
 
@@ -587,7 +770,7 @@ def read_items(
 
     # Assemble public items
     if not items:
-        return ItemsPublic(data=[], count=0)
+        return ItemsPublic(data=[], count=count, facets=facets, facet_stats=facet_stats)
 
     # 1. Collect identifiers for bulk fetching
     item_ids = [item.id for item in items]
@@ -695,7 +878,7 @@ def read_items(
         )
         public_items.append(item_pub)
 
-    return ItemsPublic(data=public_items, count=count)
+    return ItemsPublic(data=public_items, count=count, facets=facets, facet_stats=facet_stats)
 
 
 @router.get("/{id}", response_model=ItemPublic)

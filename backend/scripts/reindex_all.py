@@ -5,6 +5,7 @@ from sqlmodel import Session, select
 from app.core.db import engine
 from app.models import Community, Item, WorkMetadata
 from app.search import (
+    configure_search,
     sync_community_to_search,
     sync_item_to_search,
     sync_work_metadata_to_search,
@@ -14,11 +15,17 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def reindex_all() -> None:
+    logger.info("Configuring Meilisearch indexes...")
+    configure_search()
+
     with Session(engine) as session:
         # Reindex Items (including Books)
         logger.info("Reindexing items...")
         items = session.exec(select(Item)).all()
+        # It's better to sync in small batches or ensure relationships are loaded
         for item in items:
+            # Trigger loading of communities relationship for pooled_in indexing
+            _ = item.communities 
             sync_item_to_search(item)
         logger.info(f"Reindexed {len(items)} items.")
 

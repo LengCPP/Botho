@@ -16,19 +16,30 @@ import {
 interface GroupCardProps {
   name: string
   type: string
-  groups: ItemPublic[][]
+  groups?: ItemPublic[][]
+  count?: number
+  sample_image?: string | null
   onOpen: () => void
 }
 
 /* Reusable card for displaying item collections (subject, genre, etc.) */
-export function GroupCard({ name, type, groups, onOpen }: GroupCardProps) {
+export function GroupCard({
+  name,
+  type,
+  groups,
+  count,
+  sample_image,
+  onOpen,
+}: GroupCardProps) {
   const bgColor = useColorModeValue("accent.50", "gray.800")
   const borderColor = useColorModeValue("accent.200", "gray.600")
   const textColor = useColorModeValue("gray.800", "gray.100")
 
   // Flatten and take first 5 for preview
-  const allItems = groups.flat()
+  const allItems = groups?.flat() || []
   const previewItems = allItems.slice(0, 5)
+
+  const displayCount = count !== undefined ? count : groups?.length || 0
 
   return (
     <Card.Root
@@ -61,12 +72,12 @@ export function GroupCard({ name, type, groups, onOpen }: GroupCardProps) {
             </Badge>
           </VStack>
           <Badge variant="solid" colorPalette="teal" size="xs" ml={2}>
-            {groups.length}{" "}
-            {groups[0][0].item_type === "book"
-              ? groups.length === 1
+            {displayCount}{" "}
+            {groups?.[0]?.[0]?.item_type === "book" || type === "author"
+              ? displayCount === 1
                 ? "Book"
                 : "Books"
-              : groups.length === 1
+              : displayCount === 1
                 ? "Item"
                 : "Items"}
           </Badge>
@@ -134,6 +145,22 @@ export function GroupCard({ name, type, groups, onOpen }: GroupCardProps) {
                   )}
                 </Box>
               ))}
+            </Flex>
+          ) : sample_image ? (
+            <Flex justify="center" align="center" height="100%">
+              <Box height="100%" aspectRatio="2/3">
+                <Image
+                  src={getImageUrl(sample_image)}
+                  alt={name}
+                  height="100%"
+                  width="100%"
+                  aspectRatio="2/3"
+                  objectFit="cover"
+                  borderRadius="sm"
+                  boxShadow="xl"
+                  border="1px solid white"
+                />
+              </Box>
             </Flex>
           ) : (
             <Flex height="100%" align="center" justify="center">

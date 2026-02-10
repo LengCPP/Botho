@@ -159,12 +159,23 @@ function ItemsTable() {
       q,
     }),
     placeholderData: (prevData) => prevData,
-    enabled: !!user,
+    enabled: !!user && (!!subject || display_type === "items"),
+  })
+
+  const { data: facets, isLoading: isLoadingFacets } = useQuery({
+    queryKey: ["itemFacets", user?.id, organize_by, q],
+    queryFn: () =>
+      (ItemsService as any).readItemFacets({
+        ownerId: user?.id,
+        groupBy: organize_by,
+        q: q,
+      }),
+    enabled: !!user && display_type === "collections" && !subject,
   })
 
   // Prefetch next page
   useEffect(() => {
-    if (data?.data.length === limit) {
+    if (display_type === "items" && data?.data.length === limit) {
       const nextPage = page + 1
       queryClient.prefetchQuery(
         getItemsQueryOptions({
@@ -179,7 +190,7 @@ function ItemsTable() {
         })
       )
     }
-  }, [data, page, limit, queryClient, sort_by, sort_order, user?.id, category, genre, q])
+  }, [data, page, limit, queryClient, sort_by, sort_order, user?.id, category, genre, q, display_type])
 
   // Fetch outgoing loans once for all cards
   useQuery({
@@ -210,6 +221,7 @@ function ItemsTable() {
   const hasAnyItems = (allItemsCheck?.count ?? 0) > 0
 
   const organizedItems = useMemo(() => {
+    if (display_type === "collections" && !subject) return {}
     const groupedPhysical = groupItems(items)
     const sections: Record<string, ItemPublic[][]> = {}
 
@@ -242,11 +254,11 @@ function ItemsTable() {
     return sections
   }, [items, organize_by])
 
-  if (isLoading) {
+  if (isLoading || isLoadingFacets) {
     return <PendingItems />
   }
 
-  if (items.length === 0 && page === 1) {
+  if (items.length === 0 && page === 1 && !facets?.length) {
     if (hasAnyItems || q) {
       return (
         <Box mt={8}>
@@ -311,13 +323,14 @@ function ItemsTable() {
           }}
           gap={6}
         >
-          {Object.entries(organizedItems).map(([name, groups]) => (
+          {facets?.map((facet: any) => (
             <GroupCard
-              key={name}
-              name={name}
+              key={facet.name}
+              name={facet.name}
               type={organize_by}
-              groups={groups}
-              onOpen={() => updateSearch({ subject: name })}
+              count={facet.count}
+              sample_image={facet.sample_image}
+              onOpen={() => updateSearch({ subject: facet.name })}
             />
           ))}
         </Grid>

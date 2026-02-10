@@ -73,6 +73,7 @@ import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
 import { LoanCard } from "@/components/Items/LoanCard"
+import PendingItems from "@/components/Pending/PendingItems"
 import {
   PaginationItems,
   PaginationNextTrigger,
@@ -108,8 +109,75 @@ const communitySearchSchema = z.object({
     .catch("board"),
   q: z.string().optional(),
   page: z.number().catch(1),
-  limit: z.number().catch(8),
+  limit: z.number().catch(() => Number(localStorage.getItem("limit")) || 8),
+  sort_by: z
+    .string()
+    .catch(() => localStorage.getItem("sort_by") || "created_at"),
+  sort_order: z
+    .string()
+    .catch(() => localStorage.getItem("sort_order") || "desc"),
+  category: z.string().optional(),
+  genre: z.string().optional(),
+  view_mode: z
+    .enum(["card", "list"])
+    .catch(() => (localStorage.getItem("view_mode") as any) || "card"),
+  display_type: z
+    .enum(["items", "collections"])
+    .catch(
+      () => (localStorage.getItem("display_type") as any) || "collections",
+    ),
+  subject: z.string().optional(),
+  organize_by: z
+    .enum(["subject", "genre", "category", "author", "ownership"])
+    .catch(() => (localStorage.getItem("organize_by") as any) || "subject"),
 })
+
+function getCommunityItemsQueryOptions({
+  communityId,
+  page,
+  sort_by,
+  sort_order,
+  limit,
+  category,
+  genre,
+  q,
+}: {
+  communityId: string
+  page: number
+  sort_by: string
+  sort_order: string
+  limit: number
+  category?: string
+  genre?: string
+  q?: string
+}) {
+  return {
+    queryFn: () =>
+      CommunitiesService.readCommunityItems({
+        id: communityId,
+        skip: (page - 1) * limit,
+        limit: limit,
+        sortBy: sort_by,
+        sortOrder: sort_order,
+        category: category,
+        genre: genre,
+        q: q,
+      }),
+    queryKey: [
+      "communityItems",
+      communityId,
+      {
+        page,
+        sort_by,
+        sort_order,
+        limit,
+        category,
+        genre,
+        q,
+      },
+    ],
+  }
+}
 
 export const Route = createFileRoute("/_layout/communities/$communityId")({
   component: CommunityBoard,
@@ -452,7 +520,20 @@ function DonationManagement({
 
 function CommunityBoard() {
   const { communityId } = Route.useParams()
-  const { tab, q: qParam, page, limit } = Route.useSearch()
+  const {
+    tab,
+    q: qParam,
+    page,
+    limit,
+    sort_by,
+    sort_order,
+    category,
+    genre,
+    view_mode,
+    display_type,
+    subject,
+    organize_by,
+  } = Route.useSearch()
   const { user: currentUser } = useAuth()
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const queryClient = useQueryClient()
@@ -467,35 +548,28 @@ function CommunityBoard() {
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
   const [selectedLoanForReview, setSelectedLoanForReview] =
     useState<LoanPublic | null>(null)
-  const [viewMode, setViewMode] = useState<"card" | "list">(
-    () => (localStorage.getItem("view_mode") as any) || "card",
-  )
-  const [displayType, setDisplayType] = useState<"items" | "collections">(
-    () => (localStorage.getItem("display_type") as any) || "collections",
-  )
-  const [organizeBy, setOrganizeBy] = useState<
-    "subject" | "genre" | "category" | "author" | "ownership"
-  >(() => (localStorage.getItem("organize_by") as any) || "subject")
 
   useEffect(() => {
-    localStorage.setItem("view_mode", viewMode)
-    localStorage.setItem("display_type", displayType)
-    localStorage.setItem("organize_by", organizeBy)
-  }, [viewMode, displayType, organizeBy])
+    localStorage.setItem("view_mode", view_mode)
+    localStorage.setItem("display_type", display_type)
+    localStorage.setItem("organize_by", organize_by)
+    localStorage.setItem("sort_by", sort_by)
+    localStorage.setItem("sort_order", sort_order)
+    localStorage.setItem("limit", String(limit))
+  }, [view_mode, display_type, organize_by, sort_by, sort_order, limit])
 
-  const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
-  const [q, setQ] = useState(qParam || "")
   const isMobile = useBreakpointValue({ base: true, md: false })
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      navigate({
-        search: (prev) => ({ ...prev, q: q || undefined }),
-        replace: true,
-      })
-    }, 500)
-    return () => clearTimeout(timer)
-  }, [q, navigate])
+  const updateSearch = (newParams: any) => {
+    navigate({
+      search: (prev: any) => ({ ...prev, ...newParams, page: 1 }),
+    })
+  }
+
+  const setPage = (page: number) =>
+    navigate({
+      search: (prev: any) => ({ ...prev, page }),
+    })
 
   const handleTabChange = (value: string) => {
     navigate({
@@ -547,16 +621,56 @@ function CommunityBoard() {
     enabled: !!isStaff,
   })
 
-  const { data: communityItems, isLoading: isLoadingItems } = useQuery({
-    queryKey: ["communityItems", communityId, { q: qParam, page, limit }],
-    queryFn: () =>
-      CommunitiesService.readCommunityItems({
-        id: communityId,
-        q: qParam,
-        skip: (page - 1) * limit,
-        limit,
-      }),
-    enabled: !!isMember,
+  const { data: communityItems, isLoading: isLoadingItems, isPlaceholderData } = useQuery({
+    ...getCommunityItemsQueryOptions({
+      communityId,
+      page,
+      sort_by,
+      sort_order,
+      limit,
+      category,
+      genre,
+      q: qParam,
+    }),
+    placeholderData: (prevData) => prevData,
+    enabled: !!isMember && tab === "items" && (!!subject || display_type === "items"),
+  })
+
+  // New query for high-performance facets (Collections View)
+  const { data: facets, isLoading: isLoadingFacets } = useQuery({
+    queryKey: ["communityFacets", communityId, organize_by, qParam],
+    queryFn: () => (CommunitiesService as any).readCommunityItemFacets({
+      id: communityId,
+      groupBy: organize_by,
+      q: qParam
+    }),
+    enabled: !!isMember && tab === "items" && display_type === "collections" && !subject,
+  })
+
+  // Prefetch next page (only in items view)
+  useEffect(() => {
+    if (tab === "items" && display_type === "items" && communityItems?.data.length === limit) {
+      const nextPage = page + 1
+      queryClient.prefetchQuery(
+        getCommunityItemsQueryOptions({
+          communityId,
+          page: nextPage,
+          sort_by,
+          sort_order,
+          limit,
+          category,
+          genre,
+          q: qParam,
+        })
+      )
+    }
+  }, [communityItems, page, limit, queryClient, communityId, sort_by, sort_order, category, genre, qParam, tab, display_type])
+
+  // Fetch outgoing loans once for all cards
+  useQuery({
+    queryKey: ["loans", "outgoing"],
+    queryFn: () => LoansService.readOutgoingLoanRequests({}),
+    enabled: !!currentUser && isMember && tab === "items",
   })
 
   const { data: communityLoans, isLoading: isLoadingLoans } = useQuery({
@@ -578,12 +692,6 @@ function CommunityBoard() {
       CommunitiesService.readCommunityMessages({ id: communityId }),
     enabled: !!isMember,
   })
-
-  const updateSearch = (params: Partial<{ page: number; limit: number }>) => {
-    navigate({
-      search: (prev) => ({ ...prev, ...params }),
-    })
-  }
 
   const activeLoans = useMemo(() => {
     return (
@@ -715,17 +823,17 @@ function CommunityBoard() {
       const isOwned = first.owner_id === communityId
 
       let keys: string[] = []
-      if (organizeBy === "subject") {
+      if (organize_by === "subject") {
         keys = first.work_metadata?.tags || []
-      } else if (organizeBy === "genre") {
+      } else if (organize_by === "genre") {
         const g = (first.extra_data as any)?.genre
         if (g) keys = [g]
-      } else if (organizeBy === "category") {
+      } else if (organize_by === "category") {
         const c = (first.extra_data as any)?.category
         if (c) keys = [c]
-      } else if (organizeBy === "author") {
+      } else if (organize_by === "author") {
         if (first.author) keys = [first.author]
-      } else if (organizeBy === "ownership") {
+      } else if (organize_by === "ownership") {
         keys = [isOwned ? "Community Owned" : "Member Shared Pool"]
       }
 
@@ -741,7 +849,7 @@ function CommunityBoard() {
       }
     }
     return sections
-  }, [items, communityId, organizeBy])
+  }, [items, communityId, organize_by])
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault()
@@ -767,12 +875,13 @@ function CommunityBoard() {
 
   const renderGroup = (groups: ItemPublic[][]) => (
     <SimpleGrid
-      columns={viewMode === "list" ? 1 : { base: 2, sm: 3, md: 4 }}
-      gap={viewMode === "list" ? 2 : { base: 2, md: 6 }}
+      columns={view_mode === "list" ? 1 : { base: 2, sm: 3, md: 4 }}
+      gap={view_mode === "list" ? 2 : { base: 2, md: 6 }}
+      opacity={isPlaceholderData ? 0.5 : 1}
     >
       {groups.map((group) => {
         const item = group[0]
-        return viewMode === "list" ? (
+        return view_mode === "list" ? (
           <CompactItemCard
             key={item.id}
             item={group}
@@ -817,58 +926,6 @@ function CommunityBoard() {
 
           {isMember && (
             <HStack gap={2}>
-              <HStack
-                border="1px solid"
-                borderColor="border.subtle"
-                p={1}
-                rounded="md"
-                gap={0}
-              >
-                <Button
-                  size="xs"
-                  variant={displayType === "items" ? "solid" : "ghost"}
-                  onClick={() => {
-                    setDisplayType("items")
-                    setSelectedGroup(null)
-                  }}
-                  title="Item View"
-                >
-                  <FiBox />
-                </Button>
-                <Button
-                  size="xs"
-                  variant={displayType === "collections" ? "solid" : "ghost"}
-                  onClick={() => setDisplayType("collections")}
-                  title="Collection View"
-                >
-                  <FaFolder />
-                </Button>
-              </HStack>
-
-              <Separator orientation="vertical" height="20px" mx={1} />
-
-              <Flex
-                border="1px solid"
-                borderColor="border.subtle"
-                p={1}
-                rounded="md"
-                gap={0}
-              >
-                <Button
-                  size="xs"
-                  variant={viewMode === "card" ? "solid" : "ghost"}
-                  onClick={() => setViewMode("card")}
-                >
-                  <FaThLarge />
-                </Button>
-                <Button
-                  size="xs"
-                  variant={viewMode === "list" ? "solid" : "ghost"}
-                  onClick={() => setViewMode("list")}
-                >
-                  <FaList />
-                </Button>
-              </Flex>
               <Button
                 size="xs"
                 variant="ghost"
@@ -1070,84 +1127,54 @@ function CommunityBoard() {
                       </Text>
                     )}
                   </VStack>
-                  {/* Organize Button */}
-                  {displayType === "collections" && !selectedGroup && (
-                    <Popover.Root>
-                      <Popover.Trigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          colorPalette="accent"
-                        >
-                          <FaFilter /> Organize
-                        </Button>
-                      </Popover.Trigger>
-                      <Portal>
-                        <Popover.Positioner>
-                          <Popover.Content width="300px">
-                            <Popover.Arrow />
-                            <Popover.Body>
-                              <VStack gap={4} align="stretch">
-                                <Box>
-                                  <Text fontSize="sm" fontWeight="bold" mb={2}>
-                                    Organize Collections By
-                                  </Text>
-                                  <VStack gap={2} align="stretch">
-                                    {(
-                                      [
-                                        "subject",
-                                        "genre",
-                                        "category",
-                                        "author",
-                                        ...(isAdmin ? ["ownership"] : []),
-                                      ] as const
-                                    ).map((opt) => (
-                                      <Button
-                                        key={opt}
-                                        size="sm"
-                                        variant={
-                                          organizeBy === opt ? "solid" : "ghost"
-                                        }
-                                        justifyContent="flex-start"
-                                        onClick={() =>
-                                          setOrganizeBy(opt as any)
-                                        }
-                                      >
-                                        {opt.charAt(0).toUpperCase() +
-                                          opt.slice(1)}
-                                      </Button>
-                                    ))}
-                                  </VStack>
-                                </Box>
-                              </VStack>
-                            </Popover.Body>
-                          </Popover.Content>
-                        </Popover.Positioner>
-                      </Portal>
-                    </Popover.Root>
-                  )}
+                  <AddItem communityId={communityId} isAdmin={isAdmin} />
                 </HStack>
 
                 <HStack gap={2}>
                   <ItemsViewOptions
-                    q={q}
-                    onChangeQ={setQ}
-                    limit={limit}
-                    onChangeLimit={(val) =>
-                      updateSearch({ limit: val, page: 1 })
+                    q={qParam}
+                    onChangeQ={(val) => updateSearch({ q: val })}
+                    viewMode={view_mode}
+                    onChangeViewMode={(mode) => updateSearch({ view_mode: mode })}
+                    displayType={display_type}
+                    onChangeDisplayType={(type) =>
+                      updateSearch({ display_type: type, subject: undefined })
                     }
-                    showSearch={true}
+                    sortBy={sort_by}
+                    onChangeSortBy={(val) => updateSearch({ sort_by: val })}
+                    sortOrder={sort_order}
+                    onChangeSortOrder={(val) => updateSearch({ sort_order: val })}
+                    limit={limit}
+                    onChangeLimit={(val) => updateSearch({ limit: val })}
+                    category={category}
+                    onChangeCategory={(val) =>
+                      updateSearch({ category: val, genre: undefined })
+                    }
+                    genre={genre}
+                    onChangeGenre={(val) => updateSearch({ genre: val })}
+                    organizeBy={organize_by}
+                    onChangeOrganizeBy={(val) =>
+                      updateSearch({ organize_by: val, subject: undefined })
+                    }
+                    showDisplayToggle={true}
+                    showViewToggle={true}
+                    showFilter={true}
+                    showSort={true}
                     showLimit={true}
-                    showSort={false}
-                    showViewToggle={false}
+                    organizeOptions={[
+                      "subject",
+                      "genre",
+                      "category",
+                      "author",
+                      ...(isAdmin ? ["ownership"] : []),
+                    ]}
                   />
-                  <AddItem communityId={communityId} isAdmin={isAdmin} />
                 </HStack>
               </Flex>
 
-              {isLoadingItems ? (
-                <Text>Loading items...</Text>
-              ) : items.length === 0 ? (
+              {isLoadingItems || isLoadingFacets ? (
+                <PendingItems />
+              ) : items.length === 0 && page === 1 && !facets?.length ? (
                 <Box
                   p={10}
                   textAlign="center"
@@ -1156,57 +1183,43 @@ function CommunityBoard() {
                   rounded="md"
                 >
                   <Text color="fg.muted">
-                    No items in this community pool yet.
+                    {qParam
+                      ? "No items match your search."
+                      : "No items in this community pool yet."}
                   </Text>
                 </Box>
               ) : (
                 <Box mt={8}>
-                  {displayType === "collections" && !selectedGroup ? (
+                  {display_type === "collections" && !subject ? (
                     <SimpleGrid
                       columns={{ base: 1, md: 2, lg: 3, xl: 4 }}
                       gap={6}
                     >
-                      {Object.entries(organizedItems).map(([name, data]) => (
+                      {facets?.map((facet: any) => (
                         <GroupCard
-                          key={name}
-                          name={name}
-                          type={organizeBy}
-                          groups={[...data.pooled, ...data.owned]}
-                          onOpen={() => setSelectedGroup(name)}
+                          key={facet.name}
+                          name={facet.name}
+                          type={organize_by}
+                          count={facet.count}
+                          sample_image={facet.sample_image}
+                          onOpen={() => updateSearch({ subject: facet.name })}
                         />
                       ))}
                     </SimpleGrid>
-                  ) : displayType === "items" ? (
-                    <VStack align="stretch" gap={8}>
-                      {renderGroup(groupItems(items))}
-                      <Flex justifyContent="center">
-                        <PaginationRoot
-                          count={communityItems?.count || 0}
-                          pageSize={limit}
-                          onPageChange={({ page }) => updateSearch({ page })}
-                        >
-                          <Flex>
-                            <PaginationPrevTrigger />
-                            <PaginationItems />
-                            <PaginationNextTrigger />
-                          </Flex>
-                        </PaginationRoot>
-                      </Flex>
-                    </VStack>
                   ) : (
                     <Box>
-                      {selectedGroup && (
+                      {subject && (
                         <VStack align="start" mb={6} gap={2}>
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setSelectedGroup(null)}
+                            onClick={() => updateSearch({ subject: undefined })}
                           >
                             <FaChevronLeft style={{ marginRight: "8px" }} />{" "}
                             Collections
                           </Button>
                           {Object.entries(organizedItems)
-                            .filter(([name]) => name === selectedGroup)
+                            .filter(([name]) => name === subject)
                             .map(([name, data]) => (
                               <Heading
                                 key={name}
@@ -1220,11 +1233,11 @@ function CommunityBoard() {
                                   ? "Books"
                                   : "Items"}{" "}
                                 {name.toLowerCase() === "others"
-                                  ? `with unspecified ${organizeBy}`
+                                  ? `with unspecified ${organize_by}`
                                   : `${
-                                      organizeBy === "author"
+                                      organize_by === "author"
                                         ? "by"
-                                        : organizeBy === "genre"
+                                        : organize_by === "genre"
                                           ? "in"
                                           : "on"
                                     } ${name}`}
@@ -1237,28 +1250,34 @@ function CommunityBoard() {
                         </VStack>
                       )}
 
-                      {Object.entries(organizedItems)
-                        .filter(([name]) => name === selectedGroup)
-                        .map(([name, data]) => (
-                          <VStack key={name} align="stretch" gap={8}>
-                            {renderGroup([...data.pooled, ...data.owned])}
-                            <Flex justifyContent="center">
-                              <PaginationRoot
-                                count={data.pooled.length + data.owned.length}
-                                pageSize={limit}
-                                onPageChange={({ page }) =>
-                                  updateSearch({ page })
-                                }
-                              >
-                                <Flex>
-                                  <PaginationPrevTrigger />
-                                  <PaginationItems />
-                                  <PaginationNextTrigger />
-                                </Flex>
-                              </PaginationRoot>
+                      <VStack align="stretch" gap={8}>
+                        {renderGroup(
+                          subject
+                            ? [
+                                ...(organizedItems[subject]?.pooled || []),
+                                ...(organizedItems[subject]?.owned || []),
+                              ]
+                            : groupItems(items),
+                        )}
+                        <Flex justifyContent="center">
+                          <PaginationRoot
+                            count={
+                              subject
+                                ? (organizedItems[subject]?.pooled.length || 0) +
+                                  (organizedItems[subject]?.owned.length || 0)
+                                : communityItems?.count || 0
+                            }
+                            pageSize={limit}
+                            onPageChange={({ page }) => setPage(page)}
+                          >
+                            <Flex>
+                              <PaginationPrevTrigger />
+                              <PaginationItems />
+                              <PaginationNextTrigger />
                             </Flex>
-                          </VStack>
-                        ))}
+                          </PaginationRoot>
+                        </Flex>
+                      </VStack>
                     </Box>
                   )}
                 </Box>

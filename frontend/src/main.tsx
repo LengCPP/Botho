@@ -1,4 +1,4 @@
-import { GoogleOAuthProvider } from "@react-oauth/google"
+import { GoogleOAuthProvider, googleLogout } from "@react-oauth/google"
 import {
   MutationCache,
   QueryCache,
@@ -19,6 +19,7 @@ OpenAPI.TOKEN = async () => localStorage.getItem("access_token") || ""
 const handleApiError = (error: Error) => {
   if (error instanceof ApiError && error.status === 401) {
     localStorage.removeItem("access_token")
+    googleLogout()
     window.location.href = "/login"
   }
 }

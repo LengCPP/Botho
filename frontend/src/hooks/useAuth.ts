@@ -1,3 +1,4 @@
+import { googleLogout } from "@react-oauth/google"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
@@ -83,6 +84,7 @@ const useAuth = () => {
 
   const logout = () => {
     localStorage.removeItem("access_token")
+    googleLogout()
     queryClient.clear()
     navigate({ to: "/login" })
   }

@@ -39,7 +39,7 @@ Botho is a containerized monorepo with a FastAPI (Python) backend and a React (T
 - **Migrations:** Always run migrations after changing models.
 
 ## 6. Key Features to Remember
-- **Communities:** Private/Public groups for resource sharing. Includes 'bucket' collections.
+- **Communities:** Private/Public groups for resource sharing.
 - **Loans:** Workflow: Request -> Accept -> Ratify -> Return -> Confirm.
 - **Reading Log:** Book tracking and reviews.
 - **Avatars:** Deterministic colors with a themed orange ring (`ui.hover` / `#fb6635`).

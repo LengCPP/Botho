@@ -10,7 +10,7 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react"
-import type React from "react"
+import { type ReactNode, useEffect, useState } from "react"
 import {
   FaBook,
   FaFilter,
@@ -101,6 +101,21 @@ export function ItemsViewOptions({
   showSearch = true,
   organizeOptions = ["subject", "genre", "category", "author"],
 }: ItemsViewOptionsProps) {
+  const [localQ, setLocalQ] = useState(q || "")
+
+  useEffect(() => {
+    setLocalQ(q || "")
+  }, [q])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (onChangeQ && localQ !== q) {
+        onChangeQ(localQ)
+      }
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [localQ, onChangeQ, q])
+
   const selectBg = useColorModeValue("white", "gray.800")
   const selectColor = useColorModeValue("black", "white")
   const selectBorder = useColorModeValue("gray.300", "gray.600")
@@ -132,8 +147,8 @@ export function ItemsViewOptions({
               placeholder="Find in catalogue..."
               size="sm"
               variant="subtle"
-              value={q || ""}
-              onChange={(e) => onChangeQ(e.target.value)}
+              value={localQ}
+              onChange={(e) => setLocalQ(e.target.value)}
             />
           </InputGroup>
         </Box>

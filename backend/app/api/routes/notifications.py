@@ -249,14 +249,14 @@ async def websocket_endpoint(
 
     from app.core.db import engine
 
+    await websocket.accept()
+
     # Authenticate and get user, then release session immediately
     try:
         with Session(engine) as session:
             user = await get_current_user_ws(session=session, token=token)
             user_id = user.id
     except HTTPException:
-        if websocket.client_state == WebSocketState.CONNECTING:
-            await websocket.accept()
         await websocket.close(code=1008)
         return
 
