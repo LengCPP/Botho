@@ -684,63 +684,64 @@ def read_items(
         allowed_community_ids = list(set(my_community_ids + public_community_ids))
 
     # Use Meilisearch for all listings to support facets and global filtering
+    # Meilisearch disabled by user request for this endpoint to ensure exact collection filtering
     from app.search import client as meili_client
     meili_success = False
     facets = None
     facet_stats = None
 
-    try:
-        index = meili_client.index("items")
-        filters = []
-        if target_owner_id:
-            filters.append(f'owner_id = "{target_owner_id}"')
-        if category:
-            filters.append(f'category = "{category}"')
-        if genre:
-            filters.append(f'genre = "{genre}"')
-        if subject:
-            filters.append(f'subject = "{subject}"')
-        if author:
-            # Use exact match for author in filter (frontend sends exact name)
-            filters.append(f'author = "{author}"')
-        if item_type:
-            filters.append(f'item_type = "{item_type.value}"')
-        if feed_mode:
-            if allowed_community_ids:
-                allowed_ids_str = "[" + ", ".join([f'"{cid}"' for cid in allowed_community_ids]) + "]"
-                filters.append(f"(owner_id IN {allowed_ids_str} OR pooled_in IN {allowed_ids_str})")
-            else:
-                return ItemsPublic(data=[], count=0)
+    # try:
+    #     index = meili_client.index("items")
+    #     filters = []
+    #     if target_owner_id:
+    #         filters.append(f'owner_id = "{target_owner_id}"')
+    #     if category:
+    #         filters.append(f'category = "{category}"')
+    #     if genre:
+    #         filters.append(f'genre = "{genre}"')
+    #     if subject:
+    #         filters.append(f'subject = "{subject}"')
+    #     if author:
+    #         # Use exact match for author in filter (frontend sends exact name)
+    #         filters.append(f'author = "{author}"')
+    #     if item_type:
+    #         filters.append(f'item_type = "{item_type.value}"')
+    #     if feed_mode:
+    #         if allowed_community_ids:
+    #             allowed_ids_str = "[" + ", ".join([f'"{cid}"' for cid in allowed_community_ids]) + "]"
+    #             filters.append(f"(owner_id IN {allowed_ids_str} OR pooled_in IN {allowed_ids_str})")
+    #         else:
+    #             return ItemsPublic(data=[], count=0)
 
-        search_params = {
-            "limit": limit,
-            "offset": skip,
-            "filter": " AND ".join(filters) if filters else None,
-            "facets": ["category", "genre", "author", "item_type", "subject"],
-            "sort": [f"{sort_by if sort_by != 'created_at' else 'id'}:{sort_order}"]
-        }
+    #     search_params = {
+    #         "limit": limit,
+    #         "offset": skip,
+    #         "filter": " AND ".join(filters) if filters else None,
+    #         "facets": ["category", "genre", "author", "item_type", "subject"],
+    #         "sort": [f"{sort_by if sort_by != 'created_at' else 'id'}:{sort_order}"]
+    #     }
         
-        search_results = index.search(q or "", search_params)
-        item_ids = [uuid.UUID(hit["id"]) for hit in search_results["hits"]]
-        count = search_results.get("totalHits", len(item_ids))
-        facets = search_results.get("facetDistribution")
-        facet_stats = search_results.get("facetStats")
+    #     search_results = index.search(q or "", search_params)
+    #     item_ids = [uuid.UUID(hit["id"]) for hit in search_results["hits"]]
+    #     count = search_results.get("totalHits", len(item_ids))
+    #     facets = search_results.get("facetDistribution")
+    #     facet_stats = search_results.get("facetStats")
 
-        if not item_ids:
-            return ItemsPublic(data=[], count=count, facets=facets, facet_stats=facet_stats)
+    #     if not item_ids:
+    #         return ItemsPublic(data=[], count=count, facets=facets, facet_stats=facet_stats)
 
-        # Fetch from DB preserving order
-        db_items = session.exec(
-            select(Item)
-            .where(Item.id.in_(item_ids))
-            .where(~Item.id.in_(defaulted_item_ids))
-            .options(joinedload(Item.user_owner), joinedload(Item.community_owner))
-        ).all()
-        item_map = {item.id: item for item in db_items}
-        items = [item_map[iid] for iid in item_ids if iid in item_map]
-        meili_success = True
-    except Exception:
-        meili_success = False
+    #     # Fetch from DB preserving order
+    #     db_items = session.exec(
+    #         select(Item)
+    #         .where(Item.id.in_(item_ids))
+    #         .where(~Item.id.in_(defaulted_item_ids))
+    #         .options(joinedload(Item.user_owner), joinedload(Item.community_owner))
+    #     ).all()
+    #     item_map = {item.id: item for item in db_items}
+    #     items = [item_map[iid] for iid in item_ids if iid in item_map]
+    #     meili_success = True
+    # except Exception:
+    #     meili_success = False
 
     if not meili_success:
         # Fallback to SQL if Meilisearch fails or is not applicable
@@ -766,16 +767,51 @@ def read_items(
             statement = statement.where(Item.id.not_in(defaulted_item_ids))
 
             if category:
-                statement = statement.where(func.json_extract_path_text(Item.extra_data, 'category') == category)
+                if category == "Others":
+                    statement = statement.where(
+                        or_(
+                            func.json_extract_path_text(Item.extra_data, 'category').is_(None),
+                            func.json_extract_path_text(Item.extra_data, 'category') == ""
+                        )
+                    )
+                else:
+                    statement = statement.where(func.json_extract_path_text(Item.extra_data, 'category') == category)
+            
             if genre:
-                statement = statement.where(func.json_extract_path_text(Item.extra_data, 'genre') == genre)
+                if genre == "Others":
+                    statement = statement.where(
+                        or_(
+                            func.json_extract_path_text(Item.extra_data, 'genre').is_(None),
+                            func.json_extract_path_text(Item.extra_data, 'genre') == ""
+                        )
+                    )
+                else:
+                    statement = statement.where(func.json_extract_path_text(Item.extra_data, 'genre') == genre)
+
             if subject:
+                # Left join to handle missing metadata as "Others"
                 statement = statement.join(
                     WorkMetadata, 
-                    (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title)
-                ).where(func.json_extract_path_text(WorkMetadata.tags, '$').ilike(f'%"{subject}"%'))
+                    (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title),
+                    isouter=True
+                )
+                if subject == "Others":
+                    # No metadata OR tags is empty/null
+                    statement = statement.where(
+                        or_(
+                            WorkMetadata.tags.is_(None),
+                            func.json_array_length(WorkMetadata.tags) == 0
+                        )
+                    )
+                else:
+                    statement = statement.where(func.json_extract_path_text(WorkMetadata.tags, '$').ilike(f'%"{subject}"%'))
+            
             if author:
-                statement = statement.where(Item.author == author)
+                if author == "Others":
+                    statement = statement.where(or_(Item.author.is_(None), Item.author == ""))
+                else:
+                    statement = statement.where(Item.author == author)
+            
             if item_type:
                 statement = statement.where(Item.item_type == item_type)
 
@@ -797,23 +833,54 @@ def read_items(
             statement = statement.where(Item.id.not_in(defaulted_item_ids))
 
             if category:
-                statement = statement.where(
-                    func.json_extract_path_text(Item.extra_data, 'category') == category
-                )
+                if category == "Others":
+                    statement = statement.where(
+                        or_(
+                            func.json_extract_path_text(Item.extra_data, 'category').is_(None),
+                            func.json_extract_path_text(Item.extra_data, 'category') == ""
+                        )
+                    )
+                else:
+                    statement = statement.where(
+                        func.json_extract_path_text(Item.extra_data, 'category') == category
+                    )
 
             if genre:
-                statement = statement.where(
-                    func.json_extract_path_text(Item.extra_data, 'genre') == genre
-                )
+                if genre == "Others":
+                    statement = statement.where(
+                        or_(
+                            func.json_extract_path_text(Item.extra_data, 'genre').is_(None),
+                            func.json_extract_path_text(Item.extra_data, 'genre') == ""
+                        )
+                    )
+                else:
+                    statement = statement.where(
+                        func.json_extract_path_text(Item.extra_data, 'genre') == genre
+                    )
 
             if subject:
+                # Left join to handle missing metadata as "Others"
                 statement = statement.join(
                     WorkMetadata, 
-                    (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title)
-                ).where(func.json_extract_path_text(WorkMetadata.tags, '$').ilike(f'%"{subject}"%'))
+                    (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title),
+                    isouter=True
+                )
+                if subject == "Others":
+                     # No metadata OR tags is empty/null
+                    statement = statement.where(
+                        or_(
+                            WorkMetadata.tags.is_(None),
+                            func.json_array_length(WorkMetadata.tags) == 0
+                        )
+                    )
+                else:
+                    statement = statement.where(func.json_extract_path_text(WorkMetadata.tags, '$').ilike(f'%"{subject}"%'))
 
             if author:
-                statement = statement.where(Item.author == author)
+                if author == "Others":
+                    statement = statement.where(or_(Item.author.is_(None), Item.author == ""))
+                else:
+                    statement = statement.where(Item.author == author)
 
             if item_type:
                 statement = statement.where(Item.item_type == item_type)
