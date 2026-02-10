@@ -467,60 +467,61 @@ def read_item_facets(
              return {"data": [], "count": 0}
 
     # Map 'subject' to 'tags' for Meilisearch indexing
-    facet_field = "tags" if group_by == "subject" else group_by
+    # facet_field = "tags" if group_by == "subject" else group_by
+    facet_field = group_by
 
     from app.search import client as meili_client
     meili_success = False
-    try:
-        index = meili_client.index("items")
-        filters = [f"owner_id = '{target_owner_id}'"]
-        
-        search_params = {
-            "limit": 0,
-            "filter": " AND ".join(filters),
-            "facets": [facet_field]
-        }
-        
-        # Use a short timeout for facet retrieval to avoid hanging
-        search_results = index.search(q or "", search_params)
-        facet_distribution = search_results.get("facetDistribution", {})
-        counts = facet_distribution.get(facet_field, {})
-        
-        # Sort counts by value descending
-        all_sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)
-        total_count = len(all_sorted_counts)
-        
-        # Handle "Others" separately or include in counts
-        # Meilisearch facetDistribution usually doesn't include nulls.
-        # But for UI consistency, we might want to check for others.
-        
-        # Apply pagination
-        paginated_counts = all_sorted_counts[skip : skip + limit]
-        
-        results = []
-        for name, count in paginated_counts:
-            # For each facet, we want ONE sample image (or multiple if we want to enrich). 
-            sample_params = {
-                "limit": 1,
-                "filter": f"{facet_field} = \"{name}\" AND {' AND '.join(filters)}"
-            }
-            sample_res = index.search(q or "", sample_params)
-            sample_images = []
-            if sample_res["hits"]:
-                img = sample_res["hits"][0].get("image_url")
-                if img:
-                    sample_images.append(img)
-            
-            results.append({
-                "name": name, 
-                "count": count,
-                "sample_images": sample_images
-            })
-            
-        meili_success = True
-        return {"data": results, "count": total_count}
-    except Exception:
-        meili_success = False
+    # try:
+    #     index = meili_client.index("items")
+    #     filters = [f"owner_id = '{target_owner_id}'"]
+    #     
+    #     search_params = {
+    #         "limit": 0,
+    #         "filter": " AND ".join(filters),
+    #         "facets": [facet_field]
+    #     }
+    #     
+    #     # Use a short timeout for facet retrieval to avoid hanging
+    #     search_results = index.search(q or "", search_params)
+    #     facet_distribution = search_results.get("facetDistribution", {})
+    #     counts = facet_distribution.get(facet_field, {})
+    #     
+    #     # Sort counts by value descending
+    #     all_sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)
+    #     total_count = len(all_sorted_counts)
+    #     
+    #     # Handle "Others" separately or include in counts
+    #     # Meilisearch facetDistribution usually doesn't include nulls.
+    #     # But for UI consistency, we might want to check for others.
+    #     
+    #     # Apply pagination
+    #     paginated_counts = all_sorted_counts[skip : skip + limit]
+    #     
+    #     results = []
+    #     for name, count in paginated_counts:
+    #         # For each facet, we want ONE sample image (or multiple if we want to enrich). 
+    #         sample_params = {
+    #             "limit": 1,
+    #             "filter": f"{facet_field} = \"{name}\" AND {' AND '.join(filters)}"
+    #         }
+    #         sample_res = index.search(q or "", sample_params)
+    #         sample_images = []
+    #         if sample_res["hits"]:
+    #             img = sample_res["hits"][0].get("image_url")
+    #             if img:
+    #                 sample_images.append(img)
+    #         
+    #         results.append({
+    #             "name": name, 
+    #             "count": count,
+    #             "sample_images": sample_images
+    #         })
+    #         
+    #     meili_success = True
+    #     return {"data": results, "count": total_count}
+    # except Exception:
+    #     meili_success = False
 
     if not meili_success:
         # SQL Fallback for facets
@@ -613,6 +614,7 @@ def read_items(
     category: str | None = None,
     genre: str | None = None,
     subject: str | None = None,
+    author: str | None = None,
     item_type: ItemType | None = None,
     enable_feed: bool = False,
     q: str | None = None,
@@ -621,6 +623,7 @@ def read_items(
     Retrieve items. Filters by current user's owner_id by default, unless enable_feed is True.
     Supports searching via 'q' using Meilisearch.
     """
+    print(f"DEBUG: read_items called with author={author}, subject={subject}")
 
     target_owner_id = None
     feed_mode = False
@@ -690,18 +693,21 @@ def read_items(
         index = meili_client.index("items")
         filters = []
         if target_owner_id:
-            filters.append(f"owner_id = '{target_owner_id}'")
+            filters.append(f'owner_id = "{target_owner_id}"')
         if category:
-            filters.append(f"category = '{category}'")
+            filters.append(f'category = "{category}"')
         if genre:
-            filters.append(f"genre = '{genre}'")
+            filters.append(f'genre = "{genre}"')
         if subject:
-            filters.append(f"tags = '{subject}'")
+            filters.append(f'subject = "{subject}"')
+        if author:
+            # Use exact match for author in filter (frontend sends exact name)
+            filters.append(f'author = "{author}"')
         if item_type:
-            filters.append(f"item_type = '{item_type.value}'")
+            filters.append(f'item_type = "{item_type.value}"')
         if feed_mode:
             if allowed_community_ids:
-                allowed_ids_str = "[" + ", ".join([f"'{cid}'" for cid in allowed_community_ids]) + "]"
+                allowed_ids_str = "[" + ", ".join([f'"{cid}"' for cid in allowed_community_ids]) + "]"
                 filters.append(f"(owner_id IN {allowed_ids_str} OR pooled_in IN {allowed_ids_str})")
             else:
                 return ItemsPublic(data=[], count=0)
@@ -710,7 +716,7 @@ def read_items(
             "limit": limit,
             "offset": skip,
             "filter": " AND ".join(filters) if filters else None,
-            "facets": ["category", "genre", "author", "item_type", "tags"],
+            "facets": ["category", "genre", "author", "item_type", "subject"],
             "sort": [f"{sort_by if sort_by != 'created_at' else 'id'}:{sort_order}"]
         }
         
@@ -768,6 +774,8 @@ def read_items(
                     WorkMetadata, 
                     (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title)
                 ).where(func.json_extract_path_text(WorkMetadata.tags, '$').ilike(f'%"{subject}"%'))
+            if author:
+                statement = statement.where(Item.author == author)
             if item_type:
                 statement = statement.where(Item.item_type == item_type)
 
@@ -803,6 +811,9 @@ def read_items(
                     WorkMetadata, 
                     (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title)
                 ).where(func.json_extract_path_text(WorkMetadata.tags, '$').ilike(f'%"{subject}"%'))
+
+            if author:
+                statement = statement.where(Item.author == author)
 
             if item_type:
                 statement = statement.where(Item.item_type == item_type)
