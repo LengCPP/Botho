@@ -44,12 +44,6 @@ import { GroupCard } from "@/components/Items/GroupCard"
 import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
-import {
-  PaginationItems,
-  PaginationNextTrigger,
-  PaginationPrevTrigger,
-  PaginationRoot,
-} from "@/components/ui/pagination"
 import UserInformation from "@/components/UserSettings/UserInformation"
 import UserProfilePicture from "@/components/UserSettings/UserProfilePicture"
 import { useColorModeValue } from "@/components/ui/color-mode"
@@ -59,16 +53,45 @@ import {
   MenuRoot,
   MenuTrigger,
 } from "@/components/ui/menu"
+import {
+  PaginationItems,
+  PaginationNextTrigger,
+  PaginationPrevTrigger,
+  PaginationRoot,
+} from "@/components/ui/pagination"
 import type { UserPublicExtended } from "@/customTypes"
 import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
 import { formatPublicId, getImageUrl, groupItems, handleError } from "@/utils"
 
 const userSearchSchema = z.object({
-  q: z.string().optional(),
   page: z.number().catch(1),
-  limit: z.number().catch(8),
+  sort_by: z
+    .string()
+    .catch(() => localStorage.getItem("sort_by") || "created_at"),
+  sort_order: z
+    .string()
+    .catch(() => localStorage.getItem("sort_order") || "desc"),
+  limit: z.number().catch(() => {
+    const stored = localStorage.getItem("limit")
+    return stored && stored !== "undefined" ? Number(stored) : 8
+  }),
+  category: z.string().optional(),
+  genre: z.string().optional(),
+  view_mode: z
+    .enum(["card", "list"])
+    .catch(() => (localStorage.getItem("view_mode") as any) || "card"),
+  display_type: z
+    .enum(["items", "collections"])
+    .catch(() => (localStorage.getItem("display_type") as any) || "items"),
+  subject: z.string().optional(),
+  organize_by: z
+    .enum(["subject", "genre", "category", "author"])
+    .catch(() => (localStorage.getItem("organize_by") as any) || "subject"),
+  q: z.string().optional(),
 })
+
+const COLLECTIONS_LIMIT = 12
 
 export const Route = createFileRoute("/_layout/users/$userId")({
   component: UserProfilePage,
@@ -77,58 +100,46 @@ export const Route = createFileRoute("/_layout/users/$userId")({
 
 function UserProfilePage() {
   const { userId } = Route.useParams()
-  const { q: qParam, page, limit } = Route.useSearch()
+  const {
+    page,
+    sort_by,
+    sort_order,
+    limit,
+    category,
+    genre,
+    view_mode,
+    display_type,
+    subject,
+    organize_by,
+    q,
+  } = Route.useSearch()
   const { user: currentUser } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const [isRemoveFriendModalOpen, setIsRemoveFriendModalOpen] = useState(false)
 
-  // View State
-  const [viewMode, setViewMode] = useState<"card" | "list">(
-    () => (localStorage.getItem("view_mode") as any) || "card",
-  )
-  const [displayType, setDisplayType] = useState<"items" | "collections">(
-    () => (localStorage.getItem("display_type") as any) || "items",
-  )
-  const [organizeBy, setOrganizeBy] = useState(
-    () => localStorage.getItem("organize_by") || "subject",
-  )
-  const [subject, setSubject] = useState<string | undefined>(undefined)
-
   useEffect(() => {
-    localStorage.setItem("view_mode", viewMode)
-    localStorage.setItem("display_type", displayType)
-    localStorage.setItem("organize_by", organizeBy)
-  }, [viewMode, displayType, organizeBy])
-
-  const [sortBy, setSortBy] = useState("created_at")
-  const [sortOrder, setSortOrder] = useState("desc")
-  const [category, setCategory] = useState<string | undefined>(undefined)
-  const [genre, setGenre] = useState<string | undefined>(undefined)
-  const [q, setQ] = useState(qParam || "")
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      navigate({
-        search: (prev) => ({ ...prev, q: q || undefined, page: 1 }),
-        replace: true,
-      })
-    }, 500)
-    return () => clearTimeout(timer)
-  }, [q, navigate])
+    localStorage.setItem("view_mode", view_mode)
+    localStorage.setItem("display_type", display_type)
+    localStorage.setItem("organize_by", organize_by)
+    localStorage.setItem("sort_by", sort_by)
+    localStorage.setItem("sort_order", sort_order)
+    localStorage.setItem("limit", String(limit))
+  }, [view_mode, display_type, organize_by, sort_by, sort_order, limit])
 
   const updateSearch = (newParams: any) => {
     navigate({
-      search: (prev: any) => ({ ...prev, ...newParams }),
+      search: (prev: any) => ({ ...prev, ...newParams, page: 1 }),
     })
   }
 
-  const setPage = (page: number) => updateSearch({ page })
+  const setPage = (page: number) =>
+    navigate({
+      search: (prev: any) => ({ ...prev, page }),
+    })
 
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
-  const isMobile = useBreakpointValue({ base: true, md: false })
-
   const borderColor = useColorModeValue("accent.200", "gray.600")
 
   useEffect(() => {
@@ -150,29 +161,43 @@ function UserProfilePage() {
       "items",
       userId,
       {
-        excludeCollections: true,
-        sortBy,
-        sortOrder,
+        page,
+        sort_by,
+        sort_order,
+        limit,
         category,
         genre,
-        q: qParam,
-        page,
-        limit,
+        subject,
+        q,
       },
     ],
     queryFn: () =>
       ItemsService.readItems({
         ownerId: userId,
-        excludeCollections: true,
-        sortBy,
-        sortOrder,
-        category,
-        genre,
-        q: qParam,
         skip: (page - 1) * limit,
         limit,
+        sortBy: sort_by,
+        sortOrder: sort_order,
+        category,
+        genre,
+        subject,
+        q,
       }),
-    enabled: canSeeAll,
+    placeholderData: (prevData) => prevData,
+    enabled: canSeeAll && (!!subject || display_type === "items"),
+  })
+
+  const { data: facets, isLoading: isLoadingFacets } = useQuery({
+    queryKey: ["itemFacets", userId, organize_by, q, page],
+    queryFn: () =>
+      ItemsService.readItemFacets({
+        ownerId: userId,
+        groupBy: organize_by,
+        q: q,
+        skip: (page - 1) * COLLECTIONS_LIMIT,
+        limit: COLLECTIONS_LIMIT,
+      }),
+    enabled: canSeeAll && display_type === "collections" && !subject,
   })
 
   const friendMutation = useMutation({
@@ -208,45 +233,7 @@ function UserProfilePage() {
   }
 
   const userItems = items?.data || []
-
-  // Calculate Organized Items for "Collections" view
-  const organizedItems = useMemo(() => {
-    const groupedPhysical = groupItems(userItems)
-    const sections: Record<string, ItemPublic[][]> = {}
-
-    for (const group of groupedPhysical) {
-      const first = group[0]
-      let keys: string[] = []
-
-      if (organizeBy === "subject") {
-        keys = first.work_metadata?.tags || []
-      } else if (organizeBy === "genre") {
-        const g = (first.extra_data as any)?.genre
-        if (g) keys = [g]
-      } else if (organizeBy === "category") {
-        const c = (first.extra_data as any)?.category
-        if (c) keys = [c]
-      } else if (organizeBy === "author") {
-        if (first.author) keys = [first.author]
-      }
-
-      if (keys.length === 0) {
-        if (!sections.Others) sections.Others = []
-        sections.Others.push(group)
-      } else {
-        for (const key of keys) {
-          if (!sections[key]) sections[key] = []
-          sections[key].push(group)
-        }
-      }
-    }
-    return sections
-  }, [userItems, organizeBy])
-
-  // Determine what to display in the main content area
-  const activeGroups = subject
-    ? organizedItems[subject] || []
-    : groupItems(userItems)
+  const activeGroups = groupItems(userItems)
 
   if (isLoadingUser) return <Text p={4}>Loading profile...</Text>
   if (!user) return <Text p={4}>User not found</Text>
@@ -329,10 +316,10 @@ function UserProfilePage() {
             gap={4}
           >
             <Heading size="md">
-              {displayType === "collections"
+              {display_type === "collections"
                 ? subject
                   ? subject.toLowerCase() === "others"
-                    ? `Items with unspecified ${organizeBy}`
+                    ? `Items with unspecified ${organize_by}`
                     : `Items in ${subject}`
                   : "Item Collections"
                 : `Items (${items?.count || 0})`}
@@ -340,40 +327,40 @@ function UserProfilePage() {
 
             <ItemsViewOptions
               q={q}
-              onChangeQ={setQ}
-              viewMode={viewMode}
-              onChangeViewMode={setViewMode}
-              displayType={displayType}
-              onChangeDisplayType={(type) => {
-                setDisplayType(type)
-                setSubject(undefined)
-              }}
-              organizeBy={organizeBy}
-              onChangeOrganizeBy={(val) => {
-                setOrganizeBy(val)
-                setSubject(undefined)
-              }}
-              sortBy={sortBy}
-              onChangeSortBy={setSortBy}
-              sortOrder={sortOrder}
-              onChangeSortOrder={setSortOrder}
+              onChangeQ={(val) => updateSearch({ q: val })}
+              viewMode={view_mode}
+              onChangeViewMode={(mode) => updateSearch({ view_mode: mode })}
+              displayType={display_type}
+              onChangeDisplayType={(type) =>
+                updateSearch({ display_type: type, subject: undefined })
+              }
+              sortBy={sort_by}
+              onChangeSortBy={(val) => updateSearch({ sort_by: val })}
+              sortOrder={sort_order}
+              onChangeSortOrder={(val) => updateSearch({ sort_order: val })}
               limit={limit}
-              onChangeLimit={(val) => updateSearch({ limit: val, page: 1 })}
+              onChangeLimit={(val) => updateSearch({ limit: val })}
               category={category}
-              onChangeCategory={setCategory}
+              onChangeCategory={(val) =>
+                updateSearch({ category: val, genre: undefined })
+              }
               genre={genre}
-              onChangeGenre={setGenre}
+              onChangeGenre={(val) => updateSearch({ genre: val })}
+              organizeBy={organize_by}
+              onChangeOrganizeBy={(val) =>
+                updateSearch({ organize_by: val, subject: undefined })
+              }
               showDisplayToggle={true}
-              showViewToggle={displayType === "items" || !!subject}
+              showViewToggle={display_type === "items" || !!subject}
               showLimit={true}
-              showFilter={displayType === "items"}
-              showSort={displayType === "items"}
+              showFilter={display_type === "items"}
+              showSort={display_type === "items"}
             />
           </Flex>
 
-          {isLoadingItems ? (
+          {isLoadingItems || isLoadingFacets ? (
             <Text>Loading items...</Text>
-          ) : userItems.length === 0 ? (
+          ) : userItems.length === 0 && !facets?.data?.length ? (
             <Text color="gray.500">No items found.</Text>
           ) : (
             <>
@@ -383,7 +370,7 @@ function UserProfilePage() {
                   variant="ghost"
                   size="sm"
                   mb={4}
-                  onClick={() => setSubject(undefined)}
+                  onClick={() => updateSearch({ subject: undefined })}
                 >
                   <FaChevronLeft style={{ marginRight: "8px" }} /> Back to
                   Collections
@@ -391,28 +378,49 @@ function UserProfilePage() {
               )}
 
               {/* Render Collections Grid (GroupCards) */}
-              {displayType === "collections" && !subject ? (
-                <SimpleGrid columns={{ base: 1, md: 2, lg: 3, xl: 4 }} gap={6}>
-                  {Object.entries(organizedItems).map(([name, groups]) => (
-                    <GroupCard
-                      key={name}
-                      name={name}
-                      type={organizeBy}
-                      groups={groups}
-                      onOpen={() => setSubject(name)}
-                    />
-                  ))}
-                </SimpleGrid>
+              {display_type === "collections" && !subject ? (
+                <>
+                  <SimpleGrid
+                    columns={{ base: 1, md: 2, lg: 3, xl: 4 }}
+                    gap={6}
+                  >
+                    {facets?.data?.map((facet: any) => (
+                      <GroupCard
+                        key={facet.name}
+                        name={facet.name}
+                        type={organize_by}
+                        count={facet.count}
+                        sample_images={facet.sample_images}
+                        onOpen={() => updateSearch({ subject: facet.name })}
+                      />
+                    ))}
+                  </SimpleGrid>
+                  <Flex justifyContent="center" mt={8}>
+                    <PaginationRoot
+                      count={facets?.count ?? 0}
+                      pageSize={COLLECTIONS_LIMIT}
+                      onPageChange={({ page }) => setPage(page)}
+                    >
+                      <Flex>
+                        <PaginationPrevTrigger />
+                        <PaginationItems />
+                        <PaginationNextTrigger />
+                      </Flex>
+                    </PaginationRoot>
+                  </Flex>
+                </>
               ) : (
                 /* Render Items Grid */
                 <VStack align="stretch" gap={8}>
                   <SimpleGrid
-                    columns={viewMode === "list" ? 1 : { base: 2, sm: 3, md: 4 }}
-                    gap={viewMode === "list" ? 2 : { base: 2, md: 6 }}
+                    columns={
+                      view_mode === "list" ? 1 : { base: 2, sm: 3, md: 4 }
+                    }
+                    gap={view_mode === "list" ? 2 : { base: 2, md: 6 }}
                   >
                     {activeGroups.map((group) => {
                       const firstItem = group[0]
-                      return viewMode === "list" ? (
+                      return view_mode === "list" ? (
                         <CompactItemCard
                           key={firstItem.id}
                           item={group}
@@ -431,7 +439,7 @@ function UserProfilePage() {
 
                   <Flex justifyContent="center">
                     <PaginationRoot
-                      count={subject ? activeGroups.length : (items?.count || 0)}
+                      count={items?.count || 0}
                       pageSize={limit}
                       onPageChange={({ page }) => setPage(page)}
                     >

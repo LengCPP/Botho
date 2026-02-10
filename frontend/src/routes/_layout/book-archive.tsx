@@ -54,11 +54,7 @@ function BooksTable() {
   const navigate = useNavigate({ from: Route.fullPath })
   const { page } = Route.useSearch()
 
-  const {
-    data,
-    isLoading,
-    isPlaceholderData,
-  } = useQuery({
+  const { data, isLoading, isPlaceholderData } = useQuery({
     ...getBooksQueryOptions({ page }),
     placeholderData: (prevData) => prevData,
   })
@@ -202,32 +198,45 @@ function BookArchive() {
 
   return (
     <Container maxW="full">
-      <Flex justify="space-between" align="baseline" pt={12} pb={6} wrap="wrap" gap={4}>
+      <Flex
+        justify="space-between"
+        align="baseline"
+        pt={12}
+        pb={6}
+        wrap="wrap"
+        gap={4}
+      >
         <HStack align="baseline" gap={4}>
-          <Heading size="lg">
-            Book Archive Management
-          </Heading>
+          <Heading size="lg">Book Archive Management</Heading>
           <Badge variant="subtle" colorPalette="blue" size="md">
             {totalCount} Total Books
           </Badge>
         </HStack>
-        <Box border="1px solid" borderColor="border.subtle" p={4} rounded="md" bg="bg.muted">
+        <Box
+          border="1px solid"
+          borderColor="border.subtle"
+          p={4}
+          rounded="md"
+          bg="bg.muted"
+        >
           <VStack align="start" gap={2}>
-            <Text fontSize="xs" fontWeight="bold" color="fg.muted">Maintenance Actions</Text>
+            <Text fontSize="xs" fontWeight="bold" color="fg.muted">
+              Maintenance Actions
+            </Text>
             <HStack gap={2}>
-              <Button 
-                size="xs" 
-                colorPalette="orange" 
-                variant="solid" 
+              <Button
+                size="xs"
+                colorPalette="orange"
+                variant="solid"
                 onClick={() => maintenanceMutation.mutate()}
                 loading={maintenanceMutation.isPending}
               >
                 <FiRefreshCw /> Trigger AI Bulk Classification
               </Button>
-              <Button 
-                size="xs" 
-                colorPalette="blue" 
-                variant="solid" 
+              <Button
+                size="xs"
+                colorPalette="blue"
+                variant="solid"
                 onClick={() => syncRegistryMutation.mutate()}
                 loading={syncRegistryMutation.isPending}
               >

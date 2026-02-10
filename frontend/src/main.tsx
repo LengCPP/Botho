@@ -16,6 +16,17 @@ import { CustomProvider } from "./components/ui/provider"
 OpenAPI.BASE = import.meta.env.VITE_API_URL || ""
 OpenAPI.TOKEN = async () => localStorage.getItem("access_token") || ""
 
+// Request persistent storage if available
+if (navigator.storage?.persist) {
+  navigator.storage.persist().then((persisted) => {
+    if (persisted) {
+      console.log("Storage persistence granted.")
+    } else {
+      console.log("Storage persistence denied.")
+    }
+  })
+}
+
 const handleApiError = (error: Error) => {
   if (error instanceof ApiError && error.status === 401) {
     localStorage.removeItem("access_token")

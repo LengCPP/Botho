@@ -5,6 +5,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, BackgroundTasks
 from sqlmodel import col, func, or_, select
 
+from sqlalchemy.orm import joinedload
 from app.api.deps import CurrentUser, SessionDep
 from app.api.utils import (
     check_item_availability,
@@ -14,7 +15,9 @@ from app.api.utils import (
     get_work_metadata,
     ensure_work_metadata,
     maintenance_bulk_classify,
-    sync_item_to_archive
+    sync_item_to_archive,
+    update_collection_index,
+    rebuild_collection_index_task,
 )
 from app.core.config import settings
 from app.models import (
@@ -243,6 +246,15 @@ def recommend_items(
     from app.search import client
     
     # 1. Get Social Graph (Friends & Communities)
+    # Optimization: If user has 0 items and 0 interests, skip complex logic
+    if current_user.collection_index and current_user.collection_index.get("total") == 0:
+        # Check interests
+        interests_count = session.exec(
+            select(func.count(UserInterest.interest_id)).where(UserInterest.user_id == current_user.id)
+        ).one()
+        if interests_count == 0:
+            return ItemsPublic(data=[], count=0)
+
     # Friends (bidirectional)
     friends_stmt = select(Friendship).where(
         (Friendship.user_id == current_user.id) | (Friendship.friend_id == current_user.id),
@@ -423,9 +435,12 @@ def read_item_facets(
     group_by: str = "category",
     owner_id: uuid.UUID | None = None,
     q: str | None = None,
+    skip: int = 0,
+    limit: int = 20,
 ) -> Any:
     """
     Get unique values and counts for a specific facet for user or community items.
+    Returns paginated results.
     """
     target_owner_id = owner_id or current_user.id
     
@@ -440,6 +455,16 @@ def read_item_facets(
         ).first()
         if not is_community:
             raise HTTPException(status_code=403, detail="Not enough permissions")
+
+    # Optimization: Check collection index total
+    owner_obj = session.get(User, target_owner_id)
+    if not owner_obj:
+        owner_obj = session.get(Community, target_owner_id)
+        
+    if owner_obj and owner_obj.collection_index:
+        total = owner_obj.collection_index.get("total")
+        if total == 0:
+             return {"data": [], "count": 0}
 
     # Map 'subject' to 'tags' for Meilisearch indexing
     facet_field = "tags" if group_by == "subject" else group_by
@@ -461,88 +486,119 @@ def read_item_facets(
         facet_distribution = search_results.get("facetDistribution", {})
         counts = facet_distribution.get(facet_field, {})
         
-        results = []
-        # Limit to top 50 facets to avoid performance issues with sample images
-        sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:50]
+        # Sort counts by value descending
+        all_sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)
+        total_count = len(all_sorted_counts)
         
-        for name, count in sorted_counts:
-            # For each facet, we want ONE sample image. 
-            # To optimize, we could use multi-search, but let's just limit the loop for now.
+        # Handle "Others" separately or include in counts
+        # Meilisearch facetDistribution usually doesn't include nulls.
+        # But for UI consistency, we might want to check for others.
+        
+        # Apply pagination
+        paginated_counts = all_sorted_counts[skip : skip + limit]
+        
+        results = []
+        for name, count in paginated_counts:
+            # For each facet, we want ONE sample image (or multiple if we want to enrich). 
             sample_params = {
                 "limit": 1,
                 "filter": f"{facet_field} = \"{name}\" AND {' AND '.join(filters)}"
             }
             sample_res = index.search(q or "", sample_params)
-            sample_image = None
+            sample_images = []
             if sample_res["hits"]:
-                sample_image = sample_res["hits"][0].get("image_url")
+                img = sample_res["hits"][0].get("image_url")
+                if img:
+                    sample_images.append(img)
             
             results.append({
                 "name": name, 
                 "count": count,
-                "sample_image": sample_image
+                "sample_images": sample_images
             })
             
-        # Check for uncategorized items
-        others_filter = filters + [f"({facet_field} IS NULL OR {facet_field} IS EMPTY OR {facet_field} NOT EXISTS)"]
-        try:
-            others_res = index.search(q or "", {"limit": 1, "filter": " AND ".join(others_filter)})
-            others_count = others_res.get("totalHits") or others_res.get("estimatedTotalHits", 0)
-            if others_count > 0:
-                results.append({
-                    "name": "Others",
-                    "count": others_count,
-                    "sample_image": others_res["hits"][0].get("image_url") if others_res["hits"] else None
-                })
-        except:
-            pass
-
         meili_success = True
-        return results
+        return {"data": results, "count": total_count}
     except Exception:
         meili_success = False
 
     if not meili_success:
         # SQL Fallback for facets
         results = []
+        total_count = 0
         if group_by == "author":
-            # Group by author
-            stmt = select(Item.author, func.count(Item.id), func.max(Item.image_url)).where(Item.owner_id == target_owner_id).group_by(Item.author)
+            # Count total unique authors
+            total_count = session.exec(
+                select(func.count(func.distinct(Item.author))).where(Item.owner_id == target_owner_id)
+            ).one()
+
+            # Group by author with pagination
+            stmt = select(Item.author, func.count(Item.id), func.max(Item.image_url))\
+                .where(Item.owner_id == target_owner_id)\
+                .group_by(Item.author)\
+                .order_by(func.count(Item.id).desc())\
+                .offset(skip).limit(limit)
+            
             rows = session.exec(stmt).all()
             for author, count, img in rows:
-                if author:
-                    results.append({"name": author, "count": count, "sample_image": img})
-                else:
-                    results.append({"name": "Others", "count": count, "sample_image": img})
+                results.append({
+                    "name": author or "Others", 
+                    "count": count, 
+                    "sample_images": [img] if img else []
+                })
+
         elif group_by in ["category", "genre"]:
-            # Group by JSON field
             json_field = group_by
+            # Count total unique
+            total_count = session.exec(
+                select(func.count(func.distinct(func.json_extract_path_text(Item.extra_data, json_field))))\
+                .where(Item.owner_id == target_owner_id)
+            ).one()
+
             stmt = select(
                 func.json_extract_path_text(Item.extra_data, json_field).label("name"),
                 func.count(Item.id).label("count"),
                 func.max(Item.image_url).label("sample_image")
-            ).where(Item.owner_id == target_owner_id).group_by("name")
+            ).where(Item.owner_id == target_owner_id)\
+            .group_by("name")\
+            .order_by(func.count(Item.id).desc())\
+            .offset(skip).limit(limit)
+            
             rows = session.exec(stmt).all()
             for name, count, img in rows:
-                results.append({"name": name or "Others", "count": count, "sample_image": img})
+                results.append({
+                    "name": name or "Others", 
+                    "count": count, 
+                    "sample_images": [img] if img else []
+                })
+
         elif group_by == "subject":
             # Subjects (tags) are in WorkMetadata, requires join
-            stmt = select(
+            # This is complex for SQL total count due to JSON array elements
+            base_stmt = select(
                 func.json_array_elements_text(WorkMetadata.tags).label("name"),
                 func.count(Item.id).label("count"),
                 func.max(Item.image_url).label("sample_image")
             ).join(
                 WorkMetadata, (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title)
             ).where(Item.owner_id == target_owner_id).group_by("name")
+
             try:
-                rows = session.exec(stmt).all()
+                # Get total count by wrapping in subquery
+                total_count = session.exec(select(func.count()).select_from(base_stmt.subquery())).one()
+                
+                rows = session.exec(base_stmt.order_by(func.count(Item.id).desc()).offset(skip).limit(limit)).all()
                 for name, count, img in rows:
-                    results.append({"name": name, "count": count, "sample_image": img})
+                    results.append({
+                        "name": name, 
+                        "count": count, 
+                        "sample_images": [img] if img else []
+                    })
             except Exception:
-                # complex JSON array grouping might fail on some DBs
                 pass
         
-        return results
+        return {"data": results, "count": total_count}
+
 
 
 @router.get("/", response_model=ItemsPublic)
@@ -672,6 +728,7 @@ def read_items(
             select(Item)
             .where(Item.id.in_(item_ids))
             .where(~Item.id.in_(defaulted_item_ids))
+            .options(joinedload(Item.user_owner), joinedload(Item.community_owner))
         ).all()
         item_map = {item.id: item for item in db_items}
         items = [item_map[iid] for iid in item_ids if iid in item_map]
@@ -766,7 +823,10 @@ def read_items(
             else:
                 statement = statement.order_by(sort_column.asc())
 
-            items = session.exec(statement.offset(skip).limit(limit)).all()
+            items = session.exec(
+                statement.options(joinedload(Item.user_owner), joinedload(Item.community_owner))
+                .offset(skip).limit(limit)
+            ).all()
 
     # Assemble public items
     if not items:
@@ -956,6 +1016,7 @@ async def create_item(
     *,
     session: SessionDep,
     current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
     title: Annotated[str, Form()],
     description: Annotated[str | None, Form()] = None,
     author: Annotated[str | None, Form()] = None,
@@ -1093,6 +1154,9 @@ async def create_item(
         session.refresh(db_item)
         sync_item_to_search(db_item)
 
+        # Update collection index for owner in background
+        background_tasks.add_task(rebuild_collection_index_task, db_item.owner_id)
+
         owner_pub = None
         community_pub = None
         if db_item.user_owner:
@@ -1132,6 +1196,7 @@ async def update_item(
     *,
     session: SessionDep,
     current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
     id: uuid.UUID,
     title: Annotated[str | None, Form()] = None,
     description: Annotated[str | None, Form()] = None,
@@ -1236,6 +1301,9 @@ async def update_item(
         session.refresh(db_item)
         sync_item_to_search(db_item)
 
+        # Update collection index for owner in background
+        background_tasks.add_task(rebuild_collection_index_task, db_item.owner_id)
+
         # Refresh honor score
         from app.api.routes.loans import refresh_user_honor
         await refresh_user_honor(session, current_user.id)
@@ -1287,6 +1355,7 @@ def delete_item(
     *,
     session: SessionDep,
     current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
     id: uuid.UUID,
 ) -> Any:
     """
@@ -1315,8 +1384,13 @@ def delete_item(
     if db_item.image_url:
         delete_image(db_item.image_url)
 
+    owner_id = db_item.owner_id # Save for background task
     session.delete(db_item)
     session.commit()
+    
+    # Update collection index for owner in background
+    background_tasks.add_task(rebuild_collection_index_task, owner_id)
+
     delete_item_from_search(id)
     return Message(message="Item deleted successfully")
 
@@ -1326,6 +1400,7 @@ def duplicate_item(
     *,
     session: SessionDep,
     current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
     id: uuid.UUID,
 ) -> Any:
     """
@@ -1351,6 +1426,9 @@ def duplicate_item(
     session.commit()
     session.refresh(new_item)
     sync_item_to_search(new_item)
+
+    # Update collection index for owner in background
+    background_tasks.add_task(rebuild_collection_index_task, new_item.owner_id)
 
     owner_pub = filter_owner_privacy(current_user, current_user.id, is_admin=current_user.is_superuser)
     owner_pub.is_available = True

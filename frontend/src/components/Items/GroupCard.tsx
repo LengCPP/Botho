@@ -19,6 +19,7 @@ interface GroupCardProps {
   groups?: ItemPublic[][]
   count?: number
   sample_image?: string | null
+  sample_images?: string[] // For efficient rendering from index
   onOpen: () => void
 }
 
@@ -29,6 +30,7 @@ export function GroupCard({
   groups,
   count,
   sample_image,
+  sample_images,
   onOpen,
 }: GroupCardProps) {
   const bgColor = useColorModeValue("accent.50", "gray.800")
@@ -38,6 +40,11 @@ export function GroupCard({
   // Flatten and take first 5 for preview
   const allItems = groups?.flat() || []
   const previewItems = allItems.slice(0, 5)
+
+  // Use sample_images if provided, otherwise fallback to previewItems images
+  const imagesToShow = sample_images?.length
+    ? sample_images.slice(0, 5)
+    : (previewItems.map((item) => item.image_url).filter(Boolean) as string[])
 
   const displayCount = count !== undefined ? count : groups?.length || 0
 
@@ -93,11 +100,11 @@ export function GroupCard({
           p={2}
           overflow="hidden"
         >
-          {previewItems.length > 0 ? (
+          {imagesToShow.length > 0 ? (
             <Flex justify="center" align="center" height="100%">
-              {previewItems.map((item, index) => (
+              {imagesToShow.map((imageUrl, index) => (
                 <Box
-                  key={item.id}
+                  key={imageUrl + index}
                   zIndex={5 - index}
                   height="100%"
                   aspectRatio="2/3"
@@ -106,43 +113,18 @@ export function GroupCard({
                   transform={`rotate(${index * 10 - 20}deg)`}
                   transition="transform 0.2s"
                 >
-                  {item.image_url ? (
-                    <Image
-                      src={getImageUrl(item.image_url)}
-                      alt={item.title}
-                      height="100%"
-                      width="100%"
-                      aspectRatio="2/3"
-                      objectFit="cover"
-                      borderRadius="sm"
-                      boxShadow="xl"
-                      border="1px solid white"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <Box
-                      height="100%"
-                      width="100%"
-                      aspectRatio="2/3"
-                      bg="gray.400"
-                      borderRadius="sm"
-                      display="flex"
-                      alignItems="center"
-                      justifyContent="center"
-                      border="1px solid white"
-                      p={1}
-                    >
-                      <Text
-                        fontSize="8px"
-                        fontWeight="bold"
-                        textAlign="center"
-                        color="white"
-                        lineClamp={3}
-                      >
-                        {item.title}
-                      </Text>
-                    </Box>
-                  )}
+                  <Image
+                    src={getImageUrl(imageUrl)}
+                    alt={`${name} preview ${index}`}
+                    height="100%"
+                    width="100%"
+                    aspectRatio="2/3"
+                    objectFit="cover"
+                    borderRadius="sm"
+                    boxShadow="xl"
+                    border="1px solid white"
+                    loading="lazy"
+                  />
                 </Box>
               ))}
             </Flex>

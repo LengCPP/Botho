@@ -11,6 +11,7 @@ from app.api.utils import (
     filter_loan_privacy,
     filter_owner_privacy,
     filter_user_privacy,
+    update_collection_index
 )
 from app.models import (
     CommunitiesPublic,
@@ -909,6 +910,11 @@ def add_item_to_community(
     session.add(comm_item)
 
     session.commit()
+    
+    # Update collection index for community
+    update_collection_index(session, id)
+    session.commit()
+
     from app.search import sync_item_to_search
     session.refresh(item)
     sync_item_to_search(item)
@@ -1050,6 +1056,12 @@ async def ratify_donation(
     session.add(item)
     session.add(comm_item)
     session.commit()
+    
+    # Update collection index for BOTH community and previous owner (user)
+    update_collection_index(session, id)
+    update_collection_index(session, donor_id)
+    session.commit()
+
     from app.search import sync_item_to_search
     session.refresh(item)
     sync_item_to_search(item)
@@ -1116,10 +1128,16 @@ def remove_item_from_community(
         item_id_to_del = item.id
         session.delete(item)
         session.commit()
+        # Update community index
+        update_collection_index(session, id)
+        session.commit()
         delete_item_from_search(item_id_to_del)
     else:
         # Just remove pooling metadata
         session.delete(comm_item)
+        session.commit()
+        # Update community index
+        update_collection_index(session, id)
         session.commit()
         session.refresh(item)
         sync_item_to_search(item)

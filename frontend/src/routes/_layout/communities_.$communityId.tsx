@@ -74,12 +74,6 @@ import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
 import { LoanCard } from "@/components/Items/LoanCard"
 import PendingItems from "@/components/Pending/PendingItems"
-import {
-  PaginationItems,
-  PaginationNextTrigger,
-  PaginationPrevTrigger,
-  PaginationRoot,
-} from "@/components/ui/pagination"
 import { useColorModeValue } from "@/components/ui/color-mode"
 import {
   DialogBody,
@@ -99,6 +93,12 @@ import {
   MenuRoot,
   MenuTrigger,
 } from "@/components/ui/menu"
+import {
+  PaginationItems,
+  PaginationNextTrigger,
+  PaginationPrevTrigger,
+  PaginationRoot,
+} from "@/components/ui/pagination"
 import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
 import { getImageUrl, groupItems } from "@/utils"
@@ -621,7 +621,11 @@ function CommunityBoard() {
     enabled: !!isStaff,
   })
 
-  const { data: communityItems, isLoading: isLoadingItems, isPlaceholderData } = useQuery({
+  const {
+    data: communityItems,
+    isLoading: isLoadingItems,
+    isPlaceholderData,
+  } = useQuery({
     ...getCommunityItemsQueryOptions({
       communityId,
       page,
@@ -633,23 +637,33 @@ function CommunityBoard() {
       q: qParam,
     }),
     placeholderData: (prevData) => prevData,
-    enabled: !!isMember && tab === "items" && (!!subject || display_type === "items"),
+    enabled:
+      !!isMember && tab === "items" && (!!subject || display_type === "items"),
   })
 
   // New query for high-performance facets (Collections View)
   const { data: facets, isLoading: isLoadingFacets } = useQuery({
     queryKey: ["communityFacets", communityId, organize_by, qParam],
-    queryFn: () => (CommunitiesService as any).readCommunityItemFacets({
-      id: communityId,
-      groupBy: organize_by,
-      q: qParam
-    }),
-    enabled: !!isMember && tab === "items" && display_type === "collections" && !subject,
+    queryFn: () =>
+      (CommunitiesService as any).readCommunityItemFacets({
+        id: communityId,
+        groupBy: organize_by,
+        q: qParam,
+      }),
+    enabled:
+      !!isMember &&
+      tab === "items" &&
+      display_type === "collections" &&
+      !subject,
   })
 
   // Prefetch next page (only in items view)
   useEffect(() => {
-    if (tab === "items" && display_type === "items" && communityItems?.data.length === limit) {
+    if (
+      tab === "items" &&
+      display_type === "items" &&
+      communityItems?.data.length === limit
+    ) {
       const nextPage = page + 1
       queryClient.prefetchQuery(
         getCommunityItemsQueryOptions({
@@ -661,10 +675,23 @@ function CommunityBoard() {
           category,
           genre,
           q: qParam,
-        })
+        }),
       )
     }
-  }, [communityItems, page, limit, queryClient, communityId, sort_by, sort_order, category, genre, qParam, tab, display_type])
+  }, [
+    communityItems,
+    page,
+    limit,
+    queryClient,
+    communityId,
+    sort_by,
+    sort_order,
+    category,
+    genre,
+    qParam,
+    tab,
+    display_type,
+  ])
 
   // Fetch outgoing loans once for all cards
   useQuery({
@@ -1135,7 +1162,9 @@ function CommunityBoard() {
                     q={qParam}
                     onChangeQ={(val) => updateSearch({ q: val })}
                     viewMode={view_mode}
-                    onChangeViewMode={(mode) => updateSearch({ view_mode: mode })}
+                    onChangeViewMode={(mode) =>
+                      updateSearch({ view_mode: mode })
+                    }
                     displayType={display_type}
                     onChangeDisplayType={(type) =>
                       updateSearch({ display_type: type, subject: undefined })
@@ -1143,7 +1172,9 @@ function CommunityBoard() {
                     sortBy={sort_by}
                     onChangeSortBy={(val) => updateSearch({ sort_by: val })}
                     sortOrder={sort_order}
-                    onChangeSortOrder={(val) => updateSearch({ sort_order: val })}
+                    onChangeSortOrder={(val) =>
+                      updateSearch({ sort_order: val })
+                    }
                     limit={limit}
                     onChangeLimit={(val) => updateSearch({ limit: val })}
                     category={category}
@@ -1195,13 +1226,23 @@ function CommunityBoard() {
                       columns={{ base: 1, md: 2, lg: 3, xl: 4 }}
                       gap={6}
                     >
-                      {facets?.map((facet: any) => (
+                      {(community.collection_index?.[organize_by]
+                        ? Object.entries(
+                            community.collection_index[organize_by],
+                          ).map(([name, data]: any) => ({
+                            name,
+                            count: data.count,
+                            sample_images: data.sample_images,
+                          }))
+                        : facets || []
+                      ).map((facet: any) => (
                         <GroupCard
                           key={facet.name}
                           name={facet.name}
                           type={organize_by}
                           count={facet.count}
                           sample_image={facet.sample_image}
+                          sample_images={facet.sample_images}
                           onOpen={() => updateSearch({ subject: facet.name })}
                         />
                       ))}
@@ -1263,7 +1304,8 @@ function CommunityBoard() {
                           <PaginationRoot
                             count={
                               subject
-                                ? (organizedItems[subject]?.pooled.length || 0) +
+                                ? (organizedItems[subject]?.pooled.length ||
+                                    0) +
                                   (organizedItems[subject]?.owned.length || 0)
                                 : communityItems?.count || 0
                             }

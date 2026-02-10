@@ -15,10 +15,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useEffect, useMemo, useState } from "react"
-import {
-  FaChevronLeft,
-  FaFileImport,
-} from "react-icons/fa"
+import { FaChevronLeft, FaFileImport } from "react-icons/fa"
 import { FiSearch } from "react-icons/fi"
 import { z } from "zod"
 
@@ -67,6 +64,8 @@ const itemsSearchSchema = z.object({
   tab: z.enum(["items", "import"]).catch("items"),
 })
 
+const COLLECTIONS_LIMIT = 12
+
 function getItemsQueryOptions({
   page,
   sort_by,
@@ -75,6 +74,7 @@ function getItemsQueryOptions({
   ownerId,
   category,
   genre,
+  subject,
   q,
 }: {
   page: number
@@ -84,6 +84,7 @@ function getItemsQueryOptions({
   ownerId?: string
   category?: string
   genre?: string
+  subject?: string
   q?: string
 }) {
   return {
@@ -96,6 +97,7 @@ function getItemsQueryOptions({
         ownerId: ownerId,
         category: category,
         genre: genre,
+        subject: subject,
         q: q,
       }),
     queryKey: [
@@ -108,6 +110,7 @@ function getItemsQueryOptions({
         ownerId,
         category,
         genre,
+        subject,
         q,
       },
     ],
@@ -156,6 +159,7 @@ function ItemsTable() {
       ownerId: user?.id,
       category,
       genre,
+      subject,
       q,
     }),
     placeholderData: (prevData) => prevData,
@@ -163,12 +167,14 @@ function ItemsTable() {
   })
 
   const { data: facets, isLoading: isLoadingFacets } = useQuery({
-    queryKey: ["itemFacets", user?.id, organize_by, q],
+    queryKey: ["itemFacets", user?.id, organize_by, q, page],
     queryFn: () =>
-      (ItemsService as any).readItemFacets({
+      ItemsService.readItemFacets({
         ownerId: user?.id,
         groupBy: organize_by,
         q: q,
+        skip: (page - 1) * COLLECTIONS_LIMIT,
+        limit: COLLECTIONS_LIMIT,
       }),
     enabled: !!user && display_type === "collections" && !subject,
   })
@@ -186,11 +192,25 @@ function ItemsTable() {
           ownerId: user?.id,
           category,
           genre,
+          subject,
           q,
-        })
+        }),
       )
     }
-  }, [data, page, limit, queryClient, sort_by, sort_order, user?.id, category, genre, q, display_type])
+  }, [
+    data,
+    page,
+    limit,
+    queryClient,
+    sort_by,
+    sort_order,
+    user?.id,
+    category,
+    genre,
+    subject,
+    q,
+    display_type,
+  ])
 
   // Fetch outgoing loans once for all cards
   useQuery({
@@ -220,45 +240,11 @@ function ItemsTable() {
   const count = data?.count ?? 0
   const hasAnyItems = (allItemsCheck?.count ?? 0) > 0
 
-  const organizedItems = useMemo(() => {
-    if (display_type === "collections" && !subject) return {}
-    const groupedPhysical = groupItems(items)
-    const sections: Record<string, ItemPublic[][]> = {}
-
-    for (const group of groupedPhysical) {
-      const first = group[0]
-      let keys: string[] = []
-
-      if (organize_by === "subject") {
-        keys = first.work_metadata?.tags || []
-      } else if (organize_by === "genre") {
-        const g = (first.extra_data as any)?.genre
-        if (g) keys = [g]
-      } else if (organize_by === "category") {
-        const c = (first.extra_data as any)?.category
-        if (c) keys = [c]
-      } else if (organize_by === "author") {
-        if (first.author) keys = [first.author]
-      }
-
-      if (keys.length === 0) {
-        if (!sections.Others) sections.Others = []
-        sections.Others.push(group)
-      } else {
-        for (const key of keys) {
-          if (!sections[key]) sections[key] = []
-          sections[key].push(group)
-        }
-      }
-    }
-    return sections
-  }, [items, organize_by])
-
   if (isLoading || isLoadingFacets) {
     return <PendingItems />
   }
 
-  if (items.length === 0 && page === 1 && !facets?.length) {
+  if (items.length === 0 && page === 1 && !facets?.data?.length) {
     if (hasAnyItems || q) {
       return (
         <Box mt={8}>
@@ -323,7 +309,7 @@ function ItemsTable() {
           }}
           gap={6}
         >
-          {facets?.map((facet: any) => (
+          {facets?.data?.map((facet: any) => (
             <GroupCard
               key={facet.name}
               name={facet.name}
@@ -334,14 +320,26 @@ function ItemsTable() {
             />
           ))}
         </Grid>
+
+        <Flex justifyContent="center" mt={8}>
+          <PaginationRoot
+            count={facets?.count ?? 0}
+            pageSize={COLLECTIONS_LIMIT}
+            onPageChange={({ page }) => setPage(page)}
+          >
+            <Flex>
+              <PaginationPrevTrigger />
+              <PaginationItems />
+              <PaginationNextTrigger />
+            </Flex>
+          </PaginationRoot>
+        </Flex>
       </Box>
     )
   }
 
   // Drilled-down Group View OR Item View
-  const activeGroups = subject
-    ? organizedItems[subject] || []
-    : groupItems(items)
+  const activeGroups = groupItems(items)
 
   return (
     <Box mt={8}>
@@ -385,7 +383,7 @@ function ItemsTable() {
 
       <Flex justifyContent="center" mt={8}>
         <PaginationRoot
-          count={subject ? activeGroups.length : count}
+          count={count}
           pageSize={limit}
           onPageChange={({ page }) => setPage(page)}
         >
@@ -413,6 +411,7 @@ function Items() {
     view_mode,
     display_type,
     organize_by,
+    subject,
     q,
     tab,
   } = Route.useSearch()
@@ -426,6 +425,7 @@ function Items() {
       ownerId: user?.id,
       category,
       genre,
+      subject,
       q,
     }),
     enabled: !!user && tab !== "import",

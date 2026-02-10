@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 from pydantic import EmailStr, field_validator
 from sqlalchemy import JSON, Column, DateTime, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
 
 # Enums
@@ -89,7 +90,7 @@ class CommunityItem(SQLModel, table=True):
     item_id: uuid.UUID = Field(
         foreign_key="item.id", primary_key=True, ondelete="CASCADE"
     )
-    added_by: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
+    added_by: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
     is_donation_pending: bool = Field(default=False)
 
 
@@ -185,10 +186,10 @@ class PushSubscriptionCreate(SQLModel):
 
 class Loan(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    item_id: uuid.UUID = Field(foreign_key="item.id", ondelete="CASCADE")
-    owner_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="CASCADE")
-    community_id: uuid.UUID | None = Field(default=None, foreign_key="community.id", ondelete="CASCADE")
-    requester_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
+    item_id: uuid.UUID = Field(foreign_key="item.id", ondelete="CASCADE", index=True)
+    owner_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="CASCADE", index=True)
+    community_id: uuid.UUID | None = Field(default=None, foreign_key="community.id", ondelete="CASCADE", index=True)
+    requester_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
     status: LoanStatus = Field(default=LoanStatus.PENDING)
     start_date: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
     end_date: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
@@ -400,6 +401,7 @@ class User(UserBase, table=True):
         sa_relationship_kwargs={"foreign_keys": "UserReview.reviewer_id"}
     )
     contributions: list["Contribution"] = Relationship(back_populates="user")
+    collection_index: dict[str, Any] | None = Field(default={}, sa_column=Column(JSONB))
 
 
 class CommunityBase(SQLModel):
@@ -440,6 +442,7 @@ class Community(CommunityBase, table=True):
         }
     )
     loans: list["Loan"] = Relationship(back_populates="community")
+    collection_index: dict[str, Any] | None = Field(default={}, sa_column=Column(JSONB))
 
 
 class CommunityAnnouncement(SQLModel, table=True):
@@ -591,6 +594,7 @@ class CommunityPublic(CommunityBase):
     current_user_role: CommunityMemberRole | None = None
     current_user_status: CommunityMemberStatus | None = None
     notifications_enabled: bool | None = None
+    collection_index: dict[str, Any] | None = None
 
 
 class CommunityAnnouncementBase(SQLModel):
@@ -659,6 +663,7 @@ class UserPublic(UserBase):
     is_delinquent: bool = False
     ai_honor_summary: str | None = None
     ai_improvement_tips: list[str] | None = None
+    collection_index: dict[str, Any] | None = None
 
 
 class CommunityMemberUpdate(SQLModel):
@@ -927,8 +932,8 @@ class ReadingLogsPublic(SQLModel):
 
 class Contribution(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    user_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
-    item_id: uuid.UUID | None = Field(default=None, foreign_key="item.id", ondelete="SET NULL")
+    user_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
+    item_id: uuid.UUID | None = Field(default=None, foreign_key="item.id", ondelete="SET NULL", index=True)
     work_author: str | None = Field(default=None, max_length=255)
     work_title: str | None = Field(default=None, max_length=255)
     description: str = Field(max_length=255)
@@ -951,9 +956,9 @@ class Contribution(SQLModel, table=True):
 
 class UserReview(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    loan_id: uuid.UUID = Field(foreign_key="loan.id", ondelete="CASCADE")
-    reviewer_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
-    reviewee_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="CASCADE")
+    loan_id: uuid.UUID = Field(foreign_key="loan.id", ondelete="CASCADE", index=True)
+    reviewer_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
+    reviewee_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="CASCADE", index=True)
     rating: int = Field(ge=1, le=5)
     comment: str | None = Field(default=None, max_length=2000)
     condition_grade: int | None = Field(default=None, ge=1, le=10)

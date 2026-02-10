@@ -5,6 +5,8 @@ from typing import Any
 from sqlmodel import Session, and_, func, or_, select
 
 from app.models import (
+    Community,
+    CommunityItem,
     Friendship,
     FriendshipStatus,
     Item,
@@ -19,6 +21,129 @@ from app.models import (
     UserReview,
     WorkMetadata,
 )
+
+def _update_collection_index_logic(session: Session, owner_id: uuid.UUID):
+    """
+    Internal logic to update the collection_index for a user or community.
+    Calculates totals and sample images for genre, category, subject, and author.
+    """
+    user = session.get(User, owner_id)
+    community = None
+    if not user:
+        community = session.get(Community, owner_id)
+    
+    if not user and not community:
+        return
+
+    # Fetch all items for this owner
+    if community:
+        # Include pooled items for communities
+        comm_item_ids = select(CommunityItem.item_id).where(CommunityItem.community_id == owner_id)
+        items_stmt = select(Item).where(or_(Item.owner_id == owner_id, Item.id.in_(comm_item_ids)))
+        items = session.exec(items_stmt).all()
+    else:
+        items = session.exec(select(Item).where(Item.owner_id == owner_id)).all()
+    
+    # Pre-fetch work metadata for subjects (tags)
+    work_keys = {(item.author, item.title) for item in items if item.author and item.title}
+    work_meta_map = {}
+    if work_keys:
+        from sqlalchemy import tuple_
+        work_metas = session.exec(
+            select(WorkMetadata).where(
+                tuple_(WorkMetadata.author, WorkMetadata.title).in_(list(work_keys))
+            )
+        ).all()
+        for wm in work_metas:
+            work_meta_map[(wm.author, wm.title)] = wm
+
+    index = {
+        "total": len(items),
+        "genre": {},
+        "category": {},
+        "subject": {},
+        "author": {},
+        "ownership": {}
+    }
+
+    for item in items:
+        # 1. Author
+        author = item.author or "Others"
+        if author not in index["author"]:
+            index["author"][author] = {"count": 0, "sample_images": []}
+        index["author"][author]["count"] += 1
+        if item.image_url and len(index["author"][author]["sample_images"]) < 5:
+            if item.image_url not in index["author"][author]["sample_images"]:
+                index["author"][author]["sample_images"].append(item.image_url)
+
+        # 2. Category & Genre
+        extra = item.extra_data or {}
+        category = extra.get("category") or "Others"
+        genre = extra.get("genre") or "Others"
+
+        if category not in index["category"]:
+            index["category"][category] = {"count": 0, "sample_images": []}
+        index["category"][category]["count"] += 1
+        if item.image_url and len(index["category"][category]["sample_images"]) < 5:
+            if item.image_url not in index["category"][category]["sample_images"]:
+                index["category"][category]["sample_images"].append(item.image_url)
+
+        if genre not in index["genre"]:
+            index["genre"][genre] = {"count": 0, "sample_images": []}
+        index["genre"][genre]["count"] += 1
+        if item.image_url and len(index["genre"][genre]["sample_images"]) < 5:
+            if item.image_url not in index["genre"][genre]["sample_images"]:
+                index["genre"][genre]["sample_images"].append(item.image_url)
+
+        # 3. Subject (Tags)
+        meta = work_meta_map.get((item.author, item.title))
+        tags = meta.tags if meta and meta.tags else []
+        if not tags:
+            tags = ["Others"]
+        
+        for tag in tags:
+            if tag not in index["subject"]:
+                index["subject"][tag] = {"count": 0, "sample_images": []}
+            index["subject"][tag]["count"] += 1
+            if item.image_url and len(index["subject"][tag]["sample_images"]) < 5:
+                if item.image_url not in index["subject"][tag]["sample_images"]:
+                    index["subject"][tag]["sample_images"].append(item.image_url)
+
+        # 4. Ownership (Community only)
+        if community:
+            owner_type = "Community Owned" if item.owner_id == owner_id else "Member Shared Pool"
+            if owner_type not in index["ownership"]:
+                index["ownership"][owner_type] = {"count": 0, "sample_images": []}
+            index["ownership"][owner_type]["count"] += 1
+            if item.image_url and len(index["ownership"][owner_type]["sample_images"]) < 5:
+                if item.image_url not in index["ownership"][owner_type]["sample_images"]:
+                    index["ownership"][owner_type]["sample_images"].append(item.image_url)
+
+    if user:
+        user.collection_index = index
+        session.add(user)
+    elif community:
+        community.collection_index = index
+        session.add(community)
+    
+    session.commit()
+
+def update_collection_index(session: Session, owner_id: uuid.UUID):
+    """
+    Deprecated: Use rebuild_collection_index_task for background execution.
+    Maintains synchronous behavior for legacy calls.
+    """
+    _update_collection_index_logic(session, owner_id)
+
+def rebuild_collection_index_task(owner_id: uuid.UUID):
+    """
+    Background task to rebuild collection index.
+    Creates its own session.
+    """
+    from app.core.db import engine
+    with Session(engine) as session:
+        _update_collection_index_logic(session, owner_id)
+
 
 async def maintenance_bulk_classify():
     """Background task to classify all books and clean up polluted ISBNs."""

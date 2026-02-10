@@ -74,7 +74,9 @@ const fetchBooks = async (
   let googleResults: BookResult[] = []
 
   if (response.status === 429) {
-    console.warn("Google Books API Rate Limit hit, falling back to Open Library")
+    console.warn(
+      "Google Books API Rate Limit hit, falling back to Open Library",
+    )
   } else if (!response.ok) {
     console.error("Google Books API failed, falling back to Open Library")
   } else {
