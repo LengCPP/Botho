@@ -9,3 +9,5 @@ backend/manual_testing_scripts/
 frontend/manual-testing-scripts/
 .env.local.bak
 .env.prod
+.env.bak
+docker-compose.override.yml
