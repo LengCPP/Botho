@@ -192,7 +192,6 @@ def get_recent_activity(
         select(ItemConditionRating).where(ItemConditionRating.item_id.in_(item_ids))
     ).all()
     
-    from app.models import ItemConditionRating
     condition_data_map = {} 
     for r in condition_ratings:
         if r.item_id not in condition_data_map:

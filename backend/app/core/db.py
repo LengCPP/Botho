@@ -36,6 +36,10 @@ def init_db(session: Session) -> None:
             is_superuser=True,
         )
         user = crud.create_user(session=session, user_create=user_in)
+        user.is_verified = True
+        session.add(user)
+        session.commit()
+        session.refresh(user)
 
     # Prepopulate interests
     default_interests = ["Music", "Chess", "Sports", "Technology", "Art", "Travel", "Gaming", "Cooking"]

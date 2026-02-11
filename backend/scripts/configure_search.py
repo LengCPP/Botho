@@ -23,7 +23,10 @@ def configure_meilisearch():
             "owner_id",
             "pooled_in",
             "category",
-            "genre"
+            "genre",
+            "author",
+            "subject",
+            "is_available"
         ],
         "typoTolerance": {
             "enabled": True,

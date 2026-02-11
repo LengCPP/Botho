@@ -572,7 +572,10 @@ class Item(ItemBase, table=True):
         }
     )
     communities: list["Community"] = Relationship(back_populates="items", link_model=CommunityItem)
-    loans: list["Loan"] = Relationship(back_populates="item")
+    loans: list["Loan"] = Relationship(
+        back_populates="item",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
 
 
 # API Models (Public)

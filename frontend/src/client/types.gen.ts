@@ -626,6 +626,7 @@ export type CommunitiesReadCommunityItemFacetsData = {
 export type CommunitiesReadCommunityItemFacetsResponse = unknown
 
 export type CommunitiesReadCommunityItemsData = {
+  author?: string | null
   category?: string | null
   genre?: string | null
   id: string
@@ -889,6 +890,7 @@ export type ItemsReadItemFacetsData = {
 export type ItemsReadItemFacetsResponse = unknown
 
 export type ItemsReadItemsData = {
+  author?: string | null
   category?: string | null
   enableFeed?: boolean
   genre?: string | null

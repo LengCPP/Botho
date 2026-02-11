@@ -546,64 +546,65 @@ def read_community_item_facets(
         raise HTTPException(status_code=403, detail="Must be a member to view community items")
 
     # Map 'subject' to 'tags' for Meilisearch indexing
-    facet_field = "tags" if group_by == "subject" else group_by
+    # facet_field = "tags" if group_by == "subject" else group_by
+    facet_field = group_by
 
     from app.search import client as meili_client
     meili_success = False
-    try:
-        index = meili_client.index("items")
-        filters = [f'(owner_id = "{id}" OR pooled_in = "{id}")']
-        filters.append("is_available = true")
-        
-        search_params = {
-            "limit": 0,  # We only care about facets
-            "filter": " AND ".join(filters),
-            "facets": [facet_field]
-        }
-        
-        search_results = index.search(q or "", search_params)
-        facet_distribution = search_results.get("facetDistribution", {})
-        counts = facet_distribution.get(facet_field, {})
-        
-        # Get sample images for top 50 facets to avoid performance issues
-        results = []
-        sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:50]
-        
-        for name, count in sorted_counts:
-            sample_params = {
-                "limit": 1,
-                "filter": f'{facet_field} = "{name}" AND {" AND ".join(filters)}'
-            }
-            sample_res = index.search(q or "", sample_params)
-            sample_image = None
-            if sample_res["hits"]:
-                sample_image = sample_res["hits"][0].get("image_url")
-            
-            results.append({
-                "name": name, 
-                "count": count,
-                "sample_image": sample_image
-            })
-        
-        # Check if there are items that are not captured by facets (uncategorized/untagged)
-        others_filter = filters + [f"({facet_field} IS NULL OR {facet_field} IS EMPTY OR {facet_field} NOT EXISTS)"]
-        try:
-            others_res = index.search(q or "", {"limit": 1, "filter": " AND ".join(others_filter)})
-            others_count = others_res.get("totalHits") or others_res.get("estimatedTotalHits", 0)
-            
-            if others_count > 0:
-                results.append({
-                    "name": "Others",
-                    "count": others_count,
-                    "sample_image": others_res["hits"][0].get("image_url") if others_res["hits"] else None
-                })
-        except:
-            pass
-            
-        meili_success = True
-        return results
-    except Exception:
-        meili_success = False
+    # try:
+    #     index = meili_client.index("items")
+    #     filters = [f'(owner_id = "{id}" OR pooled_in = "{id}")']
+    #     filters.append("is_available = true")
+    #     
+    #     search_params = {
+    #         "limit": 0,  # We only care about facets
+    #         "filter": " AND ".join(filters),
+    #         "facets": [facet_field]
+    #     }
+    #     
+    #     search_results = index.search(q or "", search_params)
+    #     facet_distribution = search_results.get("facetDistribution", {})
+    #     counts = facet_distribution.get(facet_field, {})
+    #     
+    #     # Get sample images for top 50 facets to avoid performance issues
+    #     results = []
+    #     sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:50]
+    #     
+    #     for name, count in sorted_counts:
+    #         sample_params = {
+    #             "limit": 1,
+    #             "filter": f'{facet_field} = "{name}" AND {" AND ".join(filters)}'
+    #         }
+    #         sample_res = index.search(q or "", sample_params)
+    #         sample_image = None
+    #         if sample_res["hits"]:
+    #             sample_image = sample_res["hits"][0].get("image_url")
+    #         
+    #         results.append({
+    #             "name": name, 
+    #             "count": count,
+    #             "sample_image": sample_image
+    #         })
+    #     
+    #     # Check if there are items that are not captured by facets (uncategorized/untagged)
+    #     others_filter = filters + [f"({facet_field} IS NULL OR {facet_field} IS EMPTY OR {facet_field} NOT EXISTS)"]
+    #     try:
+    #         others_res = index.search(q or "", {"limit": 1, "filter": " AND ".join(others_filter)})
+    #         others_count = others_res.get("totalHits") or others_res.get("estimatedTotalHits", 0)
+    #         
+    #         if others_count > 0:
+    #             results.append({
+    #                 "name": "Others",
+    #                 "count": others_count,
+    #                 "sample_image": others_res["hits"][0].get("image_url") if others_res["hits"] else None
+    #             })
+    #     except:
+    #         pass
+    #         
+    #     meili_success = True
+    #     return results
+    # except Exception:
+    #     meili_success = False
 
     if not meili_success:
         # Fallback to SQL for facets
@@ -657,6 +658,7 @@ def read_community_items(
     category: str | None = None,
     genre: str | None = None,
     subject: str | None = None,
+    author: str | None = None,
     q: str | None = None,
 ) -> Any:
     """
@@ -684,47 +686,49 @@ def read_community_items(
     from app.search import client as meili_client
     meili_success = False
     
-    try:
-        index = meili_client.index("items")
-        # Filter: item belongs to community (owned or pooled)
-        # Meilisearch 'pooled_in' is an array, we check if community ID is in it
-        filters = [f'(owner_id = "{id}" OR pooled_in = "{id}")']
-        filters.append("is_available = true")
-        
-        if category:
-            filters.append(f"category = '{category}'")
-        if genre:
-            filters.append(f"genre = '{genre}'")
-        if subject:
-            filters.append(f"tags = '{subject}'")
-            
-        search_params = {
-            "limit": limit,
-            "offset": skip,
-            "filter": " AND ".join(filters),
-            "sort": [f"{sort_by if sort_by != 'created_at' else 'id'}:{sort_order}"]
-        }
-        
-        search_results = index.search(q or "", search_params)
-        item_ids = [uuid.UUID(hit["id"]) for hit in search_results["hits"]]
-        count = search_results.get("totalHits", len(item_ids))
-        facets = search_results.get("facetDistribution")
-        facet_stats = search_results.get("facetStats")
-        
-        if not item_ids:
-            return ItemsPublic(data=[], count=count, facets=facets, facet_stats=facet_stats)
-                
-        # Fetch from DB preserving order
-        db_items = session.exec(
-            select(Item)
-            .where(Item.id.in_(item_ids))
-            .where(Item.id.not_in(defaulted_item_ids))
-        ).all()
-        item_map = {item.id: item for item in db_items}
-        items = [item_map[iid] for iid in item_ids if iid in item_map]
-        meili_success = True
-    except Exception:
-        meili_success = False
+    # try:
+    #     index = meili_client.index("items")
+    #     # Filter: item belongs to community (owned or pooled)
+    #     # Meilisearch 'pooled_in' is an array, we check if community ID is in it
+    #     filters = [f'(owner_id = "{id}" OR pooled_in = "{id}")']
+    #     filters.append("is_available = true")
+    #     
+    #     if category:
+    #         filters.append(f'category = "{category}"')
+    #     if genre:
+    #         filters.append(f'genre = "{genre}"')
+    #     if subject:
+    #         filters.append(f'subject = "{subject}"')
+    #     if author:
+    #         filters.append(f'author = "{author}"')
+    #         
+    #     search_params = {
+    #         "limit": limit,
+    #         "offset": skip,
+    #         "filter": " AND ".join(filters),
+    #         "sort": [f"{sort_by if sort_by != 'created_at' else 'id'}:{sort_order}"]
+    #     }
+    #     
+    #     search_results = index.search(q or "", search_params)
+    #     item_ids = [uuid.UUID(hit["id"]) for hit in search_results["hits"]]
+    #     count = search_results.get("totalHits", len(item_ids))
+    #     facets = search_results.get("facetDistribution")
+    #     facet_stats = search_results.get("facetStats")
+    #     
+    #     if not item_ids:
+    #         return ItemsPublic(data=[], count=count, facets=facets, facet_stats=facet_stats)
+    #             
+    #     # Fetch from DB preserving order
+    #     db_items = session.exec(
+    #         select(Item)
+    #         .where(Item.id.in_(item_ids))
+    #         .where(Item.id.not_in(defaulted_item_ids))
+    #     ).all()
+    #     item_map = {item.id: item for item in db_items}
+    #     items = [item_map[iid] for iid in item_ids if iid in item_map]
+    #     meili_success = True
+    # except Exception:
+    #     meili_success = False
 
     if not meili_success:
         facets = {}
@@ -770,6 +774,8 @@ def read_community_items(
                 WorkMetadata, 
                 (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title)
             ).where(func.json_extract_path_text(WorkMetadata.tags, '$') .ilike(f'%"{subject}"%'))
+        if author:
+            statement = statement.where(col(Item.author).ilike(f"%{author}%"))
 
         # Apply sorting
         sort_column = Item.created_at

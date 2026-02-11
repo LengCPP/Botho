@@ -81,7 +81,7 @@ const EditTags = ({ item }: EditTagsProps) => {
         <DialogBody>
           <form id="edit-tags-form" onSubmit={handleSubmit(onSubmit)}>
             <Field label="Subjects (comma separated)">
-              <Input {...register("tags")} placeholder="fantasy, scifi, epic" />
+              <Input {...register("tags")} placeholder="love, war, peace" />
             </Field>
           </form>
         </DialogBody>

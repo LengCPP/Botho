@@ -563,6 +563,7 @@ export class CommunitiesService {
         category: data.category,
         genre: data.genre,
         subject: data.subject,
+        author: data.author,
         q: data.q,
       },
       errors: {
@@ -1521,6 +1522,7 @@ export class ItemsService {
         category: data.category,
         genre: data.genre,
         subject: data.subject,
+        author: data.author,
         item_type: data.itemType,
         enable_feed: data.enableFeed,
         q: data.q,

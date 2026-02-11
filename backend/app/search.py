@@ -15,7 +15,8 @@ def configure_search():
         "pooled_in", 
         "category", 
         "genre", 
-        "tags",
+        "author",
+        "subject",
         "item_type", 
         "is_available"
     ])
@@ -26,7 +27,7 @@ def configure_search():
     ])
 
     works_index = client.index("works")
-    works_index.update_filterable_attributes(["isbn", "category", "tags"])
+    works_index.update_filterable_attributes(["isbn", "category", "subject"])
     works_index.update_sortable_attributes(["title", "author"])
 
     communities_index = client.index("communities")
@@ -66,7 +67,7 @@ def sync_item_to_search(item: Item):
         "pooled_in": pooled_in,
         "category": category,
         "genre": genre,
-        "tags": tags,
+        "subject": tags,
         "created_at": int(item.created_at.timestamp()) if item.created_at else None,
         "is_available": True
     }
@@ -104,7 +105,7 @@ def sync_work_metadata_to_search(meta: WorkMetadata):
         "description": meta.description,
         "category": meta.category,
         "image_url": meta.image_url,
-        "tags": meta.tags,
+        "subject": meta.tags,
     }
     index.add_documents([document])
 

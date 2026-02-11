@@ -40,7 +40,7 @@ import {
 } from "@/client"
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
-import { GroupCard } from "@/components/Items/GroupCard"
+import { CollectionGrid } from "@/components/Items/CollectionGrid"
 import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
@@ -85,6 +85,7 @@ const userSearchSchema = z.object({
     .enum(["items", "collections"])
     .catch(() => (localStorage.getItem("display_type") as any) || "items"),
   subject: z.string().optional(),
+  author: z.string().optional(),
   organize_by: z
     .enum(["subject", "genre", "category", "author"])
     .catch(() => (localStorage.getItem("organize_by") as any) || "subject"),
@@ -110,6 +111,7 @@ function UserProfilePage() {
     view_mode,
     display_type,
     subject,
+    author,
     organize_by,
     q,
   } = Route.useSearch()
@@ -138,6 +140,15 @@ function UserProfilePage() {
     navigate({
       search: (prev: any) => ({ ...prev, page }),
     })
+
+  const handleOpenCollection = (name: string) => {
+    const params: any = { subject: undefined, author: undefined, genre: undefined, category: undefined }
+    if (organize_by === "subject") params.subject = name
+    else if (organize_by === "author") params.author = name
+    else if (organize_by === "genre") params.genre = name
+    else if (organize_by === "category") params.category = name
+    updateSearch(params)
+  }
 
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
   const borderColor = useColorModeValue("accent.200", "gray.600")
@@ -235,6 +246,9 @@ function UserProfilePage() {
   const userItems = items?.data || []
   const activeGroups = groupItems(userItems)
 
+  const currentFilterValue = subject || author || genre || category
+  const isDrillDown = !!currentFilterValue
+
   if (isLoadingUser) return <Text p={4}>Loading profile...</Text>
   if (!user) return <Text p={4}>User not found</Text>
 
@@ -317,12 +331,14 @@ function UserProfilePage() {
           >
             <Heading size="md">
               {display_type === "collections"
-                ? subject
-                  ? subject.toLowerCase() === "others"
+                ? isDrillDown
+                  ? currentFilterValue.toLowerCase() === "others"
                     ? `Items with unspecified ${organize_by}`
-                    : `Items in ${subject}`
+                    : `Items in ${currentFilterValue}`
                   : "Item Collections"
-                : `Items (${items?.count || 0})`}
+                : `Items (${
+                    user?.collection_index?.total ?? items?.count ?? 0
+                  })`}
             </Heading>
 
             <ItemsViewOptions
@@ -332,7 +348,7 @@ function UserProfilePage() {
               onChangeViewMode={(mode) => updateSearch({ view_mode: mode })}
               displayType={display_type}
               onChangeDisplayType={(type) =>
-                updateSearch({ display_type: type, subject: undefined })
+                updateSearch({ display_type: type, subject: undefined, author: undefined, genre: undefined, category: undefined })
               }
               sortBy={sort_by}
               onChangeSortBy={(val) => updateSearch({ sort_by: val })}
@@ -348,10 +364,10 @@ function UserProfilePage() {
               onChangeGenre={(val) => updateSearch({ genre: val })}
               organizeBy={organize_by}
               onChangeOrganizeBy={(val) =>
-                updateSearch({ organize_by: val, subject: undefined })
+                updateSearch({ organize_by: val, subject: undefined, author: undefined, genre: undefined, category: undefined })
               }
               showDisplayToggle={true}
-              showViewToggle={display_type === "items" || !!subject}
+              showViewToggle={display_type === "items" || isDrillDown}
               showLimit={true}
               showFilter={display_type === "items"}
               showSort={display_type === "items"}
@@ -365,36 +381,26 @@ function UserProfilePage() {
           ) : (
             <>
               {/* Back Button for Drilldown */}
-              {subject && (
+              {isDrillDown && (
                 <Button
                   variant="ghost"
                   size="sm"
                   mb={4}
-                  onClick={() => updateSearch({ subject: undefined })}
+                  onClick={() => updateSearch({ subject: undefined, author: undefined, genre: undefined, category: undefined })}
                 >
                   <FaChevronLeft style={{ marginRight: "8px" }} /> Back to
                   Collections
                 </Button>
               )}
 
-              {/* Render Collections Grid (GroupCards) */}
-              {display_type === "collections" && !subject ? (
+              {/* Render Collections Grid */}
+              {display_type === "collections" && !isDrillDown ? (
                 <>
-                  <SimpleGrid
-                    columns={{ base: 1, md: 2, lg: 3, xl: 4 }}
-                    gap={6}
-                  >
-                    {facets?.data?.map((facet: any) => (
-                      <GroupCard
-                        key={facet.name}
-                        name={facet.name}
-                        type={organize_by}
-                        count={facet.count}
-                        sample_images={facet.sample_images}
-                        onOpen={() => updateSearch({ subject: facet.name })}
-                      />
-                    ))}
-                  </SimpleGrid>
+                  <CollectionGrid
+                    items={facets?.data || []}
+                    type={organize_by}
+                    onOpen={handleOpenCollection}
+                  />
                   <Flex justifyContent="center" mt={8}>
                     <PaginationRoot
                       count={facets?.count ?? 0}

@@ -74,6 +74,8 @@ export const QuickSearch = ({
     <Box position="relative" width="100%" ref={containerRef} zIndex={100}>
       <InputGroup startElement={<FiSearch />} width="100%">
         <Input
+          id="quick-search-input"
+          name="quick-search"
           placeholder={placeholder}
           value={searchTerm}
           onChange={(e) => {

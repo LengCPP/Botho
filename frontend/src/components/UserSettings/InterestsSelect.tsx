@@ -161,6 +161,8 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
 
       <Box position="relative">
         <Input
+          id="interests-search"
+          name="interests-search"
           placeholder="Search or add interests..."
           value={searchTerm}
           onChange={(e) => {

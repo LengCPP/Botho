@@ -410,10 +410,11 @@ const AddItem = ({
             </Text>
             <Field
               label="Subjects"
-              helperText="Comma separated (e.g. fantasy, history, sci-fi)"
+              helperText="Comma separated (e.g. love, war, peace)"
             >
               <Input
-                placeholder="fantasy, history, sci-fi"
+                id="subjects"
+                placeholder="love, war, peace"
                 {...register("work_info.tags" as any)}
               />
             </Field>
@@ -450,6 +451,7 @@ const AddItem = ({
                   helperText="10 = Brand New, 1 = Very Poor"
                 >
                   <Input
+                    id="grade"
                     type="number"
                     min={1}
                     max={10}
@@ -459,6 +461,7 @@ const AddItem = ({
 
                 <Field label="Condition / Physical Description">
                   <Textarea
+                    id="physical_description"
                     placeholder="Explain the physical state of your copy (e.g. 'Signed by author', 'Slightly torn cover')"
                     {...register("info.physical_description" as any)}
                     rows={2}
@@ -604,6 +607,8 @@ const AddItem = ({
                     borrow.
                   </Text>
                   <Input
+                    id="search-my-items"
+                    name="search-query"
                     placeholder="Search your items..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}

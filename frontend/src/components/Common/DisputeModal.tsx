@@ -81,6 +81,7 @@ const DisputeModal = ({ review, isOpen, onClose }: DisputeModalProps) => {
             <Field label="Dispute Reason" required>
               <Textarea
                 id={id}
+                name="dispute_reason"
                 placeholder="Reason for dispute (min 10 chars)..."
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}

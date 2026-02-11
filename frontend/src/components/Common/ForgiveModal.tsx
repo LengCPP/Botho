@@ -119,6 +119,8 @@ const ForgiveModal = ({ loan, isOpen, onClose }: ForgiveModalProps) => {
                 </Text>
                 <Field.Root label="Title">
                   <Input
+                    id="replacement_title"
+                    name="replacement_title"
                     size="sm"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
@@ -127,6 +129,8 @@ const ForgiveModal = ({ loan, isOpen, onClose }: ForgiveModalProps) => {
                 </Field.Root>
                 <Field.Root label="Author (Optional)">
                   <Input
+                    id="replacement_author"
+                    name="replacement_author"
                     size="sm"
                     value={author}
                     onChange={(e) => setAuthor(e.target.value)}
@@ -135,6 +139,8 @@ const ForgiveModal = ({ loan, isOpen, onClose }: ForgiveModalProps) => {
                 </Field.Root>
                 <Field.Root label="Description">
                   <Textarea
+                    id="replacement_description"
+                    name="replacement_description"
                     size="sm"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}

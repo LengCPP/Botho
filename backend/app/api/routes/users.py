@@ -392,18 +392,18 @@ def delete_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
             status_code=403, detail="Super users are not allowed to delete themselves"
         )
 
-    # Check for outstanding loans
+    # Check for outstanding loans where user is the borrower and has possession
     outstanding_loans = session.exec(
         select(Loan).where(
-            or_(Loan.owner_id == current_user.id, Loan.requester_id == current_user.id),
-            Loan.status.in_([LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING, LoanStatus.ACCEPTED, LoanStatus.EXTENSION_PENDING])
+            Loan.requester_id == current_user.id,
+            Loan.status.in_([LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING, LoanStatus.EXTENSION_PENDING])
         )
     ).first()
 
     if outstanding_loans:
         raise HTTPException(
             status_code=400,
-            detail="You have active or pending loans. Please resolve all loans before deleting your account."
+            detail="You have active borrowed items. Please return all items before deleting your account."
         )
 
     # Handle items deletion and cleanup
@@ -526,18 +526,18 @@ def delete_user(
             status_code=403, detail="Super users are not allowed to delete themselves"
         )
 
-    # Check for outstanding loans
+    # Check for outstanding loans where user is the borrower and has possession
     outstanding_loans = session.exec(
         select(Loan).where(
-            or_(Loan.owner_id == user.id, Loan.requester_id == user.id),
-            Loan.status.in_([LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING, LoanStatus.ACCEPTED, LoanStatus.EXTENSION_PENDING])
+            Loan.requester_id == user.id,
+            Loan.status.in_([LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING, LoanStatus.EXTENSION_PENDING])
         )
     ).first()
 
     if outstanding_loans:
         raise HTTPException(
             status_code=400,
-            detail="User has active or pending loans. These must be resolved before deletion."
+            detail="User has active borrowed items. These must be resolved before deletion."
         )
 
     # Handle items deletion and cleanup

@@ -137,6 +137,7 @@ const ReviewModal = ({ loan, isOpen, onClose }: ReviewModalProps) => {
                       helperText="Your raw comments are only visible to the item owner or community admins. The user will only see an anonymized AI summary."
                     >
                       <Textarea
+                        id="review_comment"
                         {...register("comment")}
                         placeholder="Share your experience... (optional)"
                         rows={3}
@@ -169,6 +170,8 @@ const ReviewModal = ({ loan, isOpen, onClose }: ReviewModalProps) => {
                           control={control}
                           render={({ field }) => (
                             <Input
+                              id="review_condition_grade"
+                              name="condition_grade"
                               type="number"
                               min={1}
                               max={10}
@@ -182,6 +185,7 @@ const ReviewModal = ({ loan, isOpen, onClose }: ReviewModalProps) => {
                       </Field>
                       <Field label="Condition Notes">
                         <Textarea
+                          id="review_condition_notes"
                           {...register("condition_notes")}
                           placeholder="Any specific damage or unique physical features observed?"
                           rows={2}

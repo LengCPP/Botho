@@ -187,6 +187,7 @@ const AddReview = ({ item }: AddReviewProps) => {
                   </Field>
                   <Field label="Comment">
                     <Textarea
+                      id="comment"
                       placeholder="Share your thoughts on the writing, story, or themes..."
                       rows={3}
                       {...register("comment")}
@@ -221,6 +222,8 @@ const AddReview = ({ item }: AddReviewProps) => {
                           control={control}
                           render={({ field }) => (
                             <Input
+                              id="condition_grade"
+                              name="condition_grade"
                               type="number"
                               min={1}
                               max={10}
@@ -234,6 +237,7 @@ const AddReview = ({ item }: AddReviewProps) => {
                       </Field>
                       <Field label="Physical Notes">
                         <Textarea
+                          id="condition_notes"
                           placeholder="Any specific damage or unique physical features?"
                           rows={2}
                           {...register("condition_notes")}

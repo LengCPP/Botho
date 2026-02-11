@@ -144,6 +144,8 @@ export function ItemsViewOptions({
         <Box width={{ base: "full", sm: "200px", md: "250px" }}>
           <InputGroup flex="1" startElement={<FiSearch />}>
             <Input
+              id="catalogue-search-input"
+              name="q"
               placeholder="Find in catalogue..."
               size="sm"
               variant="subtle"
@@ -264,6 +266,8 @@ export function ItemsViewOptions({
                               Category
                             </Text>
                             <select
+                              id="category-filter"
+                              name="category"
                               value={category || ""}
                               onChange={(e) => {
                                 onChangeCategory(e.target.value || undefined)
@@ -296,6 +300,8 @@ export function ItemsViewOptions({
                               Genre
                             </Text>
                             <select
+                              id="genre-filter"
+                              name="genre"
                               value={genre || ""}
                               onChange={(e) =>
                                 onChangeGenre(e.target.value || undefined)

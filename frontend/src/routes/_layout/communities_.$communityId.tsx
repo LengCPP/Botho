@@ -62,11 +62,16 @@ import {
   FriendsService,
   type ItemPublic,
   type LoanPublic,
+  LoansService,
 } from "@/client"
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import { ImportItems } from "@/components/Common/ImportItems"
 import ReviewModal from "@/components/Common/ReviewModal"
 import AddItem from "@/components/Items/AddItem"
+import {
+  CollectionGrid,
+  type CollectionItem,
+} from "@/components/Items/CollectionGrid"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
 import { GroupCard } from "@/components/Items/GroupCard"
 import ItemCard from "@/components/Items/ItemCard"
@@ -103,6 +108,8 @@ import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
 import { getImageUrl, groupItems } from "@/utils"
 
+const COLLECTIONS_LIMIT = 12
+
 const communitySearchSchema = z.object({
   tab: z
     .enum(["board", "items", "members", "loans", "manage", "import"])
@@ -127,6 +134,7 @@ const communitySearchSchema = z.object({
       () => (localStorage.getItem("display_type") as any) || "collections",
     ),
   subject: z.string().optional(),
+  author: z.string().optional(),
   organize_by: z
     .enum(["subject", "genre", "category", "author", "ownership"])
     .catch(() => (localStorage.getItem("organize_by") as any) || "subject"),
@@ -140,6 +148,7 @@ function getCommunityItemsQueryOptions({
   limit,
   category,
   genre,
+  author,
   q,
 }: {
   communityId: string
@@ -149,6 +158,7 @@ function getCommunityItemsQueryOptions({
   limit: number
   category?: string
   genre?: string
+  author?: string
   q?: string
 }) {
   return {
@@ -161,6 +171,7 @@ function getCommunityItemsQueryOptions({
         sortOrder: sort_order,
         category: category,
         genre: genre,
+        author: author,
         q: q,
       }),
     queryKey: [
@@ -173,6 +184,7 @@ function getCommunityItemsQueryOptions({
         limit,
         category,
         genre,
+        author,
         q,
       },
     ],
@@ -532,8 +544,13 @@ function CommunityBoard() {
     view_mode,
     display_type,
     subject,
+    author,
     organize_by,
   } = Route.useSearch()
+
+  const isDrillDown = !!subject || !!author || !!category || !!genre
+  const currentFilterValue = subject || author || genre || category || "Unknown"
+
   const { user: currentUser } = useAuth()
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const queryClient = useQueryClient()
@@ -575,6 +592,38 @@ function CommunityBoard() {
     navigate({
       search: (prev) => ({ ...prev, tab: value as any }),
     })
+  }
+
+  const handleOpenCollection = (name: string) => {
+    if (organize_by === "author") {
+      updateSearch({
+        author: name,
+        subject: undefined,
+        genre: undefined,
+        category: undefined,
+      })
+    } else if (organize_by === "genre") {
+      updateSearch({
+        genre: name,
+        subject: undefined,
+        author: undefined,
+        category: undefined,
+      })
+    } else if (organize_by === "category") {
+      updateSearch({
+        category: name,
+        subject: undefined,
+        author: undefined,
+        genre: undefined,
+      })
+    } else {
+      updateSearch({
+        subject: name,
+        author: undefined,
+        genre: undefined,
+        category: undefined,
+      })
+    }
   }
 
   const { data: community, isLoading: isLoadingCommunity } = useQuery({
@@ -634,11 +683,18 @@ function CommunityBoard() {
       limit,
       category,
       genre,
+      author,
       q: qParam,
     }),
     placeholderData: (prevData) => prevData,
     enabled:
-      !!isMember && tab === "items" && (!!subject || display_type === "items"),
+      !!isMember &&
+      tab === "items" &&
+      (!!subject ||
+        !!author ||
+        !!category ||
+        !!genre ||
+        display_type === "items"),
   })
 
   // New query for high-performance facets (Collections View)
@@ -654,7 +710,10 @@ function CommunityBoard() {
       !!isMember &&
       tab === "items" &&
       display_type === "collections" &&
-      !subject,
+      !subject &&
+      !author &&
+      !category &&
+      !genre,
   })
 
   // Prefetch next page (only in items view)
@@ -674,6 +733,7 @@ function CommunityBoard() {
           limit,
           category,
           genre,
+          author,
           q: qParam,
         }),
       )
@@ -688,6 +748,7 @@ function CommunityBoard() {
     sort_order,
     category,
     genre,
+    author,
     qParam,
     tab,
     display_type,
@@ -877,6 +938,31 @@ function CommunityBoard() {
     }
     return sections
   }, [items, communityId, organize_by])
+
+  const collections = useMemo(() => {
+    if (community?.collection_index?.[organize_by]) {
+      const raw = community.collection_index[organize_by]
+      // Sort alphabetically by default for index
+      return Object.entries(raw as any)
+        .map(([name, data]: any) => ({
+          name,
+          count: data.count,
+          sample_images: data.sample_images,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)) as CollectionItem[]
+    }
+    return ((facets as any) || []).map((f: any) => ({
+      name: f.name,
+      count: f.count,
+      sample_image: f.sample_image,
+      sample_images: f.sample_images,
+    })) as CollectionItem[]
+  }, [community, organize_by, facets])
+
+  const paginatedCollections = useMemo(() => {
+    const start = (page - 1) * COLLECTIONS_LIMIT
+    return collections.slice(start, start + COLLECTIONS_LIMIT)
+  }, [collections, page])
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault()
@@ -1148,11 +1234,13 @@ function CommunityBoard() {
                 <HStack gap={4} align="baseline">
                   <VStack align="start" gap={0}>
                     <Heading size="md">Items</Heading>
-                    {communityItems && (
-                      <Text fontSize="sm" color="gray.500" fontWeight="medium">
-                        Total: {communityItems.count} items
-                      </Text>
-                    )}
+                    <Text fontSize="sm" color="gray.500" fontWeight="medium">
+                      Total:{" "}
+                      {community?.collection_index?.total ??
+                        communityItems?.count ??
+                        0}{" "}
+                      items
+                    </Text>
                   </VStack>
                   <AddItem communityId={communityId} isAdmin={isAdmin} />
                 </HStack>
@@ -1221,94 +1309,74 @@ function CommunityBoard() {
                 </Box>
               ) : (
                 <Box mt={8}>
-                  {display_type === "collections" && !subject ? (
-                    <SimpleGrid
-                      columns={{ base: 1, md: 2, lg: 3, xl: 4 }}
-                      gap={6}
-                    >
-                      {(community.collection_index?.[organize_by]
-                        ? Object.entries(
-                            community.collection_index[organize_by],
-                          ).map(([name, data]: any) => ({
-                            name,
-                            count: data.count,
-                            sample_images: data.sample_images,
-                          }))
-                        : facets || []
-                      ).map((facet: any) => (
-                        <GroupCard
-                          key={facet.name}
-                          name={facet.name}
-                          type={organize_by}
-                          count={facet.count}
-                          sample_image={facet.sample_image}
-                          sample_images={facet.sample_images}
-                          onOpen={() => updateSearch({ subject: facet.name })}
-                        />
-                      ))}
-                    </SimpleGrid>
+                  {display_type === "collections" && !isDrillDown ? (
+                    <Box>
+                      <CollectionGrid
+                        items={paginatedCollections}
+                        type={organize_by}
+                        onOpen={handleOpenCollection}
+                      />
+                      <Flex justifyContent="center" mt={8}>
+                        <PaginationRoot
+                          count={collections.length}
+                          pageSize={COLLECTIONS_LIMIT}
+                          onPageChange={({ page }) => setPage(page)}
+                        >
+                          <Flex>
+                            <PaginationPrevTrigger />
+                            <PaginationItems />
+                            <PaginationNextTrigger />
+                          </Flex>
+                        </PaginationRoot>
+                      </Flex>
+                    </Box>
                   ) : (
                     <Box>
-                      {subject && (
+                      {isDrillDown && (
                         <VStack align="start" mb={6} gap={2}>
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => updateSearch({ subject: undefined })}
+                            onClick={() =>
+                              updateSearch({
+                                subject: undefined,
+                                author: undefined,
+                                genre: undefined,
+                                category: undefined,
+                              })
+                            }
                           >
                             <FaChevronLeft style={{ marginRight: "8px" }} />{" "}
                             Collections
                           </Button>
-                          {Object.entries(organizedItems)
-                            .filter(([name]) => name === subject)
-                            .map(([name, data]) => (
-                              <Heading
-                                key={name}
-                                size="lg"
-                                color="ui.hover"
-                                textTransform="uppercase"
-                                letterSpacing="wider"
-                              >
-                                {[...data.pooled, ...data.owned][0]?.[0]
-                                  ?.item_type === "book"
-                                  ? "Books"
-                                  : "Items"}{" "}
-                                {name.toLowerCase() === "others"
-                                  ? `with unspecified ${organize_by}`
-                                  : `${
-                                      organize_by === "author"
-                                        ? "by"
-                                        : organize_by === "genre"
-                                          ? "in"
-                                          : "on"
-                                    } ${name}`}
-                                {data.pooled.length + data.owned.length > 1 &&
-                                  ` (${
-                                    data.pooled.length + data.owned.length
-                                  })`}
-                              </Heading>
-                            ))}
+                          <Heading
+                            size="lg"
+                            color="ui.hover"
+                            textTransform="uppercase"
+                            letterSpacing="wider"
+                          >
+                            {items[0]?.item_type === "book" ? "Books" : "Items"}{" "}
+                            {currentFilterValue.toLowerCase() === "others"
+                              ? `with unspecified ${organize_by}`
+                              : `${
+                                  organize_by === "author"
+                                    ? "by"
+                                    : organize_by === "genre"
+                                      ? "in"
+                                      : organize_by === "category"
+                                        ? "in category"
+                                        : "on"
+                                } ${currentFilterValue}`}
+                            {items.length > 1 && ` (${items.length})`}
+                          </Heading>
                         </VStack>
                       )}
 
                       <VStack align="stretch" gap={8}>
-                        {renderGroup(
-                          subject
-                            ? [
-                                ...(organizedItems[subject]?.pooled || []),
-                                ...(organizedItems[subject]?.owned || []),
-                              ]
-                            : groupItems(items),
-                        )}
+                        {renderGroup(groupItems(items))}
                         <Flex justifyContent="center">
                           <PaginationRoot
-                            count={
-                              subject
-                                ? (organizedItems[subject]?.pooled.length ||
-                                    0) +
-                                  (organizedItems[subject]?.owned.length || 0)
-                                : communityItems?.count || 0
-                            }
+                            count={communityItems?.count || 0}
                             pageSize={limit}
                             onPageChange={({ page }) => setPage(page)}
                           >

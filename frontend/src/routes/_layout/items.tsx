@@ -4,13 +4,11 @@ import {
   Container,
   EmptyState,
   Flex,
-  Grid,
   HStack,
   Heading,
   SimpleGrid,
   Text,
   VStack,
-  useBreakpointValue,
 } from "@chakra-ui/react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
@@ -22,8 +20,11 @@ import { z } from "zod"
 import { type ItemPublic, ItemsService, LoansService } from "@/client"
 import { ImportItems } from "@/components/Common/ImportItems"
 import AddItem from "@/components/Items/AddItem"
+import {
+  CollectionGrid,
+  type CollectionItem,
+} from "@/components/Items/CollectionGrid"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
-import { GroupCard } from "@/components/Items/GroupCard"
 import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
@@ -57,6 +58,7 @@ const itemsSearchSchema = z.object({
       () => (localStorage.getItem("display_type") as any) || "collections",
     ),
   subject: z.string().optional(),
+  author: z.string().optional(),
   organize_by: z
     .enum(["subject", "genre", "category", "author"])
     .catch(() => (localStorage.getItem("organize_by") as any) || "subject"),
@@ -75,6 +77,7 @@ function getItemsQueryOptions({
   category,
   genre,
   subject,
+  author,
   q,
 }: {
   page: number
@@ -85,6 +88,7 @@ function getItemsQueryOptions({
   category?: string
   genre?: string
   subject?: string
+  author?: string
   q?: string
 }) {
   return {
@@ -98,6 +102,7 @@ function getItemsQueryOptions({
         category: category,
         genre: genre,
         subject: subject,
+        author: author,
         q: q,
       }),
     queryKey: [
@@ -111,6 +116,7 @@ function getItemsQueryOptions({
         category,
         genre,
         subject,
+        author,
         q,
       },
     ],
@@ -135,6 +141,7 @@ function ItemsTable() {
     view_mode,
     display_type,
     subject,
+    author,
     organize_by,
     q,
   } = Route.useSearch()
@@ -160,10 +167,17 @@ function ItemsTable() {
       category,
       genre,
       subject,
+      author,
       q,
     }),
     placeholderData: (prevData) => prevData,
-    enabled: !!user && (!!subject || display_type === "items"),
+    enabled:
+      !!user &&
+      (!!subject ||
+        !!author ||
+        !!category ||
+        !!genre ||
+        display_type === "items"),
   })
 
   const { data: facets, isLoading: isLoadingFacets } = useQuery({
@@ -176,7 +190,13 @@ function ItemsTable() {
         skip: (page - 1) * COLLECTIONS_LIMIT,
         limit: COLLECTIONS_LIMIT,
       }),
-    enabled: !!user && display_type === "collections" && !subject,
+    enabled:
+      !!user &&
+      display_type === "collections" &&
+      !subject &&
+      !author &&
+      !category &&
+      !genre,
   })
 
   // Prefetch next page
@@ -193,6 +213,7 @@ function ItemsTable() {
           category,
           genre,
           subject,
+          author,
           q,
         }),
       )
@@ -208,6 +229,7 @@ function ItemsTable() {
     category,
     genre,
     subject,
+    author,
     q,
     display_type,
   ])
@@ -236,6 +258,67 @@ function ItemsTable() {
     })
   }
 
+  const handleOpenCollection = (name: string) => {
+    if (organize_by === "author") {
+      updateSearch({
+        author: name,
+        subject: undefined,
+        genre: undefined,
+        category: undefined,
+      })
+    } else if (organize_by === "genre") {
+      updateSearch({
+        genre: name,
+        subject: undefined,
+        author: undefined,
+        category: undefined,
+      })
+    } else if (organize_by === "category") {
+      updateSearch({
+        category: name,
+        subject: undefined,
+        author: undefined,
+        genre: undefined,
+      })
+    } else {
+      updateSearch({
+        subject: name,
+        author: undefined,
+        genre: undefined,
+        category: undefined,
+      })
+    }
+  }
+
+  const collections = useMemo(() => {
+    if (user?.collection_index?.[organize_by]) {
+      const raw = user.collection_index[organize_by]
+      return Object.entries(raw as any)
+        .map(([name, data]: any) => ({
+          name,
+          count: data.count,
+          sample_images: data.sample_images,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)) as CollectionItem[]
+    }
+    return ((facets as any)?.data || []).map((f: any) => ({
+      name: f.name,
+      count: f.count,
+      sample_image: f.sample_image,
+      sample_images: f.sample_images,
+    })) as CollectionItem[]
+  }, [user, organize_by, facets])
+
+  const paginatedCollections = useMemo(() => {
+    // If using collection_index, slice client-side
+    if (user?.collection_index?.[organize_by]) {
+      const start = (page - 1) * COLLECTIONS_LIMIT
+      return collections.slice(start, start + COLLECTIONS_LIMIT)
+    }
+    // If using facets (server-side paginated), return as is
+    return collections
+  }, [collections, page, user, organize_by])
+
   const items = data?.data ?? []
   const count = data?.count ?? 0
   const hasAnyItems = (allItemsCheck?.count ?? 0) > 0
@@ -244,10 +327,31 @@ function ItemsTable() {
     return <PendingItems />
   }
 
-  if (items.length === 0 && page === 1 && !facets?.data?.length) {
-    if (hasAnyItems || q) {
+  const isDrillDown = !!subject || !!author || !!category || !!genre
+
+  if (items.length === 0 && page === 1 && !(facets as any)?.data?.length) {
+    // ... existing empty state logic ...
+    if (hasAnyItems || q || isDrillDown) {
       return (
         <Box mt={8}>
+          {isDrillDown && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                updateSearch({
+                  subject: undefined,
+                  author: undefined,
+                  genre: undefined,
+                  category: undefined,
+                })
+              }
+              mb={4}
+            >
+              <FaChevronLeft style={{ marginRight: "8px" }} /> Back to
+              Collections
+            </Button>
+          )}
           <Text color="gray.500">No items match your filters.</Text>
         </Box>
       )
@@ -297,33 +401,22 @@ function ItemsTable() {
   )
 
   // Collection View Rendering
-  if (display_type === "collections" && !subject) {
+  if (display_type === "collections" && !isDrillDown) {
     return (
       <Box mt={8}>
-        <Grid
-          templateColumns={{
-            base: "1fr",
-            md: "repeat(2, 1fr)",
-            lg: "repeat(3, 1fr)",
-            xl: "repeat(4, 1fr)",
-          }}
-          gap={6}
-        >
-          {facets?.data?.map((facet: any) => (
-            <GroupCard
-              key={facet.name}
-              name={facet.name}
-              type={organize_by}
-              count={facet.count}
-              sample_image={facet.sample_image}
-              onOpen={() => updateSearch({ subject: facet.name })}
-            />
-          ))}
-        </Grid>
+        <CollectionGrid
+          items={paginatedCollections}
+          type={organize_by}
+          onOpen={handleOpenCollection}
+        />
 
         <Flex justifyContent="center" mt={8}>
           <PaginationRoot
-            count={facets?.count ?? 0}
+            count={
+              user?.collection_index?.[organize_by]
+                ? collections.length
+                : (facets as any)?.count ?? 0
+            }
             pageSize={COLLECTIONS_LIMIT}
             onPageChange={({ page }) => setPage(page)}
           >
@@ -340,15 +433,23 @@ function ItemsTable() {
 
   // Drilled-down Group View OR Item View
   const activeGroups = groupItems(items)
+  const currentFilterValue = subject || author || genre || category || "Unknown"
 
   return (
     <Box mt={8}>
-      {subject && (
+      {isDrillDown && (
         <VStack align="start" mb={6} gap={2}>
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => updateSearch({ subject: undefined })}
+            onClick={() =>
+              updateSearch({
+                subject: undefined,
+                author: undefined,
+                genre: undefined,
+                category: undefined,
+              })
+            }
           >
             <FaChevronLeft style={{ marginRight: "8px" }} /> Collections
           </Button>
@@ -359,15 +460,17 @@ function ItemsTable() {
             letterSpacing="wider"
           >
             {activeGroups[0]?.[0]?.item_type === "book" ? "Books" : "Items"}{" "}
-            {subject?.toLowerCase() === "others"
+            {currentFilterValue?.toLowerCase() === "others"
               ? `with unspecified ${organize_by}`
               : `${
                   organize_by === "author"
                     ? "by"
                     : organize_by === "genre"
                       ? "in"
-                      : "on"
-                } ${subject}`}{" "}
+                      : organize_by === "category"
+                        ? "in category"
+                        : "on"
+                } ${currentFilterValue}`}{" "}
             {activeGroups.length > 1 && `(${activeGroups.length})`}
           </Heading>
         </VStack>
@@ -412,6 +515,7 @@ function Items() {
     display_type,
     organize_by,
     subject,
+    author,
     q,
     tab,
   } = Route.useSearch()
@@ -426,6 +530,7 @@ function Items() {
       category,
       genre,
       subject,
+      author,
       q,
     }),
     enabled: !!user && tab !== "import",
@@ -450,11 +555,9 @@ function Items() {
           <HStack gap={4} align="baseline">
             <VStack align="start" gap={0}>
               <Heading size="lg">My Items</Heading>
-              {data && (
-                <Text fontSize="sm" color="gray.500" fontWeight="medium">
-                  Total: {data.count} items
-                </Text>
-              )}
+              <Text fontSize="sm" color="gray.500" fontWeight="medium">
+                Total: {user?.collection_index?.total ?? data?.count ?? 0} items
+              </Text>
             </VStack>
             <AddItem />
             <Button
@@ -465,7 +568,7 @@ function Items() {
               }
             >
               <FaFileImport />{" "}
-              {tab === "import" ? "View Collection" : "Bulk Import"}
+              {tab === "import" ? "Back to Items" : "Bulk Import"}
             </Button>
           </HStack>
 
@@ -477,7 +580,13 @@ function Items() {
               onChangeViewMode={(mode) => updateSearch({ view_mode: mode })}
               displayType={display_type}
               onChangeDisplayType={(type) =>
-                updateSearch({ display_type: type, subject: undefined })
+                updateSearch({
+                  display_type: type,
+                  subject: undefined,
+                  author: undefined,
+                  genre: undefined,
+                  category: undefined,
+                })
               }
               sortBy={sort_by}
               onChangeSortBy={(val) => updateSearch({ sort_by: val })}
@@ -487,13 +596,24 @@ function Items() {
               onChangeLimit={(val) => updateSearch({ limit: val })}
               category={category}
               onChangeCategory={(val) =>
-                updateSearch({ category: val, genre: undefined })
+                updateSearch({
+                  category: val,
+                  genre: undefined,
+                  subject: undefined,
+                  author: undefined,
+                })
               }
               genre={genre}
               onChangeGenre={(val) => updateSearch({ genre: val })}
               organizeBy={organize_by}
               onChangeOrganizeBy={(val) =>
-                updateSearch({ organize_by: val, subject: undefined })
+                updateSearch({
+                  organize_by: val,
+                  subject: undefined,
+                  author: undefined,
+                  genre: undefined,
+                  category: undefined,
+                })
               }
               showDisplayToggle={true}
               showViewToggle={true}

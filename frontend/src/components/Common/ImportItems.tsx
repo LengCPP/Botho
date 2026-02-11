@@ -293,6 +293,8 @@ export const ImportItems = ({ communityId }: ImportItemsProps) => {
                     </Text>
                     <Box width="60%">
                       <select
+                        id={`mapping-${key}`}
+                        name={`mapping-${key}`}
                         value={mapping[key]}
                         onChange={(e) =>
                           setMapping({ ...mapping, [key]: e.target.value })

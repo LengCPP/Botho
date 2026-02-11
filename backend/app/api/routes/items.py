@@ -3,7 +3,7 @@ import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, BackgroundTasks
-from sqlmodel import col, func, or_, select
+from sqlmodel import col, func, or_, select, cast, String
 
 from sqlalchemy.orm import joinedload
 from app.api.deps import CurrentUser, SessionDep
@@ -45,6 +45,7 @@ from app.models import (
     Loan,
     LoanStatus,
     Message,
+    User,
     UserInterest,
     UserPublic,
     UsersPublic,
@@ -444,8 +445,9 @@ def read_item_facets(
     """
     target_owner_id = owner_id or current_user.id
     
-    # Simple permission check (same as read_items)
+    # Permission check
     if target_owner_id != current_user.id and not current_user.is_superuser:
+        # Check if it's a community owner_id
         is_community = session.exec(
             select(CommunityMember).where(
                 CommunityMember.community_id == target_owner_id,
@@ -453,8 +455,24 @@ def read_item_facets(
                 CommunityMember.status == CommunityMemberStatus.ACCEPTED
             )
         ).first()
+
         if not is_community:
-            raise HTTPException(status_code=403, detail="Not enough permissions")
+            # Check if public community
+            is_public_community = session.exec(
+                select(Community).where(Community.id == target_owner_id, Community.is_private == False)
+            ).first()
+            
+            if not is_public_community:
+                # Check if friend
+                is_friend = session.exec(
+                    select(Friendship).where(
+                        ((Friendship.user_id == current_user.id) & (Friendship.friend_id == target_owner_id)) |
+                        ((Friendship.user_id == target_owner_id) & (Friendship.friend_id == current_user.id)),
+                        Friendship.status == FriendshipStatus.ACCEPTED
+                    )
+                ).first()
+                if not is_friend:
+                    raise HTTPException(status_code=403, detail="Not enough permissions")
 
     # Optimization: Check collection index total
     owner_obj = session.get(User, target_owner_id)
@@ -537,7 +555,7 @@ def read_item_facets(
             stmt = select(Item.author, func.count(Item.id), func.max(Item.image_url))\
                 .where(Item.owner_id == target_owner_id)\
                 .group_by(Item.author)\
-                .order_by(func.count(Item.id).desc())\
+                .order_by(Item.author.asc())\
                 .offset(skip).limit(limit)
             
             rows = session.exec(stmt).all()
@@ -556,13 +574,14 @@ def read_item_facets(
                 .where(Item.owner_id == target_owner_id)
             ).one()
 
+            name_expr = func.json_extract_path_text(Item.extra_data, json_field)
             stmt = select(
-                func.json_extract_path_text(Item.extra_data, json_field).label("name"),
+                name_expr.label("name"),
                 func.count(Item.id).label("count"),
                 func.max(Item.image_url).label("sample_image")
             ).where(Item.owner_id == target_owner_id)\
             .group_by("name")\
-            .order_by(func.count(Item.id).desc())\
+            .order_by(name_expr.asc())\
             .offset(skip).limit(limit)
             
             rows = session.exec(stmt).all()
@@ -576,8 +595,9 @@ def read_item_facets(
         elif group_by == "subject":
             # Subjects (tags) are in WorkMetadata, requires join
             # This is complex for SQL total count due to JSON array elements
+            name_expr = func.json_array_elements_text(WorkMetadata.tags)
             base_stmt = select(
-                func.json_array_elements_text(WorkMetadata.tags).label("name"),
+                name_expr.label("name"),
                 func.count(Item.id).label("count"),
                 func.max(Item.image_url).label("sample_image")
             ).join(
@@ -588,7 +608,7 @@ def read_item_facets(
                 # Get total count by wrapping in subquery
                 total_count = session.exec(select(func.count()).select_from(base_stmt.subquery())).one()
                 
-                rows = session.exec(base_stmt.order_by(func.count(Item.id).desc()).offset(skip).limit(limit)).all()
+                rows = session.exec(base_stmt.order_by(name_expr.asc()).offset(skip).limit(limit)).all()
                 for name, count, img in rows:
                     results.append({
                         "name": name, 
@@ -818,6 +838,12 @@ def read_items(
             count_stmt = select(func.count()).select_from(statement.subquery())
             count = session.exec(count_stmt).one()
             items = session.exec(statement.offset(skip).limit(limit)).all()
+            print(f"DEBUG: SQL Filter result count: {count}")
+            if items:
+                print(f"DEBUG: First item: {items[0].title}, Author: {items[0].author}")
+                wm = session.get(WorkMetadata, (items[0].author, items[0].title))
+                if wm:
+                    print(f"DEBUG: WorkMetadata tags: {wm.tags}")
         else:
             # Standard SQL filtering
             if feed_mode:
@@ -874,7 +900,7 @@ def read_items(
                         )
                     )
                 else:
-                    statement = statement.where(func.json_extract_path_text(WorkMetadata.tags, '$').ilike(f'%"{subject}"%'))
+                    statement = statement.where(cast(WorkMetadata.tags, String).ilike(f'%"{subject}"%'))
 
             if author:
                 if author == "Others":
