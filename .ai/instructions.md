@@ -42,7 +42,7 @@ Botho is a containerized monorepo with a FastAPI (Python) backend and a React (T
 - **Communities:** Private/Public groups for resource sharing.
 - **Loans:** Workflow: Request -> Accept -> Ratify -> Return -> Confirm.
 - **Reading Log:** Book tracking and reviews.
-- **Avatars:** Deterministic colors with a themed orange ring (`ui.hover` / `#fb6635`).
+- **Avatars:** 
 - **Search:** Powered by Meilisearch.
 
 ## 7. Security

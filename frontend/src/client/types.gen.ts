@@ -175,6 +175,9 @@ export type ItemMinimal = {
     created_at: string;
     is_available?: boolean;
     had_possession?: boolean;
+    is_community_owned?: boolean;
+    is_donation_pending?: boolean;
+    owner_name?: (string | null);
     category?: (string | null);
     genre?: (string | null);
 };

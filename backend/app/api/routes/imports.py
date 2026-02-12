@@ -249,6 +249,192 @@ async def process_all_staged_items(
     return {"message": f"Queued {len(pending_items)} items for processing"}
 
 
+@router.post("/sync-archive")
+async def sync_archive_items(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
+    ids: list[uuid.UUID],
+) -> Any:
+    """
+    Start processing staged items directly into the global archive (superuser only).
+    """
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+
+    statement = select(StagedItem).where(
+        StagedItem.id.in_(ids),
+        StagedItem.owner_id == current_user.id
+    )
+    items = session.exec(statement).all()
+
+    for item in items:
+        background_tasks.add_task(
+            enrich_and_import_to_archive,
+            item.id,
+            current_user.id,
+        )
+
+    return {"message": f"Queued {len(items)} archive imports"}
+
+
+async def enrich_and_import_to_archive(
+    staged_id: uuid.UUID,
+    owner_id: uuid.UUID,
+):
+    """
+    Background task to enrich a book and import it into the global archive (WorkMetadata).
+    Does NOT create an Item record.
+    """
+    async with enrichment_semaphore:
+        from app.core.db import engine
+        from sqlmodel import Session
+
+        await asyncio.sleep(random.uniform(0.1, 0.5))
+
+        with Session(engine) as session:
+            staged = session.get(StagedItem, staged_id)
+            if not staged or staged.status == StagedItemStatus.COMPLETED:
+                return
+
+            staged.status = StagedItemStatus.PROCESSING
+            session.add(staged)
+            session.commit()
+            
+            await notification_manager.send_personal_message(
+                {"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "PROCESSING"},
+                owner_id
+            )
+
+            try:
+                data = staged.raw_data
+                title = str(data.get("title", "")).strip()
+                author = str(data.get("author", "")).strip()
+                isbn = str(data.get("isbn", "")).strip() if data.get("isbn") else None
+                
+                if not title or not author:
+                    staged.status = StagedItemStatus.FAILED
+                    staged.error_log = "Title and Author are required for archive import."
+                    session.add(staged)
+                    session.commit()
+                    await notification_manager.send_personal_message(
+                        {"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "FAILED"},
+                        owner_id
+                    )
+                    return
+
+                # 1. Search Local Registry
+                from app.models import WorkMetadata
+                meta = None
+                clean_isbn = None
+                if isbn:
+                    clean_isbn = "".join(c for c in isbn if c.isdigit() or c.upper() == "X").upper()
+                    meta = session.exec(select(WorkMetadata).where(WorkMetadata.isbn == clean_isbn)).first()
+                
+                if not meta:
+                    meta = session.get(WorkMetadata, (author, title))
+
+                # 2. Search APIs for enrichment
+                google_data = None
+                if not meta:
+                    async with google_books_semaphore:
+                        await asyncio.sleep(0.5)
+                        search_query = f"isbn:{clean_isbn}" if clean_isbn else f"intitle:{title} inauthor:{author}"
+                        api_key = settings.VITE_GOOGLE_BOOKS_API_KEY
+                        url = f"https://www.googleapis.com/books/v1/volumes?q={search_query}&maxResults=1"
+                        if api_key: url += f"&key={api_key}"
+
+                        async with httpx.AsyncClient() as client:
+                            response = await client.get(url, timeout=10.0)
+                            if response.status_code == 200:
+                                res_json = response.json()
+                                if res_json.get("items"):
+                                    google_data = res_json["items"][0]["volumeInfo"]
+
+                # Assemble final metadata
+                final_title = title
+                final_author = author
+                final_description = str(data.get("description", "")).strip() or None
+                final_image_url = None
+                final_category = None
+                final_isbn = clean_isbn
+                final_tags = []
+
+                raw_image_url = data.get("image_url")
+                if raw_image_url:
+                    try:
+                        stored_url = upload_image_from_url(raw_image_url, folder="items")
+                        final_image_url = stored_url or raw_image_url
+                    except Exception:
+                        final_image_url = raw_image_url
+
+                if meta:
+                    final_title = meta.title
+                    final_author = meta.author
+                    final_description = meta.description or final_description
+                    final_image_url = meta.image_url or final_image_url
+                    final_category = meta.category
+                    final_isbn = meta.isbn or final_isbn
+                    final_tags = meta.tags
+                elif google_data:
+                    final_title = google_data.get("title", title)
+                    google_authors = google_data.get("authors", [])
+                    final_author = ", ".join(google_authors) if google_authors else author
+                    final_description = google_data.get("description", final_description)
+                    
+                    if not final_image_url:
+                        img_links = google_data.get("imageLinks", {})
+                        thumb = img_links.get("medium") or img_links.get("small") or img_links.get("thumbnail")
+                        if thumb:
+                            thumb = thumb.replace("http://", "https://")
+                            try:
+                                final_image_url = upload_image_from_url(thumb, folder="items") or thumb
+                            except Exception:
+                                final_image_url = thumb
+                    
+                    industry_ids = google_data.get("industryIdentifiers", [])
+                    for id_obj in industry_ids:
+                        if id_obj["type"] in ["ISBN_13", "ISBN_10"]:
+                            final_isbn = id_obj["identifier"]
+                            if id_obj["type"] == "ISBN_13": break
+                    
+                    google_categories = google_data.get("categories", [])
+                    final_category = google_categories[0] if google_categories else None
+
+                # Create/Update WorkMetadata
+                ensure_work_metadata(
+                    session,
+                    final_author,
+                    final_title,
+                    isbn=final_isbn,
+                    description=final_description,
+                    category=final_category,
+                    image_url=final_image_url,
+                    tags=final_tags
+                )
+
+                staged.status = StagedItemStatus.COMPLETED
+                session.add(staged)
+                session.commit()
+                
+                await notification_manager.send_personal_message(
+                    {"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "COMPLETED"},
+                    owner_id
+                )
+
+            except Exception as e:
+                logger.exception(f"Archive import failed for staged item {staged_id}")
+                staged.status = StagedItemStatus.FAILED
+                staged.error_log = str(e)
+                session.add(staged)
+                session.commit()
+                await notification_manager.send_personal_message(
+                    {"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "FAILED"},
+                    owner_id
+                )
+
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -388,12 +574,23 @@ async def enrich_and_import_item(
                 final_image_url = None
                 final_extra = {}
 
+                # Check if image_url is already in the raw data (e.g. from CSV)
+                raw_image_url = data.get("image_url")
+                if raw_image_url:
+                    try:
+                        logger.info(f"Uploading image from raw data for {title}: {raw_image_url}")
+                        stored_url = upload_image_from_url(raw_image_url, folder="items")
+                        final_image_url = stored_url or raw_image_url
+                    except Exception as img_err:
+                        logger.error(f"Image upload failed for raw data {title}: {img_err}")
+                        final_image_url = raw_image_url
+
                 if meta:
                     logger.info(f"Using local metadata for {title}")
                     final_title = meta.title
                     final_author = meta.author
                     final_description = meta.description or final_description
-                    final_image_url = meta.image_url
+                    final_image_url = meta.image_url or final_image_url
                     final_extra = {
                         "category": meta.category,
                         "isbn": meta.isbn,
@@ -405,18 +602,19 @@ async def enrich_and_import_item(
                     final_author = ", ".join(google_authors) if google_authors else author
                     final_description = google_data.get("description", final_description)
                     
-                    # Image processing
-                    img_links = google_data.get("imageLinks", {})
-                    thumb = img_links.get("medium") or img_links.get("small") or img_links.get("thumbnail")
-                    if thumb:
-                        thumb = thumb.replace("http://", "https://")
-                        try:
-                            logger.info(f"Uploading image from Google for {title}: {thumb}")
-                            stored_url = upload_image_from_url(thumb, folder="items")
-                            final_image_url = stored_url or thumb
-                        except Exception as img_err:
-                            logger.error(f"Image upload failed for {title}: {img_err}")
-                            final_image_url = thumb
+                    # Image processing - only if we don't have one from raw data
+                    if not final_image_url:
+                        img_links = google_data.get("imageLinks", {})
+                        thumb = img_links.get("medium") or img_links.get("small") or img_links.get("thumbnail")
+                        if thumb:
+                            thumb = thumb.replace("http://", "https://")
+                            try:
+                                logger.info(f"Uploading image from Google for {title}: {thumb}")
+                                stored_url = upload_image_from_url(thumb, folder="items")
+                                final_image_url = stored_url or thumb
+                            except Exception as img_err:
+                                logger.error(f"Image upload failed for {title}: {img_err}")
+                                final_image_url = thumb
                     
                     # Extract clean ISBN from Google if possible
                     industry_ids = google_data.get("industryIdentifiers", [])
@@ -445,15 +643,16 @@ async def enrich_and_import_item(
                         ol_desc = ol_desc.get("value")
                     final_description = ol_desc or open_library_data.get("notes") or final_description
                     
-                    ol_cover = open_library_data.get("cover", {})
-                    thumb = ol_cover.get("large") or ol_cover.get("medium") or ol_cover.get("small")
-                    if thumb:
-                        try:
-                            logger.info(f"Uploading image from OpenLibrary for {title}: {thumb}")
-                            stored_url = upload_image_from_url(thumb, folder="items")
-                            final_image_url = stored_url or thumb
-                        except Exception:
-                            final_image_url = thumb
+                    if not final_image_url:
+                        ol_cover = open_library_data.get("cover", {})
+                        thumb = ol_cover.get("large") or ol_cover.get("medium") or ol_cover.get("small")
+                        if thumb:
+                            try:
+                                logger.info(f"Uploading image from OpenLibrary for {title}: {thumb}")
+                                stored_url = upload_image_from_url(thumb, folder="items")
+                                final_image_url = stored_url or thumb
+                            except Exception:
+                                final_image_url = thumb
                     
                     final_extra = {
                         "isbn": clean_isbn,

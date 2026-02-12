@@ -65,7 +65,8 @@ export const ItemActionsMenu = ({
   const [isLoanModalOpen, setIsLoanModalOpen] = useState(false)
 
   const isMobile = useBreakpointValue({ base: true, md: false })
-  const isCommunityOwned = !!item.community_owner || (item as any).is_community_owned
+  const isCommunityOwned =
+    !!item.community_owner || (item as any).is_community_owned
 
   const { data: community } = useQuery({
     queryKey: ["community", communityId],

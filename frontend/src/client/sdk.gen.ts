@@ -245,8 +245,8 @@ export class CommunitiesService {
     
     /**
      * Read Community Item Facets
-     * Get unique values and counts for a specific facet (category, genre, author)
-     * belonging to a community. Leverages Meilisearch for high performance.
+     * Get unique values and counts for a specific facet (category, genre, author, subject)
+     * belonging to a community. Uses optimized SQL for high performance.
      * @param data The data for the request.
      * @param data.id
      * @param data.groupBy

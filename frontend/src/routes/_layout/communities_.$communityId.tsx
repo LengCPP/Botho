@@ -1088,7 +1088,7 @@ function CommunityBoard() {
               <FiMessageSquare /> Board
             </Tabs.Trigger>
             <Tabs.Trigger value="items" justifyContent="center">
-              <FiBox /> Items ({communityItems?.count || 0})
+              <FiBox /> Items ({community?.collection_index?.total ?? 0})
             </Tabs.Trigger>
             <Tabs.Trigger value="members" justifyContent="center">
               <FiUsers /> Members ({members?.count || 0})

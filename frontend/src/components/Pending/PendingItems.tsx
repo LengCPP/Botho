@@ -1,13 +1,17 @@
-import { SimpleGrid, Skeleton, Box, VStack, HStack, Card } from "@chakra-ui/react"
+import {
+  Box,
+  Card,
+  HStack,
+  SimpleGrid,
+  Skeleton,
+  VStack,
+} from "@chakra-ui/react"
 
 const PendingItems = () => (
   <Box mt={8}>
-    <SimpleGrid
-      columns={{ base: 2, sm: 3, md: 4 }}
-      gap={{ base: 2, md: 6 }}
-    >
+    <SimpleGrid columns={{ base: 2, sm: 3, md: 4 }} gap={{ base: 2, md: 6 }}>
       {[...Array(8)].map((_, index) => (
-        <Box 
+        <Box
           key={index}
           aspectRatio={2 / 3}
           width="100%"
@@ -15,9 +19,9 @@ const PendingItems = () => (
           mx="auto"
           minW="140px"
         >
-          <Card.Root 
-            height="100%" 
-            overflow="hidden" 
+          <Card.Root
+            height="100%"
+            overflow="hidden"
             borderRadius="lg"
             boxShadow="sm"
           >

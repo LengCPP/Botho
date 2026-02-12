@@ -16,7 +16,8 @@ def configure_meilisearch():
             "description",
             "item_type",
             "category",
-            "genre"
+            "genre",
+            "subject"
         ],
         "filterableAttributes": [
             "item_type",

@@ -40,10 +40,10 @@ async def generate_honor_snapshot(reviews: List[str]) -> Tuple[Optional[str], Li
         print(f"Error calling Gemini: {e}")
         return None, []
 
-async def classify_book(title: str, author: str, description: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
-    """Use Gemini to determine a descriptive category and specific genre for a book."""
+async def classify_book(title: str, author: str, description: Optional[str] = None) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """Use Gemini to determine a descriptive category, specific genre, and subjects for a book."""
     if not client:
-        return None, None
+        return None, None, None
 
     prompt = f"""
     You are a professional librarian and literary critic. Classify this book:
@@ -51,22 +51,31 @@ async def classify_book(title: str, author: str, description: Optional[str] = No
     AUTHOR: {author}
     DESCRIPTION: {description or "No description provided."}
 
-    Provide a descriptive category (e.g., 'Contemporary Fiction', 'Business & Economics') 
-    and a precise genre (e.g., 'Cyberpunk', 'Stoic Philosophy', 'Hard Science Fiction').
+    Provide:
+    1. CATEGORY: A broad classification (e.g., 'Fiction', 'Non-Fiction', 'Children & Young Adult', 'Science & Technology', 'Self-Help', 'Biography', 'Philosophy', 'Art & Design', 'History', 'Religion & Spirituality').
+    2. GENRE: A more specific description of the style and type of literature (e.g., 'Cyberpunk', 'Stoic Philosophy', 'Hard Science Fiction', 'Magical Realism', 'Investigative Journalism').
+    3. SUBJECTS: A list of single words or short phrases separated by commas that describe what the book is about (e.g., 'Artificial Intelligence, Ethics, Future of Humanity').
 
     Strictly follow this format:
-    CATEGORY: [Main category]
-    GENRE: [Specific genre]
+    CATEGORY: [Broad category]
+    GENRE: [Specific genre/style]
+    SUBJECTS: [Comma-separated words/phrases]
     """
     try:
         response = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
         text = response.text
-        cat, gen = None, None
-        if "CATEGORY:" in text:
-            cat = text.split("CATEGORY:")[1].split("\n")[0].strip()
-        if "GENRE:" in text:
-            gen = text.split("GENRE:")[1].split("\n")[0].strip()
-        return cat, gen
+        cat, gen, sub = None, None, None
+        
+        lines = text.split("\n")
+        for line in lines:
+            if line.startswith("CATEGORY:"):
+                cat = line.replace("CATEGORY:", "").strip()
+            elif line.startswith("GENRE:"):
+                gen = line.replace("GENRE:", "").strip()
+            elif line.startswith("SUBJECTS:"):
+                sub = line.replace("SUBJECTS:", "").strip()
+                
+        return cat, gen, sub
     except Exception as e:
         print(f"Error classifying book: {e}")
-        return None, None
+        return None, None, None

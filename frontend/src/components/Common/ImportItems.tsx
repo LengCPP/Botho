@@ -37,9 +37,13 @@ import * as XLSX from "xlsx"
 
 interface ImportItemsProps {
   communityId?: string
+  isArchiveImport?: boolean
 }
 
-export const ImportItems = ({ communityId }: ImportItemsProps) => {
+export const ImportItems = ({
+  communityId,
+  isArchiveImport = false,
+}: ImportItemsProps) => {
   const [parsedData, setParsedData] = useState<any[]>([])
   const [headers, setHeaders] = useState<string[]>([])
   const [mapping, setMapping] = useState<Record<string, string>>({
@@ -47,6 +51,7 @@ export const ImportItems = ({ communityId }: ImportItemsProps) => {
     author: "",
     isbn: "",
     description: "",
+    image_url: "",
   })
   const [isMappingOpen, setIsMappingOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -54,7 +59,7 @@ export const ImportItems = ({ communityId }: ImportItemsProps) => {
   const queryClient = useQueryClient()
 
   const { data: stagedItems, isLoading: isStagedLoading } = useQuery({
-    queryKey: ["stagedItems", communityId],
+    queryKey: ["stagedItems", communityId, isArchiveImport],
     queryFn: () => ImportsService.readStagedItems({ communityId }),
     refetchInterval: (query) => {
       const data = query.state.data
@@ -69,6 +74,9 @@ export const ImportItems = ({ communityId }: ImportItemsProps) => {
       const message = event.detail
       if (message.type === "IMPORT_ITEM_PROCESSED") {
         queryClient.invalidateQueries({ queryKey: ["stagedItems"] })
+        if (isArchiveImport) {
+          queryClient.invalidateQueries({ queryKey: ["book-archive"] })
+        }
       }
     }
     window.addEventListener("websocket-message", handleWsMessage)
@@ -118,10 +126,14 @@ export const ImportItems = ({ communityId }: ImportItemsProps) => {
 
   const processMutation = useMutation({
     mutationFn: (ids: string[]) =>
-      ImportsService.processStagedItems({ requestBody: ids, communityId }),
+      isArchiveImport
+        ? ImportsService.syncArchiveItems({ requestBody: ids })
+        : ImportsService.processStagedItems({ requestBody: ids, communityId }),
     onSuccess: () => {
       showSuccessToast(
-        "Processing started. Items are being enriched and added to your collection.",
+        isArchiveImport
+          ? "Archive sync started. Books are being enriched and added to the registry."
+          : "Processing started. Items are being enriched and added to your collection.",
       )
       setSelectedIds([])
       queryClient.invalidateQueries({ queryKey: ["stagedItems"] })
@@ -205,10 +217,13 @@ export const ImportItems = ({ communityId }: ImportItemsProps) => {
       <VStack align="start" gap={6} width="full">
         <HStack justify="space-between" width="full">
           <VStack align="start" gap={1}>
-            <Heading size="md">Import Items</Heading>
+            <Heading size="md">
+              {isArchiveImport ? "Import to Global Archive" : "Import Items"}
+            </Heading>
             <Text fontSize="sm" color="gray.500">
-              Upload Excel/CSV to bulk add books. We'll find covers and details
-              for you.
+              {isArchiveImport
+                ? "Upload books directly to the global registry. These won't be added to your personal collection."
+                : "Upload Excel/CSV to bulk add books. We'll find covers and details for you."}
             </Text>
           </VStack>
           <HStack>
@@ -346,7 +361,9 @@ export const ImportItems = ({ communityId }: ImportItemsProps) => {
                 onClick={() => processMutation.mutate(selectedIds)}
                 loading={processMutation.isPending}
               >
-                Add {selectedIds.length} Selected to Collection
+                {isArchiveImport
+                  ? `Add ${selectedIds.length} to Registry`
+                  : `Add ${selectedIds.length} Selected to Collection`}
               </Button>
             </HStack>
             <Box

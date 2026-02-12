@@ -21,7 +21,7 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
         headers: {
-          Host: "api.demo.botho.app",
+          Host: "localhost",
         },
       },
       "/docs": {
@@ -29,7 +29,7 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
         headers: {
-          Host: "api.demo.botho.app",
+          Host: "localhost",
         },
       },
       "/openapi.json": {
@@ -37,7 +37,7 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
         headers: {
-          Host: "api.demo.botho.app",
+          Host: "localhost",
         },
       },
     },

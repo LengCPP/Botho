@@ -29,17 +29,18 @@ async def bulk_classify():
             
             if is_generic:
                 print(f"Classifying: {book.title} by {book.author}...")
-                cat, gen = await classify_book(book.title, book.author or "", book.description)
+                cat, gen, sub = await classify_book(book.title, book.author or "", book.description)
                 
-                if cat or gen:
+                if cat or gen or sub:
                     if cat: extra["category"] = cat
                     if gen: extra["genre"] = gen
+                    if sub: extra["subject"] = sub
                     book.extra_data = extra
                     session.add(book)
                     session.flush()
                     sync_item_to_search(book)
                     count += 1
-                    print(f"  -> {cat} | {gen}")
+                    print(f"  -> {cat} | {gen} | {sub}")
                 else:
                     print(f"  -> Skip (AI returned nothing)")
                 

@@ -1,4 +1,5 @@
 import {
+  Badge,
   Box,
   Button,
   Container,
@@ -10,7 +11,11 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react"
-import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useEffect, useMemo, useState } from "react"
 import { FaChevronLeft, FaFileImport } from "react-icons/fa"
@@ -141,7 +146,13 @@ function ItemsTable() {
       return loadedCount < lastPage.count ? loadedCount : undefined
     },
     initialPageParam: 0,
-    enabled: !!user && (display_type === "items" || !!subject || !!author || !!category || !!genre),
+    enabled:
+      !!user &&
+      (display_type === "items" ||
+        !!subject ||
+        !!author ||
+        !!category ||
+        !!genre),
   })
 
   const { data: facets, isLoading: isLoadingFacets } = useQuery({
@@ -251,7 +262,12 @@ function ItemsTable() {
   const isDrillDown = !!subject || !!author || !!category || !!genre
   const hasCollections = collections.length > 0
 
-  if (allItems.length === 0 && !isLoadingInfinite && !hasCollections && !isLoadingFacets) {
+  if (
+    allItems.length === 0 &&
+    !isLoadingInfinite &&
+    !hasCollections &&
+    !isLoadingFacets
+  ) {
     if (q || isDrillDown) {
       return (
         <Box mt={8}>
@@ -378,7 +394,9 @@ function ItemsTable() {
             textTransform="uppercase"
             letterSpacing="wider"
           >
-            {(activeGroups[0]?.[0] as any)?.item_type === "book" ? "Books" : "Items"}{" "}
+            {(activeGroups[0]?.[0] as any)?.item_type === "book"
+              ? "Books"
+              : "Items"}{" "}
             {currentFilterValue?.toLowerCase() === "others"
               ? `with unspecified ${organize_by}`
               : `${
@@ -449,9 +467,25 @@ function Items() {
     })
   }
 
+  const collectionIndex = user?.collection_index as any
+  const totalCount = collectionIndex?.total ?? 0
+  const itemTypeCounts = collectionIndex?.item_type || {}
+  const bookCount = itemTypeCounts?.book?.count || 0
+
+  // If all items are books, show "Total Books", otherwise show "Total Items"
+  const label =
+    totalCount > 0 && bookCount === totalCount ? "Total Books" : "Total Items"
+
   return (
     <Container maxW="full">
-      <VStack pt={12} align="start" gap={6}>
+      <VStack pt={12} align="start" gap={6} width="full">
+        <HStack align="baseline" gap={4}>
+          <Heading size="lg">My Items</Heading>
+          <Badge variant="subtle" colorPalette="blue" size="md">
+            {totalCount} {label}
+          </Badge>
+        </HStack>
+
         <Flex
           justify="space-between"
           align="center"
@@ -459,13 +493,7 @@ function Items() {
           wrap="wrap"
           gap={4}
         >
-          <HStack gap={4} align="baseline">
-            <VStack align="start" gap={0}>
-              <Heading size="lg">My Items</Heading>
-              <Text fontSize="sm" color="gray.500" fontWeight="medium">
-                Total: {user?.collection_index?.total ?? 0} items
-              </Text>
-            </VStack>
+          <HStack gap={4}>
             <AddItem />
             <Button
               variant="outline"

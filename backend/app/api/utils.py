@@ -59,6 +59,7 @@ def _update_collection_index_logic(session: Session, owner_id: uuid.UUID):
 
     index = {
         "total": len(items),
+        "item_type": {},
         "genre": {},
         "category": {},
         "subject": {},
@@ -67,6 +68,15 @@ def _update_collection_index_logic(session: Session, owner_id: uuid.UUID):
     }
 
     for item in items:
+        # 0. Item Type
+        item_type = item.item_type.value if hasattr(item.item_type, 'value') else str(item.item_type)
+        if item_type not in index["item_type"]:
+            index["item_type"][item_type] = {"count": 0, "sample_images": []}
+        index["item_type"][item_type]["count"] += 1
+        if item.image_url and len(index["item_type"][item_type]["sample_images"]) < 5:
+            if item.image_url not in index["item_type"][item_type]["sample_images"]:
+                index["item_type"][item_type]["sample_images"].append(item.image_url)
+
         # 1. Author
         author = item.author or "Others"
         if author not in index["author"]:
@@ -195,16 +205,21 @@ async def maintenance_bulk_classify():
             if is_generic:
                 logger.info(f"Classifying: {book.title} by {book.author}")
                 print(f"DEBUG: Classifying: {book.title} by {book.author}")
-                cat, gen = await classify_book(book.title, book.author or "", book.description)
-                if cat or gen:
+                cat, gen, sub = await classify_book(book.title, book.author or "", book.description)
+                if cat or gen or sub:
                     if cat: extra["category"] = cat
                     if gen: extra["genre"] = gen
+                    if sub: extra["subject"] = sub
                     book.extra_data = extra
                     session.add(book)
                     session.flush()
                     sync_item_to_search(book)
+                    
+                    # Convert subjects string to tags list
+                    tags = [s.strip() for s in sub.split(",")] if sub else []
+                    
                     # Ensure WorkMetadata also gets updated
-                    ensure_work_metadata(session, book.author, book.title, category=cat)
+                    ensure_work_metadata(session, book.author, book.title, category=cat, tags=tags)
                     classified_count += 1
                 
                 await asyncio.sleep(0.5) # Throttle Gemini usage
@@ -219,6 +234,10 @@ async def sync_item_to_archive(session: Session, item_id: uuid.UUID):
     if not item or item.item_type != ItemType.book:
         return
     
+    tags = []
+    if item.extra_data and item.extra_data.get("subject"):
+        tags = [s.strip() for s in item.extra_data["subject"].split(",")]
+
     ensure_work_metadata(
         session, 
         item.author, 
@@ -226,7 +245,8 @@ async def sync_item_to_archive(session: Session, item_id: uuid.UUID):
         isbn=item.extra_data.get("isbn") if item.extra_data else None,
         description=item.description,
         category=item.extra_data.get("category") if item.extra_data else None,
-        image_url=item.image_url
+        image_url=item.image_url,
+        tags=tags
     )
     session.commit()
 
@@ -243,7 +263,8 @@ def ensure_work_metadata(
     isbn: str | None = None,
     description: str | None = None,
     category: str | None = None,
-    image_url: str | None = None
+    image_url: str | None = None,
+    tags: list[str] | None = None
 ) -> WorkMetadata | None:
     if not author:
         return None
@@ -255,7 +276,8 @@ def ensure_work_metadata(
             isbn=isbn,
             description=description,
             category=category,
-            image_url=image_url
+            image_url=image_url,
+            tags=tags or []
         )
         session.add(meta)
     else:
@@ -268,6 +290,11 @@ def ensure_work_metadata(
             meta.category = category
         if image_url and not meta.image_url:
             meta.image_url = image_url
+        if tags:
+            # Merge tags, avoiding duplicates
+            current_tags = set(meta.tags or [])
+            new_tags = set(tags)
+            meta.tags = list(current_tags | new_tags)
         session.add(meta)
     session.flush()
     from app.search import sync_work_metadata_to_search

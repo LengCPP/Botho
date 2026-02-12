@@ -109,7 +109,8 @@ export const CompactItemCard = ({
   })
 
   const isOwner = item.owner_id === user?.id
-  const isCommunityOwned = !!item.community_owner || (item as any).is_community_owned
+  const isCommunityOwned =
+    !!item.community_owner || (item as any).is_community_owned
   const canManage = isOwner || (isCommunityOwned && isAdmin)
 
   const renderAction = () => {
