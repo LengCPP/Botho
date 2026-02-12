@@ -49,8 +49,9 @@ This fetches the OpenAPI schema and updates `src/client`. Commit these changes.
 * `frontend/src/routes` - TanStack Router routes.
 * `frontend/src/theme/` - Chakra UI theme customizations and recipes.
 
-## Testing with Playwright
+## Testing & Environments
 
+### Playwright Testing
 End-to-end tests are located in `frontend/tests/`. To run them:
 
 1.  **Ensure the stack is running**:
@@ -64,6 +65,9 @@ End-to-end tests are located in `frontend/tests/`. To run them:
 
 You can also use UI mode: `npx playwright test --ui`.
 
-## Staging & Production
+### Environments
+The project is deployed across several environments. Always test your changes in the Docker-based development environment before pushing.
 
-The project uses a staging environment at **staging.botho.app** (and **staging.rsc-xchange.app**). Always test your changes in Docker before pushing.
+- **Production**: [https://botho.app](https://botho.app)
+- **Demo**: [https://demo.botho.app](https://demo.botho.app)
+- **Development**: [http://localhost](http://localhost)

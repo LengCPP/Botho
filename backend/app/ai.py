@@ -1,14 +1,15 @@
-import google.generativeai as genai
+from google import genai
 from typing import List, Optional, Tuple
 from app.core.config import settings
 
-# Configure Gemini
+# Initialize Gemini Client
+client = None
 if settings.GEMINI_API_KEY:
-    genai.configure(api_key=settings.GEMINI_API_KEY)
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
 async def generate_honor_snapshot(reviews: List[str]) -> Tuple[Optional[str], List[str]]:
     """Use Gemini to synthesize a reputation summary and improvement tips."""
-    if not settings.GEMINI_API_KEY or not reviews:
+    if not client or not reviews:
         return None, []
 
     reviews_text = "\n".join([f"- {r}" for r in reviews])
@@ -27,8 +28,7 @@ async def generate_honor_snapshot(reviews: List[str]) -> Tuple[Optional[str], Li
     {reviews_text}
     """
     try:
-        model = genai.GenerativeModel('gemini-pro')
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
         text = response.text
         summary, tips = "", []
         if "SUMMARY:" in text and "TIPS:" in text:
@@ -42,7 +42,7 @@ async def generate_honor_snapshot(reviews: List[str]) -> Tuple[Optional[str], Li
 
 async def classify_book(title: str, author: str, description: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
     """Use Gemini to determine a descriptive category and specific genre for a book."""
-    if not settings.GEMINI_API_KEY:
+    if not client:
         return None, None
 
     prompt = f"""
@@ -59,8 +59,7 @@ async def classify_book(title: str, author: str, description: Optional[str] = No
     GENRE: [Specific genre]
     """
     try:
-        model = genai.GenerativeModel('gemini-pro')
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
         text = response.text
         cat, gen = None, None
         if "CATEGORY:" in text:

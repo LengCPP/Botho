@@ -72,33 +72,31 @@ Copy the template `.env` file and update the variables:
 ```bash
 cp .env.example .env
 ```
-Ensure you update `SECRET_KEY`, `POSTGRES_PASSWORD`, and storage credentials.
+Ensure you update `DOMAIN`, `SECRET_KEY`, `POSTGRES_PASSWORD`, and storage credentials.
 
 ### 3. Running with Docker
 The project follows a **Docker-Centric Workflow**. Development and deployment are strictly Docker-based.
 
-Start the entire stack:
+Start the entire stack for development:
 ```bash
 docker compose up -d
 ```
-- **Frontend**: [http://localhost:5173](http://localhost:5173) (Localhost is deprecated for staging/production)
-- **Backend API**: [http://localhost:8000](http://localhost:8000)
-- **API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **App**: [http://localhost](http://localhost)
+- **Backend API**: [http://localhost/api/v1/](http://localhost/api/v1/)
+- **API Docs**: [http://localhost/docs](http://localhost/docs)
 
-### 4. Staging Environment
-The project uses a staging environment at **staging.botho.app** (also reachable via **staging.rsc-xchange.app**).
+### 4. Environments
+The project is deployed across several environments:
 
-1. **Start Staging**:
-   ```bash
-   docker compose -f docker-compose.staging.yml up -d
-   ```
-2. **Access**:
-   - App: [https://staging.botho.app](https://staging.botho.app)
-   - API: [https://api.staging.botho.app](https://api.staging.botho.app)
-3. **Database Migrations (Staging)**:
-   ```bash
-   docker compose -f docker-compose.staging.yml exec backend alembic upgrade head
-   ```
+- **Production**: [https://botho.app](https://botho.app)
+- **Demo**: [https://demo.botho.app](https://demo.botho.app)
+- **Development**: [http://localhost](http://localhost)
+
+### 5. Database Migrations
+Run migrations inside the backend container:
+```bash
+docker compose exec backend alembic upgrade head
+```
 
 ---
 
