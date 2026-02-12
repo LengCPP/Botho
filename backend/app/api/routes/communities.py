@@ -2,7 +2,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from sqlmodel import col, func, or_, select
+from sqlmodel import col, func, or_, select, text, cast, String
 
 from app import crud
 from app.api.deps import CurrentUser, SessionDep
@@ -34,6 +34,7 @@ from app.models import (
     CommunityUpdate,
     Friendship,
     FriendshipStatus,
+    Interest,
     Item,
     ItemPublic,
     ItemsPublic,
@@ -524,12 +525,12 @@ def read_community_item_facets(
     session: SessionDep,
     current_user: CurrentUser,
     id: uuid.UUID,
-    group_by: str = "category",  # category, genre, author
+    group_by: str = "category",  # category, genre, author, subject
     q: str | None = None,
 ) -> Any:
     """
-    Get unique values and counts for a specific facet (category, genre, author)
-    belonging to a community. Leverages Meilisearch for high performance.
+    Get unique values and counts for a specific facet (category, genre, author, subject)
+    belonging to a community. Uses optimized SQL for high performance.
     """
     community = session.get(Community, id)
     if not community:
@@ -545,104 +546,83 @@ def read_community_item_facets(
     if not membership and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Must be a member to view community items")
 
-    # Map 'subject' to 'tags' for Meilisearch indexing
-    # facet_field = "tags" if group_by == "subject" else group_by
-    facet_field = group_by
-
-    from app.search import client as meili_client
-    meili_success = False
-    # try:
-    #     index = meili_client.index("items")
-    #     filters = [f'(owner_id = "{id}" OR pooled_in = "{id}")']
-    #     filters.append("is_available = true")
-    #     
-    #     search_params = {
-    #         "limit": 0,  # We only care about facets
-    #         "filter": " AND ".join(filters),
-    #         "facets": [facet_field]
-    #     }
-    #     
-    #     search_results = index.search(q or "", search_params)
-    #     facet_distribution = search_results.get("facetDistribution", {})
-    #     counts = facet_distribution.get(facet_field, {})
-    #     
-    #     # Get sample images for top 50 facets to avoid performance issues
-    #     results = []
-    #     sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:50]
-    #     
-    #     for name, count in sorted_counts:
-    #         sample_params = {
-    #             "limit": 1,
-    #             "filter": f'{facet_field} = "{name}" AND {" AND ".join(filters)}'
-    #         }
-    #         sample_res = index.search(q or "", sample_params)
-    #         sample_image = None
-    #         if sample_res["hits"]:
-    #             sample_image = sample_res["hits"][0].get("image_url")
-    #         
-    #         results.append({
-    #             "name": name, 
-    #             "count": count,
-    #             "sample_image": sample_image
-    #         })
-    #     
-    #     # Check if there are items that are not captured by facets (uncategorized/untagged)
-    #     others_filter = filters + [f"({facet_field} IS NULL OR {facet_field} IS EMPTY OR {facet_field} NOT EXISTS)"]
-    #     try:
-    #         others_res = index.search(q or "", {"limit": 1, "filter": " AND ".join(others_filter)})
-    #         others_count = others_res.get("totalHits") or others_res.get("estimatedTotalHits", 0)
-    #         
-    #         if others_count > 0:
-    #             results.append({
-    #                 "name": "Others",
-    #                 "count": others_count,
-    #                 "sample_image": others_res["hits"][0].get("image_url") if others_res["hits"] else None
-    #             })
-    #     except:
-    #         pass
-    #         
-    #     meili_success = True
-    #     return results
-    # except Exception:
-    #     meili_success = False
-
-    if not meili_success:
-        # Fallback to SQL for facets
-        results = []
-        # Filter for items in this community (owned or pooled)
-        comm_item_ids = select(CommunityItem.item_id).where(CommunityItem.community_id == id)
-        base_filter = or_(Item.owner_id == id, Item.id.in_(comm_item_ids))
+    # Filter for items in this community (owned or pooled)
+    comm_item_ids = select(CommunityItem.item_id).where(CommunityItem.community_id == id)
+    base_filter = or_(Item.owner_id == id, Item.id.in_(comm_item_ids))
+    
+    results = []
+    if group_by == "author":
+        stmt = select(Item.author, func.count(Item.id), func.array_agg(Item.image_url))\
+            .where(base_filter)
+        if q:
+            stmt = stmt.where(Item.author.ilike(f"%{q}%"))
+        stmt = stmt.group_by(Item.author).order_by(Item.author.asc())
         
-        if group_by == "author":
-            stmt = select(Item.author, func.count(Item.id), func.max(Item.image_url)).where(base_filter).group_by(Item.author)
-            rows = session.exec(stmt).all()
-            for author, count, img in rows:
-                results.append({"name": author or "Others", "count": count, "sample_image": img})
-        elif group_by in ["category", "genre"]:
-            json_field = group_by
-            stmt = select(
-                func.json_extract_path_text(Item.extra_data, json_field).label("name"),
-                func.count(Item.id).label("count"),
-                func.max(Item.image_url).label("sample_image")
-            ).where(base_filter).group_by("name")
-            rows = session.exec(stmt).all()
-            for name, count, img in rows:
-                results.append({"name": name or "Others", "count": count, "sample_image": img})
-        elif group_by == "subject":
-            stmt = select(
-                func.json_array_elements_text(WorkMetadata.tags).label("name"),
-                func.count(Item.id).label("count"),
-                func.max(Item.image_url).label("sample_image")
-            ).join(
-                WorkMetadata, (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title)
-            ).where(base_filter).group_by("name")
-            try:
-                rows = session.exec(stmt).all()
-                for name, count, img in rows:
-                    results.append({"name": name, "count": count, "sample_image": img})
-            except Exception:
-                pass
-        return results
+        rows = session.exec(stmt).all()
+        for author, count, imgs in rows:
+            valid_imgs = [img for img in (imgs or []) if img][:5]
+            results.append({"name": author or "Others", "count": count, "sample_images": valid_imgs})
+            
+    elif group_by in ["category", "genre"]:
+        json_field = group_by
+        name_expr = func.json_extract_path_text(Item.extra_data, json_field)
+        stmt = select(
+            name_expr.label("name"),
+            func.count(Item.id).label("count"),
+            func.array_agg(Item.image_url).label("sample_images")
+        ).where(base_filter)
+        if q:
+            stmt = stmt.where(name_expr.ilike(f"%{q}%"))
+        stmt = stmt.group_by("name").order_by(name_expr.asc())
+        
+        rows = session.exec(stmt).all()
+        for name, count, imgs in rows:
+            valid_imgs = [img for img in (imgs or []) if img][:5]
+            results.append({"name": name or "Others", "count": count, "sample_images": valid_imgs})
+            
+    elif group_by == "subject":
+        # 1. Tags query
+        tags_expr = func.json_array_elements_text(WorkMetadata.tags)
+        tags_stmt = select(
+            tags_expr.label("name"),
+            func.count(Item.id).label("count"),
+            func.array_agg(Item.image_url).label("sample_images")
+        ).join(
+            WorkMetadata, (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title)
+        ).where(base_filter)
+        if q:
+            tags_stmt = tags_stmt.where(tags_expr.ilike(f"%{q}%"))
+        tags_stmt = tags_stmt.group_by("name")
+
+        # 2. Others query
+        others_stmt = select(
+            cast("Others", String).label("name"),
+            func.count(Item.id).label("count"),
+            func.array_agg(Item.image_url).label("sample_images")
+        ).outerjoin(
+            WorkMetadata, (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title)
+        ).where(base_filter)\
+         .where(or_(
+             WorkMetadata.tags.is_(None),
+             func.json_array_length(WorkMetadata.tags) == 0,
+             WorkMetadata.author.is_(None)
+         ))
+        
+        if q and "others".find(q.lower()) == -1:
+            full_stmt = tags_stmt
+        else:
+            full_stmt = tags_stmt.union_all(others_stmt)
+
+        try:
+            # Use reliable text sorting for subqueries
+            rows = session.exec(select(full_stmt.subquery()).order_by(text("name ASC"))).all()
+            for name, count, imgs in rows:
+                valid_imgs = [img for img in (imgs or []) if img][:5]
+                results.append({"name": name, "count": count, "sample_images": valid_imgs})
+        except Exception:
+            pass
+            
+    return results
 
 
 @router.get("/{id}/items", response_model=ItemsPublic)
@@ -686,49 +666,50 @@ def read_community_items(
     from app.search import client as meili_client
     meili_success = False
     
-    # try:
-    #     index = meili_client.index("items")
-    #     # Filter: item belongs to community (owned or pooled)
-    #     # Meilisearch 'pooled_in' is an array, we check if community ID is in it
-    #     filters = [f'(owner_id = "{id}" OR pooled_in = "{id}")']
-    #     filters.append("is_available = true")
-    #     
-    #     if category:
-    #         filters.append(f'category = "{category}"')
-    #     if genre:
-    #         filters.append(f'genre = "{genre}"')
-    #     if subject:
-    #         filters.append(f'subject = "{subject}"')
-    #     if author:
-    #         filters.append(f'author = "{author}"')
-    #         
-    #     search_params = {
-    #         "limit": limit,
-    #         "offset": skip,
-    #         "filter": " AND ".join(filters),
-    #         "sort": [f"{sort_by if sort_by != 'created_at' else 'id'}:{sort_order}"]
-    #     }
-    #     
-    #     search_results = index.search(q or "", search_params)
-    #     item_ids = [uuid.UUID(hit["id"]) for hit in search_results["hits"]]
-    #     count = search_results.get("totalHits", len(item_ids))
-    #     facets = search_results.get("facetDistribution")
-    #     facet_stats = search_results.get("facetStats")
-    #     
-    #     if not item_ids:
-    #         return ItemsPublic(data=[], count=count, facets=facets, facet_stats=facet_stats)
-    #             
-    #     # Fetch from DB preserving order
-    #     db_items = session.exec(
-    #         select(Item)
-    #         .where(Item.id.in_(item_ids))
-    #         .where(Item.id.not_in(defaulted_item_ids))
-    #     ).all()
-    #     item_map = {item.id: item for item in db_items}
-    #     items = [item_map[iid] for iid in item_ids if iid in item_map]
-    #     meili_success = True
-    # except Exception:
-    #     meili_success = False
+    # Only use Meilisearch if q is provided, otherwise SQL is faster
+    if q:
+        try:
+            index = meili_client.index("items")
+            # Filter: item belongs to community (owned or pooled)
+            filters = [f'(owner_id = "{id}" OR pooled_in = "{id}")']
+            filters.append("is_available = true")
+            
+            if category:
+                filters.append(f'category = "{category}"')
+            if genre:
+                filters.append(f'genre = "{genre}"')
+            if subject:
+                filters.append(f'subject = "{subject}"')
+            if author:
+                filters.append(f'author = "{author}"')
+                
+            search_params = {
+                "limit": limit,
+                "offset": skip,
+                "filter": " AND ".join(filters),
+                "sort": [f"{sort_by if sort_by != 'created_at' else 'id'}:{sort_order}"]
+            }
+            
+            search_results = index.search(q, search_params)
+            item_ids = [uuid.UUID(hit["id"]) for hit in search_results["hits"]]
+            count = search_results.get("totalHits", len(item_ids))
+            facets = search_results.get("facetDistribution")
+            facet_stats = search_results.get("facetStats")
+            
+            if not item_ids:
+                return ItemsPublic(data=[], count=count, facets=facets, facet_stats=facet_stats)
+                    
+            # Fetch from DB preserving order
+            db_items = session.exec(
+                select(Item)
+                .where(Item.id.in_(item_ids))
+                .where(Item.id.not_in(defaulted_item_ids))
+            ).all()
+            item_map = {item.id: item for item in db_items}
+            items = [item_map[iid] for iid in item_ids if iid in item_map]
+            meili_success = True
+        except Exception:
+            meili_success = False
 
     if not meili_success:
         facets = {}
@@ -769,11 +750,12 @@ def read_community_items(
                 func.json_extract_path_text(Item.extra_data, "genre") == genre
             )
         if subject:
-            # We filter by subject in SQL by checking the WorkMetadata tags via a join
-            statement = statement.join(
-                WorkMetadata, 
-                (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title)
-            ).where(func.json_extract_path_text(WorkMetadata.tags, '$') .ilike(f'%"{subject}"%'))
+            if subject == "Others":
+                statement = statement.join(WorkMetadata, (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title), isouter=True)
+                statement = statement.where(or_(WorkMetadata.tags.is_(None), func.json_array_length(WorkMetadata.tags) == 0))
+            else:
+                statement = statement.join(WorkMetadata, (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title))
+                statement = statement.where(cast(WorkMetadata.tags, String).ilike(f'%"{subject}"%'))
         if author:
             statement = statement.where(col(Item.author).ilike(f"%{author}%"))
 

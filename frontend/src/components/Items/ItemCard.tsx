@@ -231,7 +231,7 @@ const ItemCard = ({
 
   // Ownership detection
   const isOwner = item.owner_id === user?.id
-  const isCommunityOwned = !!item.community_owner
+  const isCommunityOwned = !!item.community_owner || (item as any).is_community_owned
   const canManage = isOwner || (isCommunityOwned && isAdmin)
 
   const isBorrowing =
@@ -240,7 +240,10 @@ const ItemCard = ({
     ["ACTIVE", "RETURN_PENDING"].includes(currentLoan.status)
 
   const isBook = item.item_type === "book"
-  const extraData = (item.extra_data as any) || {}
+  const extraData = (item as any).extra_data || {
+    category: (item as any).category,
+    genre: (item as any).genre,
+  }
 
   const { data: community } = useQuery({
     queryKey: ["community", communityId],
@@ -735,13 +738,14 @@ const ItemCard = ({
                     </Link>
                   ) : (
                     <>
-                      {item.community_owner || item.communities?.[0] ? (
+                      {isCommunityOwned || item.communities?.[0] ? (
                         <Link
                           to="/communities/$communityId"
                           params={{
                             communityId:
                               item.community_owner?.id ||
-                              item.communities?.[0].id,
+                              item.communities?.[0]?.id ||
+                              item.owner_id, // Fallback for minimal
                           }}
                           search={{ tab: "items", q: item.title }}
                           onClick={(e) => e.stopPropagation()}
@@ -754,7 +758,9 @@ const ItemCard = ({
                             _hover={{ textDecoration: "underline" }}
                           >
                             {item.community_owner?.name ||
-                              item.communities?.[0].name}
+                              (item as any).owner_name ||
+                              item.communities?.[0]?.name ||
+                              "Community"}
                           </Text>
                         </Link>
                       ) : (
@@ -772,7 +778,8 @@ const ItemCard = ({
                           >
                             {isOwner
                               ? "You"
-                              : String(
+                              : (item as any).owner_name ||
+                                String(
                                   item.owner?.full_name ||
                                     item.owner?.email ||
                                     "Owner",

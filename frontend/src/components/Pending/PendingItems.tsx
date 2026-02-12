@@ -1,34 +1,32 @@
-import { Skeleton, Table } from "@chakra-ui/react"
+import { SimpleGrid, Skeleton, Box, VStack, HStack, Card } from "@chakra-ui/react"
 
 const PendingItems = () => (
-  <Table.Root size={{ base: "sm", md: "md" }}>
-    <Table.Header>
-      <Table.Row>
-        <Table.ColumnHeader w="30%">ID</Table.ColumnHeader>
-        <Table.ColumnHeader w="30%">Title</Table.ColumnHeader>
-        <Table.ColumnHeader w="30%">Description</Table.ColumnHeader>
-        <Table.ColumnHeader w="10%">Actions</Table.ColumnHeader>
-      </Table.Row>
-    </Table.Header>
-    <Table.Body>
-      {[...Array(5)].map((_, index) => (
-        <Table.Row key={index}>
-          <Table.Cell>
-            <Skeleton h="20px" />
-          </Table.Cell>
-          <Table.Cell>
-            <Skeleton h="20px" />
-          </Table.Cell>
-          <Table.Cell>
-            <Skeleton h="20px" />
-          </Table.Cell>
-          <Table.Cell>
-            <Skeleton h="20px" />
-          </Table.Cell>
-        </Table.Row>
+  <Box mt={8}>
+    <SimpleGrid
+      columns={{ base: 2, sm: 3, md: 4 }}
+      gap={{ base: 2, md: 6 }}
+    >
+      {[...Array(8)].map((_, index) => (
+        <Box 
+          key={index}
+          aspectRatio={2 / 3}
+          width="100%"
+          maxW="300px"
+          mx="auto"
+          minW="140px"
+        >
+          <Card.Root 
+            height="100%" 
+            overflow="hidden" 
+            borderRadius="lg"
+            boxShadow="sm"
+          >
+            <Skeleton height="100%" />
+          </Card.Root>
+        </Box>
       ))}
-    </Table.Body>
-  </Table.Root>
+    </SimpleGrid>
+  </Box>
 )
 
 export default PendingItems

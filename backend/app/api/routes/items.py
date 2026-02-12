@@ -2,8 +2,8 @@ import json
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, BackgroundTasks
-from sqlmodel import col, func, or_, select, cast, String
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, BackgroundTasks, Query
+from sqlmodel import col, func, or_, select, cast, String, text
 
 from sqlalchemy.orm import joinedload
 from app.api.deps import CurrentUser, SessionDep
@@ -34,12 +34,14 @@ from app.models import (
     ItemConditionRating,
     ItemConditionRatingCreate,
     ItemConditionRatingPublic,
+    ItemMinimal,
     ItemPublic,
     ItemReview,
     ItemReviewCreate,
     ItemReviewPublic,
     ItemReviewsPublic,
     ItemReviewVote,
+    ItemsMinimalPublic,
     ItemsPublic,
     ItemType,
     Loan,
@@ -485,144 +487,120 @@ def read_item_facets(
              return {"data": [], "count": 0}
 
     # Map 'subject' to 'tags' for Meilisearch indexing
-    # facet_field = "tags" if group_by == "subject" else group_by
     facet_field = group_by
 
-    from app.search import client as meili_client
-    meili_success = False
-    # try:
-    #     index = meili_client.index("items")
-    #     filters = [f"owner_id = '{target_owner_id}'"]
-    #     
-    #     search_params = {
-    #         "limit": 0,
-    #         "filter": " AND ".join(filters),
-    #         "facets": [facet_field]
-    #     }
-    #     
-    #     # Use a short timeout for facet retrieval to avoid hanging
-    #     search_results = index.search(q or "", search_params)
-    #     facet_distribution = search_results.get("facetDistribution", {})
-    #     counts = facet_distribution.get(facet_field, {})
-    #     
-    #     # Sort counts by value descending
-    #     all_sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)
-    #     total_count = len(all_sorted_counts)
-    #     
-    #     # Handle "Others" separately or include in counts
-    #     # Meilisearch facetDistribution usually doesn't include nulls.
-    #     # But for UI consistency, we might want to check for others.
-    #     
-    #     # Apply pagination
-    #     paginated_counts = all_sorted_counts[skip : skip + limit]
-    #     
-    #     results = []
-    #     for name, count in paginated_counts:
-    #         # For each facet, we want ONE sample image (or multiple if we want to enrich). 
-    #         sample_params = {
-    #             "limit": 1,
-    #             "filter": f"{facet_field} = \"{name}\" AND {' AND '.join(filters)}"
-    #         }
-    #         sample_res = index.search(q or "", sample_params)
-    #         sample_images = []
-    #         if sample_res["hits"]:
-    #             img = sample_res["hits"][0].get("image_url")
-    #             if img:
-    #                 sample_images.append(img)
-    #         
-    #         results.append({
-    #             "name": name, 
-    #             "count": count,
-    #             "sample_images": sample_images
-    #         })
-    #         
-    #     meili_success = True
-    #     return {"data": results, "count": total_count}
-    # except Exception:
-    #     meili_success = False
+    results = []
+    total_count = 0
+    
+    if group_by == "author":
+        total_count = session.exec(
+            select(func.count(func.distinct(Item.author))).where(Item.owner_id == target_owner_id)
+        ).one()
 
-    if not meili_success:
-        # SQL Fallback for facets
-        results = []
-        total_count = 0
-        if group_by == "author":
-            # Count total unique authors
-            total_count = session.exec(
-                select(func.count(func.distinct(Item.author))).where(Item.owner_id == target_owner_id)
-            ).one()
-
-            # Group by author with pagination
-            stmt = select(Item.author, func.count(Item.id), func.max(Item.image_url))\
-                .where(Item.owner_id == target_owner_id)\
-                .group_by(Item.author)\
-                .order_by(Item.author.asc())\
-                .offset(skip).limit(limit)
+        stmt = select(Item.author, func.count(Item.id), func.array_agg(Item.image_url))\
+            .where(Item.owner_id == target_owner_id)
+        
+        if q:
+            stmt = stmt.where(Item.author.ilike(f"%{q}%"))
             
-            rows = session.exec(stmt).all()
-            for author, count, img in rows:
-                results.append({
-                    "name": author or "Others", 
-                    "count": count, 
-                    "sample_images": [img] if img else []
-                })
+        stmt = stmt.group_by(Item.author)\
+            .order_by(Item.author.asc())\
+            .offset(skip).limit(limit)
+        
+        rows = session.exec(stmt).all()
+        for author, count, imgs in rows:
+            valid_imgs = [img for img in (imgs or []) if img][:5]
+            results.append({
+                "name": author or "Others", 
+                "count": count, 
+                "sample_images": valid_imgs
+            })
 
-        elif group_by in ["category", "genre"]:
-            json_field = group_by
-            # Count total unique
-            total_count = session.exec(
-                select(func.count(func.distinct(func.json_extract_path_text(Item.extra_data, json_field))))\
-                .where(Item.owner_id == target_owner_id)
-            ).one()
+    elif group_by in ["category", "genre"]:
+        json_field = group_by
+        name_expr = func.json_extract_path_text(Item.extra_data, json_field)
+        
+        count_stmt = select(func.count(func.distinct(name_expr)))\
+            .where(Item.owner_id == target_owner_id)
+        if q:
+            count_stmt = count_stmt.where(name_expr.ilike(f"%{q}%"))
+        total_count = session.exec(count_stmt).one()
 
-            name_expr = func.json_extract_path_text(Item.extra_data, json_field)
-            stmt = select(
-                name_expr.label("name"),
-                func.count(Item.id).label("count"),
-                func.max(Item.image_url).label("sample_image")
-            ).where(Item.owner_id == target_owner_id)\
-            .group_by("name")\
+        stmt = select(
+            name_expr.label("name"),
+            func.count(Item.id).label("count"),
+            func.array_agg(Item.image_url).label("sample_images")
+        ).where(Item.owner_id == target_owner_id)
+        
+        if q:
+            stmt = stmt.where(name_expr.ilike(f"%{q}%"))
+            
+        stmt = stmt.group_by("name")\
             .order_by(name_expr.asc())\
             .offset(skip).limit(limit)
-            
-            rows = session.exec(stmt).all()
-            for name, count, img in rows:
-                results.append({
-                    "name": name or "Others", 
-                    "count": count, 
-                    "sample_images": [img] if img else []
-                })
-
-        elif group_by == "subject":
-            # Subjects (tags) are in WorkMetadata, requires join
-            # This is complex for SQL total count due to JSON array elements
-            name_expr = func.json_array_elements_text(WorkMetadata.tags)
-            base_stmt = select(
-                name_expr.label("name"),
-                func.count(Item.id).label("count"),
-                func.max(Item.image_url).label("sample_image")
-            ).join(
-                WorkMetadata, (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title)
-            ).where(Item.owner_id == target_owner_id).group_by("name")
-
-            try:
-                # Get total count by wrapping in subquery
-                total_count = session.exec(select(func.count()).select_from(base_stmt.subquery())).one()
-                
-                rows = session.exec(base_stmt.order_by(name_expr.asc()).offset(skip).limit(limit)).all()
-                for name, count, img in rows:
-                    results.append({
-                        "name": name, 
-                        "count": count, 
-                        "sample_images": [img] if img else []
-                    })
-            except Exception:
-                pass
         
-        return {"data": results, "count": total_count}
+        rows = session.exec(stmt).all()
+        for name, count, imgs in rows:
+            valid_imgs = [img for img in (imgs or []) if img][:5]
+            results.append({
+                "name": name or "Others", 
+                "count": count, 
+                "sample_images": valid_imgs
+            })
+
+    elif group_by == "subject":
+        # 1. Tags query
+        tags_expr = func.json_array_elements_text(WorkMetadata.tags)
+        tags_stmt = select(
+            tags_expr.label("name"),
+            func.count(Item.id).label("count"),
+            func.array_agg(Item.image_url).label("sample_images")
+        ).join(
+            WorkMetadata, (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title)
+        ).where(Item.owner_id == target_owner_id)
+        
+        if q:
+            tags_stmt = tags_stmt.where(tags_expr.ilike(f"%{q}%"))
+        tags_stmt = tags_stmt.group_by("name")
+
+        # 2. Others query (items with no tags)
+        others_stmt = select(
+            cast("Others", String).label("name"),
+            func.count(Item.id).label("count"),
+            func.array_agg(Item.image_url).label("sample_images")
+        ).outerjoin(
+            WorkMetadata, (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title)
+        ).where(Item.owner_id == target_owner_id)\
+         .where(or_(
+             WorkMetadata.tags.is_(None),
+             func.json_array_length(WorkMetadata.tags) == 0,
+             WorkMetadata.author.is_(None)
+         ))
+        
+        # Combine
+        if q and "others".find(q.lower()) == -1:
+            full_stmt = tags_stmt
+        else:
+            full_stmt = tags_stmt.union_all(others_stmt)
+
+        try:
+            total_count = session.exec(select(func.count()).select_from(full_stmt.subquery())).one()
+            rows = session.exec(select(full_stmt.subquery()).order_by(text("name ASC")).offset(skip).limit(limit)).all()
+            for name, count, imgs in rows:
+                valid_imgs = [img for img in (imgs or []) if img][:5]
+                results.append({
+                    "name": name, 
+                    "count": count, 
+                    "sample_images": valid_imgs
+                })
+        except Exception:
+            pass
+    
+    return {"data": results, "count": total_count}
 
 
 
-@router.get("/", response_model=ItemsPublic)
+@router.get("/", response_model=ItemsPublic | ItemsMinimalPublic)
 def read_items(
     session: SessionDep,
     current_user: CurrentUser,
@@ -638,13 +616,13 @@ def read_items(
     item_type: ItemType | None = None,
     enable_feed: bool = False,
     q: str | None = None,
+    minimal: Annotated[bool, Query()] = False,
 ) -> Any:
     """
     Retrieve items. Filters by current user's owner_id by default, unless enable_feed is True.
     Supports searching via 'q' using Meilisearch.
+    If 'minimal' is True, returns ItemMinimal objects for performance.
     """
-    print(f"DEBUG: read_items called with author={author}, subject={subject}")
-
     target_owner_id = None
     feed_mode = False
     allowed_community_ids = []
@@ -665,13 +643,11 @@ def read_items(
             ).first()
 
             if not is_community:
-                # Check if public community
                 is_public_community = session.exec(
                     select(Community).where(Community.id == owner_id, Community.is_private == False)
                 ).first()
                 
                 if not is_public_community:
-                    # Check if friend
                     is_friend = session.exec(
                         select(Friendship).where(
                             ((Friendship.user_id == current_user.id) & (Friendship.friend_id == owner_id)) |
@@ -688,7 +664,6 @@ def read_items(
         target_owner_id = current_user.id
 
     if feed_mode:
-        # Get IDs of communities user is in
         my_community_ids = session.exec(
             select(CommunityMember.community_id).where(
                 CommunityMember.user_id == current_user.id,
@@ -696,265 +671,163 @@ def read_items(
             )
         ).all()
         
-        # Get public communities
         public_community_ids = session.exec(
             select(Community.id).where(Community.is_private == False)
         ).all()
         
         allowed_community_ids = list(set(my_community_ids + public_community_ids))
 
-    # Use Meilisearch for all listings to support facets and global filtering
-    # Meilisearch disabled by user request for this endpoint to ensure exact collection filtering
     from app.search import client as meili_client
     meili_success = False
     facets = None
     facet_stats = None
+    items = []
+    count = 0
 
-    # try:
-    #     index = meili_client.index("items")
-    #     filters = []
-    #     if target_owner_id:
-    #         filters.append(f'owner_id = "{target_owner_id}"')
-    #     if category:
-    #         filters.append(f'category = "{category}"')
-    #     if genre:
-    #         filters.append(f'genre = "{genre}"')
-    #     if subject:
-    #         filters.append(f'subject = "{subject}"')
-    #     if author:
-    #         # Use exact match for author in filter (frontend sends exact name)
-    #         filters.append(f'author = "{author}"')
-    #     if item_type:
-    #         filters.append(f'item_type = "{item_type.value}"')
-    #     if feed_mode:
-    #         if allowed_community_ids:
-    #             allowed_ids_str = "[" + ", ".join([f'"{cid}"' for cid in allowed_community_ids]) + "]"
-    #             filters.append(f"(owner_id IN {allowed_ids_str} OR pooled_in IN {allowed_ids_str})")
-    #         else:
-    #             return ItemsPublic(data=[], count=0)
+    # Only use Meilisearch if q is provided, otherwise SQL is faster for listing
+    if q:
+        try:
+            index = meili_client.index("items")
+            filters = []
+            if target_owner_id:
+                filters.append(f'owner_id = "{target_owner_id}"')
+            if category:
+                filters.append(f'category = "{category}"')
+            if genre:
+                filters.append(f'genre = "{genre}"')
+            if subject:
+                filters.append(f'subject = "{subject}"')
+            if author:
+                filters.append(f'author = "{author}"')
+            if item_type:
+                filters.append(f'item_type = "{item_type.value}"')
+            if feed_mode:
+                if allowed_community_ids:
+                    allowed_ids_str = "[" + ", ".join([f'"{cid}"' for cid in allowed_community_ids]) + "]"
+                    filters.append(f"(owner_id IN {allowed_ids_str} OR pooled_in IN {allowed_ids_str})")
+                else:
+                    return ItemsPublic(data=[], count=0)
 
-    #     search_params = {
-    #         "limit": limit,
-    #         "offset": skip,
-    #         "filter": " AND ".join(filters) if filters else None,
-    #         "facets": ["category", "genre", "author", "item_type", "subject"],
-    #         "sort": [f"{sort_by if sort_by != 'created_at' else 'id'}:{sort_order}"]
-    #     }
-        
-    #     search_results = index.search(q or "", search_params)
-    #     item_ids = [uuid.UUID(hit["id"]) for hit in search_results["hits"]]
-    #     count = search_results.get("totalHits", len(item_ids))
-    #     facets = search_results.get("facetDistribution")
-    #     facet_stats = search_results.get("facetStats")
+            search_params = {
+                "limit": limit,
+                "offset": skip,
+                "filter": " AND ".join(filters) if filters else None,
+                "facets": ["category", "genre", "author", "item_type", "subject"],
+                "sort": [f"{sort_by if sort_by != 'created_at' else 'id'}:{sort_order}"]
+            }
+            
+            search_results = index.search(q, search_params)
+            item_ids = [uuid.UUID(hit["id"]) for hit in search_results["hits"]]
+            count = search_results.get("totalHits", len(item_ids))
+            facets = search_results.get("facetDistribution")
+            facet_stats = search_results.get("facetStats")
 
-    #     if not item_ids:
-    #         return ItemsPublic(data=[], count=count, facets=facets, facet_stats=facet_stats)
+            if not item_ids:
+                return ItemsPublic(data=[], count=count, facets=facets, facet_stats=facet_stats)
 
-    #     # Fetch from DB preserving order
-    #     db_items = session.exec(
-    #         select(Item)
-    #         .where(Item.id.in_(item_ids))
-    #         .where(~Item.id.in_(defaulted_item_ids))
-    #         .options(joinedload(Item.user_owner), joinedload(Item.community_owner))
-    #     ).all()
-    #     item_map = {item.id: item for item in db_items}
-    #     items = [item_map[iid] for iid in item_ids if iid in item_map]
-    #     meili_success = True
-    # except Exception:
-    #     meili_success = False
+            # Fetch from DB preserving order
+            db_stmt = select(Item).where(Item.id.in_(item_ids)).where(~Item.id.in_(defaulted_item_ids))
+            
+            from sqlalchemy.orm import selectinload
+            if minimal:
+                db_stmt = db_stmt.options(
+                    selectinload(Item.community_owner),
+                    selectinload(Item.communities)
+                )
+            else:
+                db_stmt = db_stmt.options(
+                    selectinload(Item.user_owner), 
+                    selectinload(Item.community_owner),
+                    selectinload(Item.communities)
+                )
+            
+            db_items = session.exec(db_stmt).all()
+            item_map = {item.id: item for item in db_items}
+            items = [item_map[iid] for iid in item_ids if iid in item_map]
+            meili_success = True
+        except Exception:
+            meili_success = False
 
     if not meili_success:
-        # Fallback to SQL if Meilisearch fails or is not applicable
-        facets = {} # SQL fallback doesn't easily calculate all facets
+        # SQL Fallback / Standard Listing
+        facets = {} 
         facet_stats = {}
+        
+        if feed_mode:
+            statement = select(Item).where(or_(Item.owner_id.in_(allowed_community_ids), Item.community_owner.has(Community.id.in_(allowed_community_ids))))
+        else:
+            statement = select(Item).where(Item.owner_id == target_owner_id)
+
+        statement = statement.where(Item.id.not_in(defaulted_item_ids))
+
         if q:
-            q_filter = or_(
+            statement = statement.where(or_(
                 col(Item.title).ilike(f"%{q}%"),
                 col(Item.description).ilike(f"%{q}%"),
                 col(Item.author).ilike(f"%{q}%")
-            )
-            if feed_mode:
-                statement = select(Item).where(
-                    q_filter,
-                    or_(
-                        Item.owner_id.in_(allowed_community_ids),
-                        Item.community_owner.has(Community.id.in_(allowed_community_ids))
-                    )
-                )
+            ))
+
+        if category:
+            if category == "Others":
+                statement = statement.where(or_(func.json_extract_path_text(Item.extra_data, 'category').is_(None), func.json_extract_path_text(Item.extra_data, 'category') == ""))
             else:
-                statement = select(Item).where(q_filter, Item.owner_id == target_owner_id)
+                statement = statement.where(func.json_extract_path_text(Item.extra_data, 'category') == category)
 
-            statement = statement.where(Item.id.not_in(defaulted_item_ids))
+        if genre:
+            if genre == "Others":
+                statement = statement.where(or_(func.json_extract_path_text(Item.extra_data, 'genre').is_(None), func.json_extract_path_text(Item.extra_data, 'genre') == ""))
+            else:
+                statement = statement.where(func.json_extract_path_text(Item.extra_data, 'genre') == genre)
 
-            if category:
-                if category == "Others":
-                    statement = statement.where(
-                        or_(
-                            func.json_extract_path_text(Item.extra_data, 'category').is_(None),
-                            func.json_extract_path_text(Item.extra_data, 'category') == ""
-                        )
-                    )
-                else:
-                    statement = statement.where(func.json_extract_path_text(Item.extra_data, 'category') == category)
-            
-            if genre:
-                if genre == "Others":
-                    statement = statement.where(
-                        or_(
-                            func.json_extract_path_text(Item.extra_data, 'genre').is_(None),
-                            func.json_extract_path_text(Item.extra_data, 'genre') == ""
-                        )
-                    )
-                else:
-                    statement = statement.where(func.json_extract_path_text(Item.extra_data, 'genre') == genre)
+        if subject:
+            statement = statement.join(WorkMetadata, (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title), isouter=True)
+            if subject == "Others":
+                statement = statement.where(or_(WorkMetadata.tags.is_(None), func.json_array_length(WorkMetadata.tags) == 0))
+            else:
+                statement = statement.where(cast(WorkMetadata.tags, String).ilike(f'%"{subject}"%'))
 
-            if subject:
-                # Left join to handle missing metadata as "Others"
-                statement = statement.join(
-                    WorkMetadata, 
-                    (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title),
-                    isouter=True
-                )
-                if subject == "Others":
-                    # No metadata OR tags is empty/null
-                    statement = statement.where(
-                        or_(
-                            WorkMetadata.tags.is_(None),
-                            func.json_array_length(WorkMetadata.tags) == 0
-                        )
-                    )
-                else:
-                    statement = statement.where(func.json_extract_path_text(WorkMetadata.tags, '$').ilike(f'%"{subject}"%'))
-            
-            if author:
-                if author == "Others":
-                    statement = statement.where(or_(Item.author.is_(None), Item.author == ""))
-                else:
-                    statement = statement.where(Item.author == author)
-            
-            if item_type:
-                statement = statement.where(Item.item_type == item_type)
+        if author:
+            if author == "Others":
+                statement = statement.where(or_(Item.author.is_(None), Item.author == ""))
+            else:
+                statement = statement.where(Item.author == author)
 
-            count_stmt = select(func.count()).select_from(statement.subquery())
-            count = session.exec(count_stmt).one()
-            items = session.exec(statement.offset(skip).limit(limit)).all()
-            print(f"DEBUG: SQL Filter result count: {count}")
-            if items:
-                print(f"DEBUG: First item: {items[0].title}, Author: {items[0].author}")
-                wm = session.get(WorkMetadata, (items[0].author, items[0].title))
-                if wm:
-                    print(f"DEBUG: WorkMetadata tags: {wm.tags}")
+        if item_type:
+            statement = statement.where(Item.item_type == item_type)
+
+        count = session.exec(select(func.count()).select_from(statement.subquery())).one()
+
+        sort_column = Item.created_at
+        if sort_by == "title":
+            sort_column = Item.title
+        elif sort_by == "author":
+            sort_column = Item.author
+
+        if sort_order == "desc":
+            statement = statement.order_by(sort_column.desc())
         else:
-            # Standard SQL filtering
-            if feed_mode:
-                statement = select(Item).where(
-                    or_(
-                        Item.owner_id.in_(allowed_community_ids),
-                        Item.community_owner.has(Community.id.in_(allowed_community_ids))
-                    )
-                )
-            else:
-                statement = select(Item).where(Item.owner_id == target_owner_id)
+            statement = statement.order_by(sort_column.asc())
 
-            statement = statement.where(Item.id.not_in(defaulted_item_ids))
+        from sqlalchemy.orm import selectinload
+        if minimal:
+            statement = statement.options(
+                selectinload(Item.community_owner),
+                selectinload(Item.communities)
+            )
+        else:
+            statement = statement.options(
+                selectinload(Item.user_owner), 
+                selectinload(Item.community_owner),
+                selectinload(Item.communities)
+            )
+        items = session.exec(statement.offset(skip).limit(limit)).all()
 
-            if category:
-                if category == "Others":
-                    statement = statement.where(
-                        or_(
-                            func.json_extract_path_text(Item.extra_data, 'category').is_(None),
-                            func.json_extract_path_text(Item.extra_data, 'category') == ""
-                        )
-                    )
-                else:
-                    statement = statement.where(
-                        func.json_extract_path_text(Item.extra_data, 'category') == category
-                    )
-
-            if genre:
-                if genre == "Others":
-                    statement = statement.where(
-                        or_(
-                            func.json_extract_path_text(Item.extra_data, 'genre').is_(None),
-                            func.json_extract_path_text(Item.extra_data, 'genre') == ""
-                        )
-                    )
-                else:
-                    statement = statement.where(
-                        func.json_extract_path_text(Item.extra_data, 'genre') == genre
-                    )
-
-            if subject:
-                # Left join to handle missing metadata as "Others"
-                statement = statement.join(
-                    WorkMetadata, 
-                    (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title),
-                    isouter=True
-                )
-                if subject == "Others":
-                     # No metadata OR tags is empty/null
-                    statement = statement.where(
-                        or_(
-                            WorkMetadata.tags.is_(None),
-                            func.json_array_length(WorkMetadata.tags) == 0
-                        )
-                    )
-                else:
-                    statement = statement.where(cast(WorkMetadata.tags, String).ilike(f'%"{subject}"%'))
-
-            if author:
-                if author == "Others":
-                    statement = statement.where(or_(Item.author.is_(None), Item.author == ""))
-                else:
-                    statement = statement.where(Item.author == author)
-
-            if item_type:
-                statement = statement.where(Item.item_type == item_type)
-
-            # Count total
-            count_stmt = select(func.count()).select_from(statement.subquery())
-            count = session.exec(count_stmt).one()
-
-            # Apply sorting
-            sort_column = Item.created_at
-            if sort_by == "title":
-                sort_column = Item.title
-            elif sort_by == "author":
-                sort_column = Item.author
-
-            if sort_order == "desc":
-                statement = statement.order_by(sort_column.desc())
-            else:
-                statement = statement.order_by(sort_column.asc())
-
-            items = session.exec(
-                statement.options(joinedload(Item.user_owner), joinedload(Item.community_owner))
-                .offset(skip).limit(limit)
-            ).all()
-
-    # Assemble public items
     if not items:
         return ItemsPublic(data=[], count=count, facets=facets, facet_stats=facet_stats)
 
-    # 1. Collect identifiers for bulk fetching
     item_ids = [item.id for item in items]
-    # Unique (author, title) pairs for WorkMetadata
-    work_keys = {(item.author, item.title) for item in items if item.author and item.title}
     
-    # 2. Bulk fetch WorkMetadata
-    work_meta_map = {}
-    if work_keys:
-        from sqlalchemy import tuple_
-        work_metas = session.exec(
-            select(WorkMetadata).where(
-                tuple_(WorkMetadata.author, WorkMetadata.title).in_(list(work_keys))
-            )
-        ).all()
-        for wm in work_metas:
-            work_meta_map[(wm.author, wm.title)] = wm
-
-    # 3. Bulk fetch active loans for availability
-    # Item is available if NO active/pending loan exists
+    # Bulk fetch availability (active loans)
     active_loan_item_ids = set(session.exec(
         select(Loan.item_id).where(
             Loan.item_id.in_(item_ids),
@@ -965,9 +838,7 @@ def read_items(
         )
     ).all())
 
-    # 4. Bulk fetch possession history for current user
-    # User had possession if they are owner OR had a loan in certain statuses
-    # We already know if they are owner from item.owner_id
+    # Bulk fetch possession history for current user
     possession_loan_item_ids = set(session.exec(
         select(Loan.item_id).where(
             Loan.item_id.in_(item_ids),
@@ -979,30 +850,65 @@ def read_items(
         )
     ).all())
 
-    # 5. Bulk fetch condition ratings
-    condition_ratings = session.exec(
-        select(ItemConditionRating).where(ItemConditionRating.item_id.in_(item_ids))
-    ).all()
-    
-    condition_data_map = {} # item_id -> {"sum": float, "count": int, "notes": []}
+    # Bulk fetch pending donations
+    pending_donation_item_ids = set(session.exec(
+        select(CommunityItem.item_id).where(
+            CommunityItem.item_id.in_(item_ids),
+            CommunityItem.is_donation_pending == True
+        )
+    ).all())
+
+    if minimal:
+        # Build ItemMinimal objects
+        minimal_items = []
+        for item in items:
+            owner_name = "Unknown"
+            if item.user_owner:
+                owner_name = item.user_owner.full_name or item.user_owner.email
+            elif item.community_owner:
+                owner_name = item.community_owner.name
+
+            minimal_items.append(ItemMinimal(
+                id=item.id,
+                owner_id=item.owner_id,
+                title=item.title,
+                author=item.author,
+                item_type=item.item_type,
+                image_url=item.image_url,
+                count=item.count,
+                created_at=item.created_at,
+                is_available=item.id not in active_loan_item_ids,
+                had_possession=item.owner_id == current_user.id or item.id in possession_loan_item_ids,
+                is_community_owned=item.community_owner is not None,
+                is_donation_pending=item.id in pending_donation_item_ids,
+                owner_name=owner_name,
+                category=item.extra_data.get("category") if item.extra_data else None,
+                genre=item.extra_data.get("genre") if item.extra_data else None
+            ))
+        return ItemsMinimalPublic(data=minimal_items, count=count, facets=facets)
+
+    # Full ItemPublic building
+    work_keys = {(item.author, item.title) for item in items if item.author and item.title}
+    work_meta_map = {}
+    if work_keys:
+        from sqlalchemy import tuple_
+        work_metas = session.exec(select(WorkMetadata).where(tuple_(WorkMetadata.author, WorkMetadata.title).in_(list(work_keys)))).all()
+        for wm in work_metas:
+            work_meta_map[(wm.author, wm.title)] = wm
+
+    condition_ratings = session.exec(select(ItemConditionRating).where(ItemConditionRating.item_id.in_(item_ids))).all()
+    condition_data_map = {} 
     for r in condition_ratings:
         if r.item_id not in condition_data_map:
             condition_data_map[r.item_id] = {"sum": 0.0, "count": 0, "notes": []}
-        
         condition_data_map[r.item_id]["sum"] += r.grade
         condition_data_map[r.item_id]["count"] += 1
         if r.notes:
-            condition_data_map[r.item_id]["notes"].append({
-                "user_id": str(r.user_id),
-                "note": r.notes,
-                "created_at": r.created_at.isoformat() if r.created_at else None
-            })
+            condition_data_map[r.item_id]["notes"].append({"user_id": str(r.user_id), "note": r.notes, "created_at": r.created_at.isoformat() if r.created_at else None})
 
-    # 6. Build final list
     public_items = []
     for item in items:
         is_avail = item.id not in active_loan_item_ids
-        
         owner_pub = None
         community_pub = None
         if item.user_owner:
@@ -1011,14 +917,11 @@ def read_items(
         elif item.community_owner:
             community_pub = item.community_owner
 
-        # Condition enrichment
         cond_stats = condition_data_map.get(item.id, {"sum": 0.0, "count": 0, "notes": []})
         avg_grade = cond_stats["sum"] / cond_stats["count"] if cond_stats["count"] > 0 else 0.0
-        
-        # Possession enrichment
         had_possession = item.owner_id == current_user.id or item.id in possession_loan_item_ids
 
-        item_pub = ItemPublic(
+        public_items.append(ItemPublic(
             id=item.id,
             owner_id=item.owner_id,
             title=item.title,
@@ -1027,22 +930,19 @@ def read_items(
             item_type=item.item_type,
             image_url=item.image_url,
             extra_data=item.extra_data,
-            info={
-                **(item.info or {}),
-                "average_condition_grade": avg_grade,
-                "physical_notes": cond_stats["notes"]
-            },
+            info={**(item.info or {}), "average_condition_grade": avg_grade, "physical_notes": cond_stats["notes"]},
             count=item.count,
             created_at=item.created_at,
             owner=owner_pub,
             community_owner=community_pub,
             is_available=is_avail,
+            is_donation_pending=item.id in pending_donation_item_ids,
             work_metadata=work_meta_map.get((item.author, item.title)),
             had_possession=had_possession
-        )
-        public_items.append(item_pub)
+        ))
 
     return ItemsPublic(data=public_items, count=count, facets=facets, facet_stats=facet_stats)
+
 
 
 @router.get("/{id}", response_model=ItemPublic)

@@ -10,7 +10,7 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useEffect, useMemo, useState } from "react"
 import { FaChevronLeft, FaFileImport } from "react-icons/fa"
@@ -46,7 +46,7 @@ const itemsSearchSchema = z.object({
   sort_order: z
     .string()
     .catch(() => localStorage.getItem("sort_order") || "desc"),
-  limit: z.number().catch(() => Number(localStorage.getItem("limit")) || 8),
+  limit: z.number().catch(() => Number(localStorage.getItem("limit")) || 12),
   category: z.string().optional(),
   genre: z.string().optional(),
   view_mode: z
@@ -68,61 +68,6 @@ const itemsSearchSchema = z.object({
 
 const COLLECTIONS_LIMIT = 12
 
-function getItemsQueryOptions({
-  page,
-  sort_by,
-  sort_order,
-  limit,
-  ownerId,
-  category,
-  genre,
-  subject,
-  author,
-  q,
-}: {
-  page: number
-  sort_by: string
-  sort_order: string
-  limit: number
-  ownerId?: string
-  category?: string
-  genre?: string
-  subject?: string
-  author?: string
-  q?: string
-}) {
-  return {
-    queryFn: () =>
-      ItemsService.readItems({
-        skip: (page - 1) * limit,
-        limit: limit,
-        sortBy: sort_by,
-        sortOrder: sort_order,
-        ownerId: ownerId,
-        category: category,
-        genre: genre,
-        subject: subject,
-        author: author,
-        q: q,
-      }),
-    queryKey: [
-      "items",
-      {
-        page,
-        sort_by,
-        sort_order,
-        limit,
-        ownerId,
-        category,
-        genre,
-        subject,
-        author,
-        q,
-      },
-    ],
-  }
-}
-
 export const Route = createFileRoute("/_layout/items")({
   component: Items,
   validateSearch: (search) => itemsSearchSchema.parse(search),
@@ -130,7 +75,6 @@ export const Route = createFileRoute("/_layout/items")({
 
 function ItemsTable() {
   const navigate = useNavigate({ from: Route.fullPath })
-  const queryClient = useQueryClient()
   const {
     page,
     sort_by,
@@ -157,27 +101,47 @@ function ItemsTable() {
     localStorage.setItem("limit", String(limit))
   }, [view_mode, display_type, organize_by, sort_by, sort_order, limit])
 
-  const { data, isLoading, isPlaceholderData } = useQuery({
-    ...getItemsQueryOptions({
-      page,
-      sort_by,
-      sort_order,
-      limit,
-      ownerId: user?.id,
-      category,
-      genre,
-      subject,
-      author,
-      q,
-    }),
-    placeholderData: (prevData) => prevData,
-    enabled:
-      !!user &&
-      (!!subject ||
-        !!author ||
-        !!category ||
-        !!genre ||
-        display_type === "items"),
+  const {
+    data: infiniteData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading: isLoadingInfinite,
+  } = useInfiniteQuery({
+    queryKey: [
+      "itemsInfinite",
+      {
+        sort_by,
+        sort_order,
+        limit,
+        ownerId: user?.id,
+        category,
+        genre,
+        subject,
+        author,
+        q,
+      },
+    ],
+    queryFn: ({ pageParam = 0 }) =>
+      ItemsService.readItems({
+        skip: pageParam as number,
+        limit: limit,
+        sortBy: sort_by,
+        sortOrder: sort_order,
+        ownerId: user?.id,
+        category: category,
+        genre: genre,
+        subject: subject,
+        author: author,
+        q: q,
+        minimal: true,
+      }),
+    getNextPageParam: (lastPage, allPages) => {
+      const loadedCount = allPages.length * limit
+      return loadedCount < lastPage.count ? loadedCount : undefined
+    },
+    initialPageParam: 0,
+    enabled: !!user && (display_type === "items" || !!subject || !!author || !!category || !!genre),
   })
 
   const { data: facets, isLoading: isLoadingFacets } = useQuery({
@@ -199,51 +163,10 @@ function ItemsTable() {
       !genre,
   })
 
-  // Prefetch next page
-  useEffect(() => {
-    if (display_type === "items" && data?.data.length === limit) {
-      const nextPage = page + 1
-      queryClient.prefetchQuery(
-        getItemsQueryOptions({
-          page: nextPage,
-          sort_by,
-          sort_order,
-          limit,
-          ownerId: user?.id,
-          category,
-          genre,
-          subject,
-          author,
-          q,
-        }),
-      )
-    }
-  }, [
-    data,
-    page,
-    limit,
-    queryClient,
-    sort_by,
-    sort_order,
-    user?.id,
-    category,
-    genre,
-    subject,
-    author,
-    q,
-    display_type,
-  ])
-
   // Fetch outgoing loans once for all cards
   useQuery({
     queryKey: ["loans", "outgoing"],
     queryFn: () => LoansService.readOutgoingLoanRequests({}),
-    enabled: !!user,
-  })
-
-  const { data: allItemsCheck } = useQuery({
-    queryKey: ["hasAnyItems", user?.id],
-    queryFn: () => ItemsService.readItems({ limit: 1, ownerId: user?.id }),
     enabled: !!user,
   })
 
@@ -319,19 +242,17 @@ function ItemsTable() {
     return collections
   }, [collections, page, user, organize_by])
 
-  const items = data?.data ?? []
-  const count = data?.count ?? 0
-  const hasAnyItems = (allItemsCheck?.count ?? 0) > 0
+  const allItems = (infiniteData?.pages.flatMap((p) => p.data) ?? []) as any[]
 
-  if (isLoading || isLoadingFacets) {
+  if (isLoadingInfinite || isLoadingFacets) {
     return <PendingItems />
   }
 
   const isDrillDown = !!subject || !!author || !!category || !!genre
+  const hasCollections = collections.length > 0
 
-  if (items.length === 0 && page === 1 && !(facets as any)?.data?.length) {
-    // ... existing empty state logic ...
-    if (hasAnyItems || q || isDrillDown) {
+  if (allItems.length === 0 && !isLoadingInfinite && !hasCollections && !isLoadingFacets) {
+    if (q || isDrillDown) {
       return (
         <Box mt={8}>
           {isDrillDown && (
@@ -374,11 +295,10 @@ function ItemsTable() {
     )
   }
 
-  const renderGroup = (groups: ItemPublic[][]) => (
+  const renderGroup = (groups: any[][]) => (
     <SimpleGrid
       columns={view_mode === "list" ? 1 : { base: 2, sm: 3, md: 4 }}
       gap={view_mode === "list" ? 2 : { base: 2, md: 6 }}
-      opacity={isPlaceholderData ? 0.5 : 1}
     >
       {groups.map((group) => {
         const firstItem = group[0]
@@ -392,7 +312,6 @@ function ItemsTable() {
           <ItemCard
             key={firstItem.id}
             item={group}
-            displayOwnerId={user?.id}
             onShowDetails={() => setSelectedItem(firstItem)}
           />
         )
@@ -432,7 +351,7 @@ function ItemsTable() {
   }
 
   // Drilled-down Group View OR Item View
-  const activeGroups = groupItems(items)
+  const activeGroups = groupItems(allItems as any)
   const currentFilterValue = subject || author || genre || category || "Unknown"
 
   return (
@@ -459,7 +378,7 @@ function ItemsTable() {
             textTransform="uppercase"
             letterSpacing="wider"
           >
-            {activeGroups[0]?.[0]?.item_type === "book" ? "Books" : "Items"}{" "}
+            {(activeGroups[0]?.[0] as any)?.item_type === "book" ? "Books" : "Items"}{" "}
             {currentFilterValue?.toLowerCase() === "others"
               ? `with unspecified ${organize_by}`
               : `${
@@ -476,27 +395,32 @@ function ItemsTable() {
         </VStack>
       )}
 
-      {renderGroup(activeGroups)}
+      {renderGroup(activeGroups as any)}
+
+      {hasNextPage && (
+        <Flex justify="center" mt={10} mb={10}>
+          <Button
+            variant="ghost"
+            colorPalette="accent"
+            onClick={() => fetchNextPage()}
+            loading={isFetchingNextPage}
+          >
+            Load More
+          </Button>
+        </Flex>
+      )}
+
+      {!hasNextPage && allItems.length > 0 && (
+        <Text textAlign="center" color="gray.500" mt={10} mb={10} fontSize="sm">
+          You've reached the end of the list.
+        </Text>
+      )}
 
       <ItemDetailModal
         item={selectedItem}
         isOpen={!!selectedItem}
         onClose={() => setSelectedItem(null)}
       />
-
-      <Flex justifyContent="center" mt={8}>
-        <PaginationRoot
-          count={count}
-          pageSize={limit}
-          onPageChange={({ page }) => setPage(page)}
-        >
-          <Flex>
-            <PaginationPrevTrigger />
-            <PaginationItems />
-            <PaginationNextTrigger />
-          </Flex>
-        </PaginationRoot>
-      </Flex>
     </Box>
   )
 }
@@ -505,7 +429,6 @@ function Items() {
   const navigate = useNavigate({ from: Route.fullPath })
   const { user } = useAuth()
   const {
-    page,
     sort_by,
     sort_order,
     limit,
@@ -519,22 +442,6 @@ function Items() {
     q,
     tab,
   } = Route.useSearch()
-
-  const { data } = useQuery({
-    ...getItemsQueryOptions({
-      page,
-      sort_by,
-      sort_order,
-      limit,
-      ownerId: user?.id,
-      category,
-      genre,
-      subject,
-      author,
-      q,
-    }),
-    enabled: !!user && tab !== "import",
-  })
 
   const updateSearch = (newParams: any) => {
     navigate({
@@ -556,7 +463,7 @@ function Items() {
             <VStack align="start" gap={0}>
               <Heading size="lg">My Items</Heading>
               <Text fontSize="sm" color="gray.500" fontWeight="medium">
-                Total: {user?.collection_index?.total ?? data?.count ?? 0} items
+                Total: {user?.collection_index?.total ?? 0} items
               </Text>
             </VStack>
             <AddItem />

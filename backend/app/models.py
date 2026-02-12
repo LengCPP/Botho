@@ -748,6 +748,25 @@ class ItemPublic(ItemBase):
     had_possession: bool = False
 
 
+class ItemMinimal(SQLModel):
+    id: uuid.UUID
+    owner_id: uuid.UUID
+    title: str
+    author: str | None = None
+    item_type: ItemType
+    image_url: str | None = None
+    count: int
+    created_at: datetime
+    is_available: bool = True
+    had_possession: bool = False
+    is_community_owned: bool = False
+    is_donation_pending: bool = False
+    owner_name: str | None = None
+    # Minimal metadata for classification in grid
+    category: str | None = None
+    genre: str | None = None
+
+
 class BookPublic(ItemPublic):
     pass
 
@@ -762,6 +781,12 @@ class ItemsPublic(SQLModel):
     count: int
     facets: dict[str, dict[str, int]] | None = None
     facet_stats: dict[str, dict[str, Any]] | None = None
+
+
+class ItemsMinimalPublic(SQLModel):
+    data: list[ItemMinimal]
+    count: int
+    facets: dict[str, dict[str, int]] | None = None
 
 
 class StagedItemPublic(SQLModel):

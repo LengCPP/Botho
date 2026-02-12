@@ -72,7 +72,7 @@ export function GroupCard({
               color={textColor}
               lineClamp={1}
             >
-              {name}
+              {name === "Others" ? `Unspecified ${type}` : name}
             </Text>
             <Badge colorPalette="accent" variant="subtle" size="xs">
               {(type || "subject").toUpperCase()} COLLECTION
