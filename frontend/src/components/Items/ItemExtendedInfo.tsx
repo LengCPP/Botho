@@ -93,7 +93,62 @@ const ItemExtendedInfo = ({
         scrollbarWidth: "none",
       }}
     >
-      {/* 1. Subject */}
+      {/* 1. Classification */}
+      {(item.work_metadata?.category ||
+        item.work_metadata?.genre ||
+        (item as any).category ||
+        (item as any).genre) && (
+        <Box>
+          <Text
+            fontSize="xs"
+            fontWeight="bold"
+            color="fg.muted"
+            textTransform="uppercase"
+            mb={2}
+          >
+            Classification
+          </Text>
+          <HStack gap={2} mb={3}>
+            {(item.work_metadata?.category || (item as any).category) && (
+              <Badge variant="solid" colorPalette="blue" size="sm">
+                {item.work_metadata?.category || (item as any).category}
+              </Badge>
+            )}
+            {(item.work_metadata?.genre || (item as any).genre) && (
+              <Badge variant="outline" colorPalette="teal" size="sm">
+                {item.work_metadata?.genre || (item as any).genre}
+              </Badge>
+            )}
+          </HStack>
+          <Separator />
+        </Box>
+      )}
+
+      {/* 2. Description */}
+      {(item.description || item.work_metadata?.description) && (
+        <Box>
+          <Text
+            fontSize="xs"
+            fontWeight="bold"
+            color="fg.muted"
+            textTransform="uppercase"
+            mb={2}
+          >
+            Description
+          </Text>
+          <Text
+            fontSize="sm"
+            color="inherit"
+            opacity={0.9}
+            lineHeight="relaxed"
+          >
+            {item.description || item.work_metadata?.description}
+          </Text>
+          <Separator mt={3} />
+        </Box>
+      )}
+
+      {/* 3. Subject */}
       {(item.work_metadata?.tags?.length || item.author) && (
         <Box>
           <HStack justify="space-between" mb={1}>

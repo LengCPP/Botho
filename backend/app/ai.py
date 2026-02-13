@@ -52,9 +52,12 @@ async def classify_book(title: str, author: str, description: Optional[str] = No
     DESCRIPTION: {description or "No description provided."}
 
     Provide:
-    1. CATEGORY: A broad classification (e.g., 'Fiction', 'Non-Fiction', 'Children & Young Adult', 'Science & Technology', 'Self-Help', 'Biography', 'Philosophy', 'Art & Design', 'History', 'Religion & Spirituality').
-    2. GENRE: A more specific description of the style and type of literature (e.g., 'Cyberpunk', 'Stoic Philosophy', 'Hard Science Fiction', 'Magical Realism', 'Investigative Journalism').
-    3. SUBJECTS: A list of single words or short phrases separated by commas that describe what the book is about (e.g., 'Artificial Intelligence, Ethics, Future of Humanity').
+    1. CATEGORY: One of the following broad classifications: 'Fiction', 'Non-Fiction', 'Children & Young Adult', 'Academic & Professional'.
+    2. GENRE: A more specific description of the style and type of literature.
+        - For 'Academic & Professional', choose from: 'Textbooks', 'Reference', 'Research', 'Journal'.
+        - For others, choose standard genres (e.g., 'Fantasy', 'Mystery', 'Biography', 'History').
+        - Do NOT use subjects (like 'Law', 'Engineering', 'Math') as Genres. Put them in SUBJECTS instead.
+    3. SUBJECTS: A list of single words or short phrases separated by commas that describe what the book is about (e.g., 'Artificial Intelligence, Ethics, Future of Humanity', 'Calculus', 'Civil Law').
 
     Strictly follow this format:
     CATEGORY: [Broad category]

@@ -15,12 +15,14 @@ from app.api.utils import (
     get_work_metadata,
     ensure_work_metadata,
     maintenance_bulk_classify,
+    enrich_specific_books,
     sync_item_to_archive,
     update_collection_index,
     rebuild_collection_index_task,
 )
 from app.core.config import settings
 from app.models import (
+    BookEnrichmentRequest,
     Community,
     CommunityItem,
     CommunityMember,
@@ -78,8 +80,33 @@ def trigger_bulk_classify(
     if not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Not enough permissions")
     
-    background_tasks.add_task(maintenance_bulk_classify)
+    background_tasks.add_task(maintenance_bulk_classify, current_user.id)
     return Message(message="Bulk classification and cleanup started in background.")
+
+
+@router.post("/book-registry/enrich", response_model=Message)
+def trigger_enrich_books(
+    *, 
+    session: SessionDep, 
+    current_user: CurrentUser, 
+    background_tasks: BackgroundTasks,
+    request: BookEnrichmentRequest
+) -> Any:
+    """
+    Trigger a background task to enrich specific books in the registry.
+    Superuser only.
+    """
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    
+    background_tasks.add_task(
+        enrich_specific_books, 
+        request.books,
+        current_user.id,
+        request.fields_to_update, 
+        request.source_api
+    )
+    return Message(message=f"Enrichment task started for {len(request.books)} books.")
 
 
 @router.post("/{id}/sync-to-archive", response_model=Message)
@@ -143,6 +170,7 @@ def list_book_registry(
     current_user: CurrentUser,
     skip: int = 0,
     limit: int = 100,
+    filter_missing: str | None = None,
 ) -> Any:
     """
     List all books in the global registry. Superuser only for now to avoid abuse.
@@ -150,11 +178,21 @@ def list_book_registry(
     if not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Not enough permissions")
     
-    count_statement = select(func.count()).select_from(WorkMetadata)
+    statement = select(WorkMetadata)
+
+    if filter_missing == "image":
+        statement = statement.where(or_(WorkMetadata.image_url.is_(None), WorkMetadata.image_url == ""))
+    elif filter_missing == "description":
+        statement = statement.where(or_(WorkMetadata.description.is_(None), WorkMetadata.description == ""))
+    elif filter_missing == "isbn":
+        statement = statement.where(or_(WorkMetadata.isbn.is_(None), WorkMetadata.isbn == ""))
+    elif filter_missing == "category":
+        statement = statement.where(or_(WorkMetadata.category.is_(None), WorkMetadata.category == ""))
+
+    count_statement = select(func.count()).select_from(statement.subquery())
     count = session.exec(count_statement).one()
 
-    statement = select(WorkMetadata).offset(skip).limit(limit)
-    books = session.exec(statement).all()
+    books = session.exec(statement.offset(skip).limit(limit)).all()
     
     return WorksMetadataPublic(data=books, count=count)
 
@@ -872,6 +910,7 @@ def read_items(
                 id=item.id,
                 owner_id=item.owner_id,
                 title=item.title,
+                description=item.description,
                 author=item.author,
                 item_type=item.item_type,
                 image_url=item.image_url,

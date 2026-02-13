@@ -480,6 +480,7 @@ class WorkMetadata(SQLModel, table=True):
     isbn: str | None = Field(default=None, index=True)
     description: str | None = Field(default=None, max_length=10000)
     category: str | None = Field(default=None, max_length=255)
+    genre: str | None = Field(default=None, max_length=255)
     image_url: str | None = Field(default=None, max_length=512)
     tags: list[str] = Field(default=[], sa_column=Column(JSON))
     average_rating: float = Field(default=0.0)
@@ -718,6 +719,7 @@ class WorkMetadataPublic(SQLModel):
     isbn: str | None = None
     description: str | None = None
     category: str | None = None
+    genre: str | None = None
     image_url: str | None = None
     tags: list[str] = []
     average_rating: float
@@ -725,7 +727,14 @@ class WorkMetadataPublic(SQLModel):
 
 
 class WorkMetadataUpdate(SQLModel):
+    genre: str | None = None
     tags: list[str] | None = None
+
+
+class BookEnrichmentRequest(SQLModel):
+    books: list[dict[str, str]] # List of {"author": str, "title": str}
+    fields_to_update: list[str] = ["description", "isbn", "image_url", "category"]
+    source_api: str = "auto" # "google_books", "open_library", "auto"
 
 
 class WorksMetadataPublic(SQLModel):
@@ -752,6 +761,7 @@ class ItemMinimal(SQLModel):
     id: uuid.UUID
     owner_id: uuid.UUID
     title: str
+    description: str | None = None
     author: str | None = None
     item_type: ItemType
     image_url: str | None = None
@@ -842,7 +852,7 @@ class LoanCreate(SQLModel):
 
 class ForgivenessRequest(SQLModel):
     reason: ForgivenessReason
-    new_item_specs: Optional[dict[str, Any]] = None
+    new_item_specs: dict[str, Any] | None = None
 
 
 class LoanPublic(SQLModel):

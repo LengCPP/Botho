@@ -9,6 +9,7 @@ import {
   DialogRoot,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Tooltip } from "@/components/ui/tooltip"
 import useCustomToast from "@/hooks/useCustomToast"
 import {
   Box,
@@ -30,15 +31,14 @@ import Papa from "papaparse"
 import { useEffect, useRef, useState } from "react"
 import {
   FaCheckCircle,
+  FaEdit,
   FaExclamationTriangle,
   FaFileImport,
+  FaInfoCircle,
   FaSpinner,
   FaTrash,
-  FaEdit,
-  FaInfoCircle,
 } from "react-icons/fa"
 import * as XLSX from "xlsx"
-import { Tooltip } from "@/components/ui/tooltip"
 
 interface ImportItemsProps {
   communityId?: string
@@ -125,7 +125,11 @@ const EditableCell = ({
       role="group"
     >
       <Text whiteSpace="normal" wordBreak="break-word">
-        {value || <Text as="span" color="fg.subtle" fontStyle="italic">Click to edit...</Text>}
+        {value || (
+          <Text as="span" color="fg.subtle" fontStyle="italic">
+            Click to edit...
+          </Text>
+        )}
       </Text>
       <Icon
         as={FaEdit}
@@ -177,7 +181,9 @@ export const ImportItems = ({
   })
   const [isMappingOpen, setIsMappingOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const [filterMode, setFilterMode] = useState<"all" | "issues" | "pending">("all")
+  const [filterMode, setFilterMode] = useState<"all" | "issues" | "pending">(
+    "all",
+  )
   const { showSuccessToast, showErrorToast, showInfoToast } = useCustomToast()
   const queryClient = useQueryClient()
 
@@ -206,7 +212,12 @@ export const ImportItems = ({
       }
     }
     prevProcessingCount.current = currentProcessing
-  }, [stagedItems?.processing_count, stagedItems?.completed_count, stagedItems?.failed_count, showInfoToast])
+  }, [
+    stagedItems?.processing_count,
+    stagedItems?.completed_count,
+    stagedItems?.failed_count,
+    showInfoToast,
+  ])
 
   // Listen for real-time processing updates via WebSocket event bus
   useState(() => {
@@ -546,7 +557,11 @@ export const ImportItems = ({
                       <Table.Row
                         key={item.id}
                         opacity={item.status === "PROCESSING" ? 0.6 : 1}
-                        bg={validationErrors.length > 0 ? "orange.50/10" : undefined}
+                        bg={
+                          validationErrors.length > 0
+                            ? "orange.50/10"
+                            : undefined
+                        }
                       >
                         <Table.Cell>
                           <Checkbox
@@ -566,12 +581,23 @@ export const ImportItems = ({
                         <Table.Cell>
                           {item.raw_data.image_url ? (
                             <Tooltip content={item.raw_data.image_url}>
-                              <Text fontSize="xs" maxW="150px" truncate color="blue.500" cursor="pointer" onClick={() => window.open(item.raw_data.image_url, "_blank")}>
+                              <Text
+                                fontSize="xs"
+                                maxW="150px"
+                                truncate
+                                color="blue.500"
+                                cursor="pointer"
+                                onClick={() =>
+                                  window.open(item.raw_data.image_url, "_blank")
+                                }
+                              >
                                 {item.raw_data.image_url}
                               </Text>
                             </Tooltip>
                           ) : (
-                            <Text fontSize="xs" color="gray.400">No Image</Text>
+                            <Text fontSize="xs" color="gray.400">
+                              No Image
+                            </Text>
                           )}
                         </Table.Cell>
                         <Table.Cell>
@@ -610,12 +636,21 @@ export const ImportItems = ({
                         <Table.Cell>
                           {validationErrors.length > 0 && (
                             <Tooltip content={validationErrors.join(", ")}>
-                              <Icon as={FaExclamationTriangle} color="orange.500" cursor="help" />
+                              <Icon
+                                as={FaExclamationTriangle}
+                                color="orange.500"
+                                cursor="help"
+                              />
                             </Tooltip>
                           )}
-                          {validationErrors.length === 0 && item.status === "PENDING" && (
-                            <Icon as={FaCheckCircle} color="gray.300" opacity={0.5} />
-                          )}
+                          {validationErrors.length === 0 &&
+                            item.status === "PENDING" && (
+                              <Icon
+                                as={FaCheckCircle}
+                                color="gray.300"
+                                opacity={0.5}
+                              />
+                            )}
                         </Table.Cell>
                         <Table.Cell>
                           {item.status === "PENDING" && (

@@ -184,6 +184,8 @@ export const CompactItemCard = ({
     )
   }
 
+  const category = item.work_metadata?.category || (item as any).category
+
   return (
     <>
       <Box
@@ -239,9 +241,16 @@ export const CompactItemCard = ({
           </Box>
 
           <VStack align="start" gap={0} flex={1} overflow="hidden">
-            <Text fontSize="sm" fontWeight="bold" lineClamp={1}>
-              {item.title}
-            </Text>
+            <HStack width="full" justify="space-between" align="baseline">
+              <Text fontSize="sm" fontWeight="bold" lineClamp={1} flex={1}>
+                {item.title}
+              </Text>
+              {category && (
+                <Badge size="2xs" colorPalette="blue" variant="subtle">
+                  {category}
+                </Badge>
+              )}
+            </HStack>
             {item.author && (
               <Text fontSize="xs" color="gray.500" lineClamp={1}>
                 {item.author}

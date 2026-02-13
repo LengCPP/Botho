@@ -27,7 +27,7 @@ def configure_search():
     ])
 
     works_index = client.index("works")
-    works_index.update_filterable_attributes(["isbn", "category", "subject"])
+    works_index.update_filterable_attributes(["isbn", "category", "genre", "subject"])
     works_index.update_sortable_attributes(["title", "author"])
 
     communities_index = client.index("communities")
@@ -104,6 +104,7 @@ def sync_work_metadata_to_search(meta: WorkMetadata):
         "isbn": meta.isbn,
         "description": meta.description,
         "category": meta.category,
+        "genre": meta.genre,
         "image_url": meta.image_url,
         "subject": meta.tags,
     }

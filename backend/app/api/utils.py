@@ -155,11 +155,12 @@ def rebuild_collection_index_task(owner_id: uuid.UUID):
         _update_collection_index_logic(session, owner_id)
 
 
-async def maintenance_bulk_classify():
+async def maintenance_bulk_classify(user_id: uuid.UUID):
     """Background task to classify all books and clean up polluted ISBNs."""
     from app.ai import classify_book
     from app.search import sync_item_to_search
     from app.core.db import engine
+    from app.api.websocket_manager import notification_manager
     import logging
 
     logger = logging.getLogger(__name__)
@@ -219,7 +220,7 @@ async def maintenance_bulk_classify():
                     tags = [s.strip() for s in sub.split(",")] if sub else []
                     
                     # Ensure WorkMetadata also gets updated
-                    ensure_work_metadata(session, book.author, book.title, category=cat, tags=tags)
+                    ensure_work_metadata(session, book.author, book.title, category=cat, genre=gen, tags=tags)
                     classified_count += 1
                 
                 await asyncio.sleep(0.5) # Throttle Gemini usage
@@ -227,6 +228,194 @@ async def maintenance_bulk_classify():
         session.commit()
         logger.info(f"Maintenance complete: Classified {classified_count} books.")
         print(f"DEBUG: Maintenance complete: Classified {classified_count} books.")
+        
+        # Notify user
+        await notification_manager.send_personal_message(
+            {"type": "BOOK_ARCHIVE_UPDATED", "count": classified_count, "action": "classified"},
+            user_id
+        )
+
+async def enrich_specific_books(
+    books_to_enrich: list[dict[str, str]],
+    user_id: uuid.UUID,
+    fields_to_update: list[str] | None = None,
+    source_api: str = "auto"
+):
+    """
+    Background task to enrich specific books using external APIs (Google Books, OpenLibrary).
+    books_to_enrich: list of {"author": str, "title": str}
+    user_id: ID of the user who triggered the task
+    fields_to_update: list of fields to overwrite
+    source_api: "google_books", "open_library", or "auto"
+    """
+    import httpx
+    import logging
+    from app.core.config import settings
+    from app.core.db import engine
+    from app.storage import upload_image_from_url
+    from app.search import sync_item_to_search
+    from app.api.websocket_manager import notification_manager
+
+    logger = logging.getLogger(__name__)
+    logger.info(f"Starting enrichment for {len(books_to_enrich)} books. API: {source_api}, Fields: {fields_to_update}")
+
+    # Limit concurrent external API calls
+    semaphore = asyncio.Semaphore(3)
+
+    # Defaults if not specified
+    if not fields_to_update:
+        fields_to_update = ["description", "isbn", "image_url", "category"]
+
+    async def fetch_metadata(author: str, title: str):
+        # ... (same as before)
+        async with semaphore:
+            await asyncio.sleep(0.5) # Rate limiting
+            google_data = None
+            open_library_data = None
+            
+            # 1. Google Books
+            if source_api in ["auto", "google_books"]:
+                search_query = f"intitle:{title} inauthor:{author}"
+                api_key = settings.VITE_GOOGLE_BOOKS_API_KEY
+                url = f"https://www.googleapis.com/books/v1/volumes?q={search_query}&maxResults=1"
+                if api_key: url += f"&key={api_key}"
+
+                async with httpx.AsyncClient() as client:
+                    try:
+                        response = await client.get(url, timeout=10.0)
+                        if response.status_code == 200:
+                            res_json = response.json()
+                            if res_json.get("items"):
+                                google_data = res_json["items"][0]["volumeInfo"]
+                    except Exception as e:
+                        logger.error(f"Google Books API failed for {title}: {e}")
+
+            # 2. Open Library (if Google fails or misses data, OR if specifically requested)
+            should_fetch_ol = source_api == "open_library" or (source_api == "auto" and not google_data)
+            
+            if should_fetch_ol:
+                try:
+                    ol_search_url = f"https://openlibrary.org/search.json?title={title}&author={author}&limit=1"
+                    async with httpx.AsyncClient() as client:
+                        ol_res = await client.get(ol_search_url, timeout=10.0)
+                        if ol_res.status_code == 200:
+                            ol_json = ol_res.json()
+                            if ol_json.get("docs"):
+                                open_library_data = ol_json["docs"][0]
+                except Exception as e:
+                    logger.error(f"OpenLibrary API failed for {title}: {e}")
+
+            return google_data, open_library_data
+
+    with Session(engine) as session:
+        count = 0
+        for book_info in books_to_enrich:
+            # ... (same loop logic)
+            author = book_info.get("author")
+            title = book_info.get("title")
+            
+            if not author or not title:
+                continue
+
+            # Fetch existing items to update
+            items = session.exec(
+                select(Item).where(Item.author == author, Item.title == title)
+            ).all()
+            
+            # Fetch WorkMetadata to update
+            meta = session.get(WorkMetadata, (author, title))
+            
+            google_data, ol_data = await fetch_metadata(author, title)
+            
+            new_desc = None
+            new_isbn = None
+            new_image_url = None
+            new_category = None
+            new_tags = []
+
+            if google_data:
+                new_desc = google_data.get("description")
+                industry_ids = google_data.get("industryIdentifiers", [])
+                for id_obj in industry_ids:
+                    if id_obj["type"] in ["ISBN_13", "ISBN_10"]:
+                        new_isbn = id_obj["identifier"]
+                        if id_obj["type"] == "ISBN_13": break
+                google_categories = google_data.get("categories", [])
+                if google_categories:
+                    new_category = google_categories[0]
+                img_links = google_data.get("imageLinks", {})
+                thumb = img_links.get("medium") or img_links.get("small") or img_links.get("thumbnail")
+                if thumb:
+                    thumb = thumb.replace("http://", "https://")
+                    try:
+                        new_image_url = await upload_image_from_url(thumb, folder="items")
+                    except Exception:
+                        pass
+
+            elif ol_data:
+                isbns = ol_data.get("isbn", [])
+                if isbns: new_isbn = isbns[0]
+                if ol_data.get("cover_i"):
+                    thumb = f"https://covers.openlibrary.org/b/id/{ol_data.get('cover_i')}-M.jpg"
+                    try:
+                        new_image_url = await upload_image_from_url(thumb, folder="items")
+                    except Exception:
+                        pass
+                new_tags = ol_data.get("subject", [])[:5]
+
+            final_isbn = new_isbn if "isbn" in fields_to_update else (meta.isbn if meta else None)
+            final_desc = new_desc if "description" in fields_to_update else (meta.description if meta else None)
+            final_img = new_image_url if "image_url" in fields_to_update else (meta.image_url if meta else None)
+            final_cat = new_category if "category" in fields_to_update else (meta.category if meta else None)
+            
+            final_tags = meta.tags if meta else []
+            if new_tags:
+                final_tags = list(set(final_tags) | set(new_tags))
+
+            if final_isbn or final_desc or final_img or final_cat:
+                meta = ensure_work_metadata(
+                    session, author, title,
+                    isbn=final_isbn,
+                    description=final_desc,
+                    image_url=final_img,
+                    category=final_cat,
+                    tags=final_tags
+                )
+                count += 1
+
+            for item in items:
+                updated = False
+                extra = item.extra_data or {}
+                
+                if "isbn" in fields_to_update and new_isbn:
+                    extra["isbn"] = new_isbn
+                    updated = True
+                
+                if "description" in fields_to_update and new_desc:
+                    item.description = new_desc
+                    updated = True
+                
+                if "image_url" in fields_to_update and new_image_url:
+                    item.image_url = new_image_url
+                    updated = True
+                
+                if "category" in fields_to_update and new_category:
+                    extra["category"] = new_category
+                    updated = True
+
+                if updated:
+                    item.extra_data = extra
+                    session.add(item)
+                    sync_item_to_search(item)
+        
+        session.commit()
+        logger.info(f"Enrichment complete. Updated {count} books.")
+        
+        # Notify user to refresh
+        await notification_manager.send_personal_message(
+            {"type": "BOOK_ARCHIVE_UPDATED", "count": count},
+            user_id
+        )
 
 async def sync_item_to_archive(session: Session, item_id: uuid.UUID):
     """Sync a specific item's metadata to the global WorkMetadata archive."""

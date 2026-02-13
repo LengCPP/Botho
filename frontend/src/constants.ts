@@ -41,9 +41,7 @@ export const BOOK_CLASSIFICATION: Record<string, string[]> = {
   "Academic & Professional": [
     "Textbooks",
     "Reference (Dictionaries, Encyclopedias)",
-    "Medical",
-    "Law",
-    "Computer Science & Technology",
-    "Engineering",
+    "Research",
+    "Journal",
   ],
 }

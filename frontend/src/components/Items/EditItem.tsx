@@ -85,14 +85,7 @@ const BOOK_CLASSIFICATION: Record<string, string[]> = {
     "Middle Grade",
     "Young Adult (YA)",
   ],
-  "Academic & Professional": [
-    "Textbooks",
-    "Reference (Dictionaries, Encyclopedias)",
-    "Medical",
-    "Law",
-    "Computer Science & Technology",
-    "Engineering",
-  ],
+  "Academic & Professional": ["Textbooks", "Reference", "Research", "Journal"],
 }
 
 const MAX_FILE_SIZE = 1 * 1024 * 1024 // 1MB
