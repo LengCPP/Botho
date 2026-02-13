@@ -17,27 +17,149 @@ import {
   HStack,
   Heading,
   Icon,
-  Progress,
+  Image,
+  Input,
   Stack,
   Table,
   Text,
+  Textarea,
   VStack,
 } from "@chakra-ui/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import Papa from "papaparse"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   FaCheckCircle,
   FaExclamationTriangle,
   FaFileImport,
   FaSpinner,
   FaTrash,
+  FaEdit,
+  FaInfoCircle,
 } from "react-icons/fa"
 import * as XLSX from "xlsx"
+import { Tooltip } from "@/components/ui/tooltip"
 
 interface ImportItemsProps {
   communityId?: string
   isArchiveImport?: boolean
+}
+
+interface EditableCellProps {
+  item: StagedItemPublic
+  field: string
+  value: string
+  onSave: (id: string, field: string, value: string) => void
+  isMultiline?: boolean
+  isNumeric?: boolean
+}
+
+const EditableCell = ({
+  item,
+  field,
+  value,
+  onSave,
+  isMultiline = false,
+}: EditableCellProps) => {
+  const [isEditing, setIsEditing] = useState(false)
+  const [currentValue, setCurrentValue] = useState(value)
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    if (isEditing) {
+      inputRef.current?.focus()
+    }
+  }, [isEditing])
+
+  const handleBlur = () => {
+    setIsEditing(false)
+    if (currentValue !== value) {
+      onSave(item.id, field, currentValue)
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !isMultiline) {
+      handleBlur()
+    }
+    if (e.key === "Escape") {
+      setCurrentValue(value)
+      setIsEditing(false)
+    }
+  }
+
+  if (isEditing) {
+    return isMultiline ? (
+      <Textarea
+        ref={inputRef as any}
+        value={currentValue}
+        onChange={(e) => setCurrentValue(e.target.value)}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        size="sm"
+        autoFocus
+      />
+    ) : (
+      <Input
+        ref={inputRef as any}
+        value={currentValue}
+        onChange={(e) => setCurrentValue(e.target.value)}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        size="sm"
+        autoFocus
+      />
+    )
+  }
+
+  return (
+    <Box
+      onClick={() => setIsEditing(true)}
+      cursor="text"
+      _hover={{ bg: "bg.muted" }}
+      p={1}
+      borderRadius="sm"
+      minH="1.5em"
+      transition="background 0.2s"
+      position="relative"
+      role="group"
+    >
+      <Text whiteSpace="normal" wordBreak="break-word">
+        {value || <Text as="span" color="fg.subtle" fontStyle="italic">Click to edit...</Text>}
+      </Text>
+      <Icon
+        as={FaEdit}
+        position="absolute"
+        top={1}
+        right={1}
+        opacity={0}
+        _groupHover={{ opacity: 0.3 }}
+        fontSize="xs"
+      />
+    </Box>
+  )
+}
+
+const validateItem = (item: StagedItemPublic) => {
+  const errors: string[] = []
+  const data = item.raw_data
+
+  if (!data.title?.trim()) {
+    errors.push("Missing Title")
+  }
+  if (!data.author?.trim()) {
+    errors.push("Missing Author")
+  }
+  if (data.isbn) {
+    const cleanIsbn = data.isbn.replace(/[-\s]/g, "")
+    const isIsbn10 = /^\d{9}[\dX]$/i.test(cleanIsbn)
+    const isIsbn13 = /^\d{13}$/.test(cleanIsbn)
+    if (!isIsbn10 && !isIsbn13) {
+      errors.push("Invalid ISBN Format")
+    }
+  }
+
+  return errors
 }
 
 export const ImportItems = ({
@@ -55,7 +177,8 @@ export const ImportItems = ({
   })
   const [isMappingOpen, setIsMappingOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const { showSuccessToast, showErrorToast } = useCustomToast()
+  const [filterMode, setFilterMode] = useState<"all" | "issues" | "pending">("all")
+  const { showSuccessToast, showErrorToast, showInfoToast } = useCustomToast()
   const queryClient = useQueryClient()
 
   const { data: stagedItems, isLoading: isStagedLoading } = useQuery({
@@ -67,6 +190,23 @@ export const ImportItems = ({
       return isProcessing ? 1000 : 5000 // Poll faster during processing, slower otherwise
     },
   })
+
+  // Track processing state for completion toast
+  const prevProcessingCount = useRef(0)
+  useEffect(() => {
+    const currentProcessing = stagedItems?.processing_count || 0
+    if (prevProcessingCount.current > 0 && currentProcessing === 0) {
+      // Just finished a batch
+      const completed = stagedItems?.completed_count || 0
+      const failed = stagedItems?.failed_count || 0
+      if (completed > 0 || failed > 0) {
+        showInfoToast(
+          `Import batch complete: ${completed} success, ${failed} failed.`,
+        )
+      }
+    }
+    prevProcessingCount.current = currentProcessing
+  }, [stagedItems?.processing_count, stagedItems?.completed_count, stagedItems?.failed_count, showInfoToast])
 
   // Listen for real-time processing updates via WebSocket event bus
   useState(() => {
@@ -85,6 +225,12 @@ export const ImportItems = ({
   })
 
   const items = stagedItems?.data || []
+  const filteredItems = items.filter((item) => {
+    if (filterMode === "all") return true
+    if (filterMode === "issues") return validateItem(item).length > 0
+    if (filterMode === "pending") return item.status === "PENDING"
+    return true
+  })
   const totalStaged = stagedItems?.count || 0
   const processingCount = stagedItems?.processing_count || 0
   const completedCount = stagedItems?.completed_count || 0
@@ -92,13 +238,6 @@ export const ImportItems = ({
 
   const completedItems = items.filter((i) => i.status === "COMPLETED")
   const failedItems = items.filter((i) => i.status === "FAILED")
-
-  const isProcessingBatch = processingCount > 0
-  const activeItemsCount = processingCount + completedCount + failedCount
-  const progressValue =
-    activeItemsCount > 0
-      ? ((completedCount + failedCount) / activeItemsCount) * 100
-      : 0
 
   const stageMutation = useMutation({
     mutationFn: (data: {
@@ -132,10 +271,18 @@ export const ImportItems = ({
     onSuccess: () => {
       showSuccessToast(
         isArchiveImport
-          ? "Archive sync started. Books are being enriched and added to the registry."
-          : "Processing started. Items are being enriched and added to your collection.",
+          ? "Archive sync started. Books are being enriched."
+          : "Processing started. Items are being enriched.",
       )
       setSelectedIds([])
+      queryClient.invalidateQueries({ queryKey: ["stagedItems"] })
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, raw_data }: { id: string; raw_data: any }) =>
+      ImportsService.updateStagedItem({ id, requestBody: raw_data }),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["stagedItems"] })
     },
   })
@@ -160,6 +307,14 @@ export const ImportItems = ({
       queryClient.invalidateQueries({ queryKey: ["stagedItems"] })
     },
   })
+
+  const handleCellSave = (id: string, field: string, newValue: string) => {
+    const item = items.find((i) => i.id === id)
+    if (!item) return
+
+    const newRawData = { ...item.raw_data, [field]: newValue }
+    updateMutation.mutate({ id, raw_data: newRawData })
+  }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) {
@@ -268,25 +423,6 @@ export const ImportItems = ({
           </HStack>
         </HStack>
 
-        {isProcessingBatch && (
-          <VStack width="full" align="stretch" gap={2}>
-            <HStack justify="space-between" fontSize="sm">
-              <Text fontWeight="bold">Processing Items...</Text>
-              <Text>{Math.round(progressValue)}%</Text>
-            </HStack>
-            <Progress.Root
-              value={progressValue}
-              colorPalette="main"
-              size="sm"
-              animated
-            >
-              <Progress.Track>
-                <Progress.Range />
-              </Progress.Track>
-            </Progress.Root>
-          </VStack>
-        )}
-
         <DialogRoot
           open={isMappingOpen}
           onOpenChange={(e) => setIsMappingOpen(e.open)}
@@ -389,9 +525,14 @@ export const ImportItems = ({
                         }
                       />
                     </Table.ColumnHeader>
-                    <Table.ColumnHeader>Title</Table.ColumnHeader>
-                    <Table.ColumnHeader>Author</Table.ColumnHeader>
-                    <Table.ColumnHeader>ISBN</Table.ColumnHeader>
+                    <Table.ColumnHeader w="60px">Cover</Table.ColumnHeader>
+                    <Table.ColumnHeader minW="150px">Title</Table.ColumnHeader>
+                    <Table.ColumnHeader minW="120px">Author</Table.ColumnHeader>
+                    <Table.ColumnHeader minW="100px">ISBN</Table.ColumnHeader>
+                    <Table.ColumnHeader minW="200px">
+                      Description
+                    </Table.ColumnHeader>
+                    <Table.ColumnHeader>Issues</Table.ColumnHeader>
                     <Table.ColumnHeader>Status</Table.ColumnHeader>
                     <Table.ColumnHeader textAlign="right">
                       Action
@@ -399,67 +540,122 @@ export const ImportItems = ({
                   </Table.Row>
                 </Table.Header>
                 <Table.Body>
-                  {items.map((item) => (
-                    <Table.Row
-                      key={item.id}
-                      opacity={item.status === "PROCESSING" ? 0.6 : 1}
-                    >
-                      <Table.Cell>
-                        <Checkbox
-                          checked={selectedIds.includes(item.id)}
-                          onCheckedChange={(details) => {
-                            if (details.checked) {
-                              setSelectedIds((prev) => [...prev, item.id])
-                            } else {
-                              setSelectedIds((prev) =>
-                                prev.filter((id) => id !== item.id),
-                              )
-                            }
-                          }}
-                          disabled={item.status === "PROCESSING"}
-                        />
-                      </Table.Cell>
-                      <Table.Cell fontWeight="medium">
-                        {item.raw_data.title}
-                      </Table.Cell>
-                      <Table.Cell>{item.raw_data.author}</Table.Cell>
-                      <Table.Cell>{item.raw_data.isbn}</Table.Cell>
-                      <Table.Cell>
-                        {item.status === "PENDING" && (
-                          <Icon as={FaFileImport} color="gray.400" />
-                        )}
-                        {item.status === "PROCESSING" && (
-                          <Icon
-                            as={FaSpinner}
-                            animation="spin"
-                            color="ui.hover"
+                  {items.map((item) => {
+                    const validationErrors = validateItem(item)
+                    return (
+                      <Table.Row
+                        key={item.id}
+                        opacity={item.status === "PROCESSING" ? 0.6 : 1}
+                        bg={validationErrors.length > 0 ? "orange.50/10" : undefined}
+                      >
+                        <Table.Cell>
+                          <Checkbox
+                            checked={selectedIds.includes(item.id)}
+                            onCheckedChange={(details) => {
+                              if (details.checked) {
+                                setSelectedIds((prev) => [...prev, item.id])
+                              } else {
+                                setSelectedIds((prev) =>
+                                  prev.filter((id) => id !== item.id),
+                                )
+                              }
+                            }}
+                            disabled={item.status === "PROCESSING"}
                           />
-                        )}
-                        {item.status === "COMPLETED" && (
-                          <Icon as={FaCheckCircle} color="green.500" />
-                        )}
-                        {item.status === "FAILED" && (
-                          <HStack color="red.500" gap={1}>
-                            <Icon as={FaExclamationTriangle} />
-                            <Text fontSize="xs" title={item.error_log}>
-                              Failed
-                            </Text>
-                          </HStack>
-                        )}
-                      </Table.Cell>
-                      <Table.Cell textAlign="right">
-                        <Button
-                          variant="ghost"
-                          size="xs"
-                          color="red.500"
-                          onClick={() => deleteMutation.mutate(item.id)}
-                          disabled={item.status === "PROCESSING"}
-                        >
-                          <FaTrash />
-                        </Button>
-                      </Table.Cell>
-                    </Table.Row>
-                  ))}
+                        </Table.Cell>
+                        <Table.Cell>
+                          {item.raw_data.image_url ? (
+                            <Image
+                              src={item.raw_data.image_url}
+                              alt="Cover"
+                              h="40px"
+                              objectFit="contain"
+                              fallback={<Box h="40px" w="30px" bg="bg.muted" />}
+                            />
+                          ) : (
+                            <Box h="40px" w="30px" bg="bg.muted" />
+                          )}
+                        </Table.Cell>
+                        <Table.Cell>
+                          <EditableCell
+                            item={item}
+                            field="title"
+                            value={item.raw_data.title}
+                            onSave={handleCellSave}
+                          />
+                        </Table.Cell>
+                        <Table.Cell>
+                          <EditableCell
+                            item={item}
+                            field="author"
+                            value={item.raw_data.author}
+                            onSave={handleCellSave}
+                          />
+                        </Table.Cell>
+                        <Table.Cell>
+                          <EditableCell
+                            item={item}
+                            field="isbn"
+                            value={item.raw_data.isbn}
+                            onSave={handleCellSave}
+                          />
+                        </Table.Cell>
+                        <Table.Cell>
+                          <EditableCell
+                            item={item}
+                            field="description"
+                            value={item.raw_data.description}
+                            onSave={handleCellSave}
+                            isMultiline
+                          />
+                        </Table.Cell>
+                        <Table.Cell>
+                          {validationErrors.length > 0 && (
+                            <Tooltip content={validationErrors.join(", ")}>
+                              <Icon as={FaExclamationTriangle} color="orange.500" cursor="help" />
+                            </Tooltip>
+                          )}
+                          {validationErrors.length === 0 && item.status === "PENDING" && (
+                            <Icon as={FaCheckCircle} color="gray.300" opacity={0.5} />
+                          )}
+                        </Table.Cell>
+                        <Table.Cell>
+                          {item.status === "PENDING" && (
+                            <Icon as={FaFileImport} color="gray.400" />
+                          )}
+                          {item.status === "PROCESSING" && (
+                            <Icon
+                              as={FaSpinner}
+                              animation="spin"
+                              color="ui.hover"
+                            />
+                          )}
+                          {item.status === "COMPLETED" && (
+                            <Icon as={FaCheckCircle} color="green.500" />
+                          )}
+                          {item.status === "FAILED" && (
+                            <HStack color="red.500" gap={1}>
+                              <Icon as={FaExclamationTriangle} />
+                              <Text fontSize="xs" title={item.error_log}>
+                                Failed
+                              </Text>
+                            </HStack>
+                          )}
+                        </Table.Cell>
+                        <Table.Cell textAlign="right">
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            color="red.500"
+                            onClick={() => deleteMutation.mutate(item.id)}
+                            disabled={item.status === "PROCESSING"}
+                          >
+                            <FaTrash />
+                          </Button>
+                        </Table.Cell>
+                      </Table.Row>
+                    )
+                  })}
                 </Table.Body>
               </Table.Root>
             </Box>

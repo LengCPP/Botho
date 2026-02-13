@@ -1088,7 +1088,7 @@ async def create_item(
         elif image_url and image_url.startswith("http"):
             # Download and store external image (e.g. from Google Books)
             try:
-                stored_url = upload_image_from_url(image_url, folder="items")
+                stored_url = await upload_image_from_url(image_url, folder="items")
                 if stored_url:
                     final_image_url = stored_url
             except Exception:
@@ -1253,7 +1253,7 @@ async def update_item(
         if image_url is not None:
             if image_url.startswith("http"):
                 try:
-                    stored_url = upload_image_from_url(image_url, folder="items")
+                    stored_url = await upload_image_from_url(image_url, folder="items")
                     if stored_url:
                         db_item.image_url = stored_url
                 except:

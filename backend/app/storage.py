@@ -47,13 +47,16 @@ def upload_image(file_data: bytes, file_name: str, folder: str = "item-images") 
         logger.error(f"Minio upload failed: {e}")
         return None
 
-def upload_image_from_url(url: str, folder: str = "item-images") -> str | None:
+async def upload_image_from_url(url: str, folder: str = "item-images") -> str | None:
     """
     Download an image from a URL and upload it to Minio.
     """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
     try:
-        with httpx.Client(follow_redirects=True) as client:
-            response = client.get(url)
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(url, headers=headers)
             response.raise_for_status()
 
             # Extract extension from URL or default to png

@@ -1,4 +1,7 @@
+import asyncio
 import json
+import logging
+import random
 import uuid
 from typing import Any
 
@@ -364,7 +367,7 @@ async def enrich_and_import_to_archive(
                 raw_image_url = data.get("image_url")
                 if raw_image_url:
                     try:
-                        stored_url = upload_image_from_url(raw_image_url, folder="items")
+                        stored_url = await upload_image_from_url(raw_image_url, folder="items")
                         final_image_url = stored_url or raw_image_url
                     except Exception:
                         final_image_url = raw_image_url
@@ -389,7 +392,7 @@ async def enrich_and_import_to_archive(
                         if thumb:
                             thumb = thumb.replace("http://", "https://")
                             try:
-                                final_image_url = upload_image_from_url(thumb, folder="items") or thumb
+                                final_image_url = await upload_image_from_url(thumb, folder="items") or thumb
                             except Exception:
                                 final_image_url = thumb
                     
@@ -579,7 +582,7 @@ async def enrich_and_import_item(
                 if raw_image_url:
                     try:
                         logger.info(f"Uploading image from raw data for {title}: {raw_image_url}")
-                        stored_url = upload_image_from_url(raw_image_url, folder="items")
+                        stored_url = await upload_image_from_url(raw_image_url, folder="items")
                         final_image_url = stored_url or raw_image_url
                     except Exception as img_err:
                         logger.error(f"Image upload failed for raw data {title}: {img_err}")
@@ -610,7 +613,7 @@ async def enrich_and_import_item(
                             thumb = thumb.replace("http://", "https://")
                             try:
                                 logger.info(f"Uploading image from Google for {title}: {thumb}")
-                                stored_url = upload_image_from_url(thumb, folder="items")
+                                stored_url = await upload_image_from_url(thumb, folder="items")
                                 final_image_url = stored_url or thumb
                             except Exception as img_err:
                                 logger.error(f"Image upload failed for {title}: {img_err}")
@@ -649,7 +652,7 @@ async def enrich_and_import_item(
                         if thumb:
                             try:
                                 logger.info(f"Uploading image from OpenLibrary for {title}: {thumb}")
-                                stored_url = upload_image_from_url(thumb, folder="items")
+                                stored_url = await upload_image_from_url(thumb, folder="items")
                                 final_image_url = stored_url or thumb
                             except Exception:
                                 final_image_url = thumb
