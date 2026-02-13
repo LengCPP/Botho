@@ -294,7 +294,7 @@ async def enrich_and_import_to_archive(
         from app.core.db import engine
         from sqlmodel import Session
 
-        await asyncio.sleep(random.uniform(0.1, 0.5))
+        await asyncio.sleep(random.uniform(1.0, 3.0))
 
         with Session(engine) as session:
             staged = session.get(StagedItem, staged_id)
@@ -338,9 +338,27 @@ async def enrich_and_import_to_archive(
                 if not meta:
                     meta = session.get(WorkMetadata, (author, title))
 
-                # 2. Search APIs for enrichment
+                # Initialize final image URL
+                final_image_url = None
+                raw_image_url = data.get("image_url")
+                image_download_failed = False
+
+                # 1.5 Try to download raw image if provided
+                if raw_image_url:
+                    try:
+                        stored_url = await upload_image_from_url(raw_image_url, folder="items")
+                        if stored_url:
+                            final_image_url = stored_url
+                        else:
+                            image_download_failed = True
+                    except Exception:
+                        image_download_failed = True
+
+                # 2. Search APIs for enrichment if needed
                 google_data = None
-                if not meta:
+                should_check_google = not meta and (not raw_image_url or image_download_failed)
+
+                if should_check_google:
                     async with google_books_semaphore:
                         await asyncio.sleep(0.5)
                         search_query = f"isbn:{clean_isbn}" if clean_isbn else f"intitle:{title} inauthor:{author}"
@@ -350,27 +368,67 @@ async def enrich_and_import_to_archive(
 
                         async with httpx.AsyncClient() as client:
                             response = await client.get(url, timeout=10.0)
+                            if response.status_code == 429:
+                                await asyncio.sleep(5.0)
+                                response = await client.get(url, timeout=10.0)
+
                             if response.status_code == 200:
                                 res_json = response.json()
                                 if res_json.get("items"):
                                     google_data = res_json["items"][0]["volumeInfo"]
 
+                # 3. Search Open Library if still no results or just for better text
+                open_library_data = None
+                if not meta and not google_data:
+                    async with httpx.AsyncClient() as client:
+                        try:
+                            if clean_isbn:
+                                ol_url = f"https://openlibrary.org/api/books?bibkeys=ISBN:{clean_isbn}&format=json&jscmd=data"
+                                ol_res = await client.get(ol_url, timeout=10.0)
+                                if ol_res.status_code == 200:
+                                    ol_json = ol_res.json()
+                                    if f"ISBN:{clean_isbn}" in ol_json:
+                                        open_library_data = ol_json[f"ISBN:{clean_isbn}"]
+                            
+                            if not open_library_data:
+                                ol_search_url = f"https://openlibrary.org/search.json?title={title}&author={author}&limit=1"
+                                ol_res = await client.get(ol_search_url, timeout=10.0)
+                                if ol_res.status_code == 200:
+                                    ol_json = ol_res.json()
+                                    if ol_json.get("docs"):
+                                        doc = ol_json["docs"][0]
+                                        work_description = None
+                                        if doc.get("key"):
+                                            try:
+                                                work_url = f"https://openlibrary.org{doc.get('key')}.json"
+                                                work_res = await client.get(work_url, timeout=5.0)
+                                                if work_res.status_code == 200:
+                                                    work_data = work_res.json()
+                                                    desc = work_data.get("description")
+                                                    if isinstance(desc, dict):
+                                                        work_description = desc.get("value")
+                                                    elif isinstance(desc, str):
+                                                        work_description = desc
+                                            except Exception:
+                                                pass
+
+                                        open_library_data = {
+                                            "title": doc.get("title"),
+                                            "authors": [{"name": a} for a in doc.get("author_name", [])],
+                                            "cover": {"medium": f"https://covers.openlibrary.org/b/id/{doc.get('cover_i')}-M.jpg"} if doc.get("cover_i") else None,
+                                            "subjects": [{"name": s} for s in doc.get("subject", [])[:5]],
+                                            "description": work_description
+                                        }
+                        except Exception:
+                            pass
+
                 # Assemble final metadata
                 final_title = title
                 final_author = author
                 final_description = str(data.get("description", "")).strip() or None
-                final_image_url = None
                 final_category = None
                 final_isbn = clean_isbn
                 final_tags = []
-
-                raw_image_url = data.get("image_url")
-                if raw_image_url:
-                    try:
-                        stored_url = await upload_image_from_url(raw_image_url, folder="items")
-                        final_image_url = stored_url or raw_image_url
-                    except Exception:
-                        final_image_url = raw_image_url
 
                 if meta:
                     final_title = meta.title
@@ -404,6 +462,31 @@ async def enrich_and_import_to_archive(
                     
                     google_categories = google_data.get("categories", [])
                     final_category = google_categories[0] if google_categories else None
+                elif open_library_data:
+                    final_title = open_library_data.get("title", title)
+                    ol_authors = [a["name"] for a in open_library_data.get("authors", [])] if isinstance(open_library_data.get("authors"), list) and isinstance(open_library_data.get("authors")[0], dict) else []
+                    if not ol_authors and isinstance(open_library_data.get("authors"), list):
+                         ol_authors = open_library_data.get("authors") # Simple list of strings case
+                    
+                    final_author = ", ".join(ol_authors) if ol_authors else author
+                    
+                    ol_desc = open_library_data.get("description")
+                    if isinstance(ol_desc, dict):
+                        ol_desc = ol_desc.get("value")
+                    final_description = ol_desc or open_library_data.get("notes") or final_description
+
+                    if not final_image_url:
+                        ol_cover = open_library_data.get("cover", {})
+                        thumb = ol_cover.get("large") or ol_cover.get("medium") or ol_cover.get("small")
+                        if thumb:
+                            try:
+                                final_image_url = await upload_image_from_url(thumb, folder="items") or thumb
+                            except Exception:
+                                final_image_url = thumb
+
+                # If everything failed, keep raw image url
+                if not final_image_url and raw_image_url and not image_download_failed:
+                     final_image_url = raw_image_url
 
                 # Create/Update WorkMetadata
                 ensure_work_metadata(
@@ -443,7 +526,7 @@ import logging
 logger = logging.getLogger(__name__)
 google_books_semaphore = asyncio.Semaphore(2) # Throttling for external APIs
 # Limit concurrent enrichment tasks to avoid exhausting DB pool
-enrichment_semaphore = asyncio.Semaphore(5)
+enrichment_semaphore = asyncio.Semaphore(2)
 
 async def enrich_and_import_item(
     session_factory: Any,
@@ -460,7 +543,7 @@ async def enrich_and_import_item(
 
         # Use a small random jitter to avoid synchronized spikes
         import random
-        await asyncio.sleep(random.uniform(0.1, 0.5))
+        await asyncio.sleep(random.uniform(1.0, 3.0))
 
         with Session(engine) as session:
             staged = session.get(StagedItem, staged_id)
@@ -510,9 +593,34 @@ async def enrich_and_import_item(
                     # Try fuzzy-ish match or direct get
                     meta = session.get(WorkMetadata, (author, title))
 
-                # 2. Search Google Books if not in local registry
+                # Initialize final image URL
+                final_image_url = None
+                raw_image_url = data.get("image_url")
+                image_download_failed = False
+
+                # 1.5 Try to download raw image if provided
+                if raw_image_url:
+                    try:
+                        logger.info(f"Uploading image from raw data for {title}: {raw_image_url}")
+                        stored_url = await upload_image_from_url(raw_image_url, folder="items")
+                        if stored_url:
+                            final_image_url = stored_url
+                        else:
+                            # If stored_url is None, it means upload failed (likely 403 or network error)
+                            logger.warning(f"Failed to upload raw image, treating as failed: {raw_image_url}")
+                            image_download_failed = True
+                    except Exception as img_err:
+                        logger.error(f"Image upload raised exception for raw data {title}: {img_err}")
+                        image_download_failed = True
+                
+                # 2. Search Google Books if:
+                #    - Not in local registry
+                #    - AND (No raw image provided OR raw image download failed)
+                #    - OR we explicitly want metadata and don't trust OpenLibrary alone
                 google_data = None
-                if not meta:
+                should_check_google = not meta and (not raw_image_url or image_download_failed)
+                
+                if should_check_google:
                     async with google_books_semaphore:
                         await asyncio.sleep(0.5) # Forced delay between API calls
                         
@@ -540,12 +648,14 @@ async def enrich_and_import_item(
                             else:
                                 logger.error(f"Google API error {response.status_code}: {response.text}")
 
-                # 3. Search Open Library if still no results
+                # 3. Search Open Library if still no results or if we just want better text data
+                # We prioritize this if we have a valid image (so we skipped Google) OR if Google failed
                 open_library_data = None
                 if not meta and not google_data:
                     logger.info(f"Fallback to Open Library for {title}")
                     async with httpx.AsyncClient() as client:
                         try:
+                            # A. Try ISBN lookup (best for details/description)
                             if clean_isbn:
                                 ol_url = f"https://openlibrary.org/api/books?bibkeys=ISBN:{clean_isbn}&format=json&jscmd=data"
                                 ol_res = await client.get(ol_url, timeout=10.0)
@@ -554,6 +664,7 @@ async def enrich_and_import_item(
                                     if f"ISBN:{clean_isbn}" in ol_json:
                                         open_library_data = ol_json[f"ISBN:{clean_isbn}"]
                             
+                            # B. Try Search API (fallback)
                             if not open_library_data:
                                 ol_search_url = f"https://openlibrary.org/search.json?title={title}&author={author}&limit=1"
                                 ol_res = await client.get(ol_search_url, timeout=10.0)
@@ -561,11 +672,29 @@ async def enrich_and_import_item(
                                     ol_json = ol_res.json()
                                     if ol_json.get("docs"):
                                         doc = ol_json["docs"][0]
+                                        
+                                        # Attempt to fetch full work details for description if 'key' exists
+                                        work_description = None
+                                        if doc.get("key"):
+                                            try:
+                                                work_url = f"https://openlibrary.org{doc.get('key')}.json"
+                                                work_res = await client.get(work_url, timeout=5.0)
+                                                if work_res.status_code == 200:
+                                                    work_data = work_res.json()
+                                                    desc = work_data.get("description")
+                                                    if isinstance(desc, dict):
+                                                        work_description = desc.get("value")
+                                                    elif isinstance(desc, str):
+                                                        work_description = desc
+                                            except Exception:
+                                                pass # Ignore work fetch errors
+
                                         open_library_data = {
                                             "title": doc.get("title"),
                                             "authors": [{"name": a} for a in doc.get("author_name", [])],
                                             "cover": {"medium": f"https://covers.openlibrary.org/b/id/{doc.get('cover_i')}-M.jpg"} if doc.get("cover_i") else None,
-                                            "subjects": [{"name": s} for s in doc.get("subject", [])[:5]]
+                                            "subjects": [{"name": s} for s in doc.get("subject", [])[:5]],
+                                            "description": work_description
                                         }
                         except Exception as ol_err:
                             logger.error(f"Open Library lookup failed: {ol_err}")
@@ -574,19 +703,7 @@ async def enrich_and_import_item(
                 final_title = title
                 final_author = author
                 final_description = str(data.get("description", "")).strip() or None
-                final_image_url = None
                 final_extra = {}
-
-                # Check if image_url is already in the raw data (e.g. from CSV)
-                raw_image_url = data.get("image_url")
-                if raw_image_url:
-                    try:
-                        logger.info(f"Uploading image from raw data for {title}: {raw_image_url}")
-                        stored_url = await upload_image_from_url(raw_image_url, folder="items")
-                        final_image_url = stored_url or raw_image_url
-                    except Exception as img_err:
-                        logger.error(f"Image upload failed for raw data {title}: {img_err}")
-                        final_image_url = raw_image_url
 
                 if meta:
                     logger.info(f"Using local metadata for {title}")
@@ -605,7 +722,7 @@ async def enrich_and_import_item(
                     final_author = ", ".join(google_authors) if google_authors else author
                     final_description = google_data.get("description", final_description)
                     
-                    # Image processing - only if we don't have one from raw data
+                    # Image processing - only if we don't have one from raw data (or it failed)
                     if not final_image_url:
                         img_links = google_data.get("imageLinks", {})
                         thumb = img_links.get("medium") or img_links.get("small") or img_links.get("thumbnail")
@@ -663,6 +780,12 @@ async def enrich_and_import_item(
                     }
                 else:
                     logger.warning(f"No enrichment found for {title}. Using raw data.")
+                
+                # If everything failed, keep raw image url (even if broken, better than nothing?)
+                # user logic says "if returns broken image or 403 then google should be used".
+                # We tried google. If google failed too, we are here.
+                if not final_image_url and raw_image_url and not image_download_failed:
+                     final_image_url = raw_image_url
 
                 # Create Item
                 target_owner = community_id if community_id else owner_id

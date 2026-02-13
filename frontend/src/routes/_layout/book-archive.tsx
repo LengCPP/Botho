@@ -116,7 +116,7 @@ function BooksTable() {
               opacity={isPlaceholderData ? 0.5 : 1}
             >
               <Table.Cell>
-                {book.image_url ? (
+                {book.image_url && book.image_url.startsWith("/") ? (
                   <Image
                     src={book.image_url}
                     alt={book.title}
@@ -125,7 +125,9 @@ function BooksTable() {
                     fallback={<Box h="60px" w="40px" bg="bg.muted" />}
                   />
                 ) : (
-                  <Box h="60px" w="40px" bg="bg.muted" />
+                  <Box h="60px" w="40px" bg="bg.muted" display="flex" alignItems="center" justifyContent="center">
+                     <Text fontSize="xs" color="fg.muted">No Img</Text>
+                  </Box>
                 )}
               </Table.Cell>
               <Table.Cell fontWeight="medium">{book.title}</Table.Cell>

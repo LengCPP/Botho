@@ -1056,20 +1056,6 @@ async def create_item(
             if isinstance(final_author, list):
                 final_author = ", ".join(final_author)
 
-        # AI Classification for books if category/genre is missing
-        if item_type == ItemType.book:
-            current_cat = parsed_extra.get("category") or (", ".join(parsed_extra.get("categories")) if isinstance(parsed_extra.get("categories"), list) else parsed_extra.get("categories"))
-            current_genre = parsed_extra.get("genre")
-            
-            if not current_cat or not current_genre:
-                ai_cat, ai_genre, ai_subjects = await classify_book(title, final_author or "", description)
-                if not current_cat and ai_cat:
-                    parsed_extra["category"] = ai_cat
-                if not current_genre and ai_genre:
-                    parsed_extra["genre"] = ai_genre
-                if ai_subjects:
-                    parsed_extra["subject"] = ai_subjects
-
         # Handle image upload
         final_image_url = image_url
         if image:
@@ -1146,10 +1132,6 @@ async def create_item(
 
         # Ensure WorkMetadata exists
         if final_author:
-            tags = []
-            if ai_subjects:
-                tags = [s.strip() for s in ai_subjects.split(",")]
-            
             ensure_work_metadata(
                 session,
                 final_author,
@@ -1158,7 +1140,7 @@ async def create_item(
                 description=description,
                 category=parsed_extra.get("category") or (", ".join(parsed_extra.get("categories")) if isinstance(parsed_extra.get("categories"), list) else parsed_extra.get("categories")),
                 image_url=final_image_url,
-                tags=tags
+                tags=None
             )
 
         session.commit()
@@ -1266,19 +1248,6 @@ async def update_item(
             except json.JSONDecodeError:
                 raise HTTPException(status_code=400, detail="Invalid JSON in extra_data")
         
-        # AI Classification for books if category/genre is missing after update
-        if (item_type == ItemType.book or db_item.item_type == ItemType.book):
-            extra = db_item.extra_data or {}
-            if not extra.get("category") or not extra.get("genre"):
-                ai_cat, ai_genre, ai_subjects = await classify_book(db_item.title, db_item.author or "", db_item.description)
-                if not extra.get("category") and ai_cat:
-                    extra["category"] = ai_cat
-                if not extra.get("genre") and ai_genre:
-                    extra["genre"] = ai_genre
-                if ai_subjects:
-                    extra["subject"] = ai_subjects
-                db_item.extra_data = extra
-
         if info is not None:
             try:
                 db_item.info = json.loads(info)

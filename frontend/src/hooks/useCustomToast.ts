@@ -27,7 +27,19 @@ const useCustomToast = () => {
     })
   }
 
-  return { showSuccessToast, showErrorToast }
+  const showInfoToast = (description: string) => {
+    toaster.create({
+      title: "Info",
+      description,
+      type: "info",
+      duration: 4000,
+      meta: {
+        closable: true,
+      },
+    })
+  }
+
+  return { showSuccessToast, showErrorToast, showInfoToast }
 }
 
 export default useCustomToast

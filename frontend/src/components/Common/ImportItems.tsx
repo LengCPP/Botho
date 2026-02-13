@@ -565,15 +565,13 @@ export const ImportItems = ({
                         </Table.Cell>
                         <Table.Cell>
                           {item.raw_data.image_url ? (
-                            <Image
-                              src={item.raw_data.image_url}
-                              alt="Cover"
-                              h="40px"
-                              objectFit="contain"
-                              fallback={<Box h="40px" w="30px" bg="bg.muted" />}
-                            />
+                            <Tooltip content={item.raw_data.image_url}>
+                              <Text fontSize="xs" maxW="150px" truncate color="blue.500" cursor="pointer" onClick={() => window.open(item.raw_data.image_url, "_blank")}>
+                                {item.raw_data.image_url}
+                              </Text>
+                            </Tooltip>
                           ) : (
-                            <Box h="40px" w="30px" bg="bg.muted" />
+                            <Text fontSize="xs" color="gray.400">No Image</Text>
                           )}
                         </Table.Cell>
                         <Table.Cell>
