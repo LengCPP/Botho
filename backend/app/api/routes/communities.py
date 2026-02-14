@@ -528,10 +528,12 @@ def read_community_item_facets(
     id: uuid.UUID,
     group_by: str = "category",  # category, genre, author, subject
     q: str | None = None,
+    skip: int = 0,
+    limit: int = 20,
 ) -> Any:
     """
     Get unique values and counts for a specific facet (category, genre, author, subject)
-    belonging to a community. Uses optimized SQL for high performance.
+    belonging to a community. Uses Meilisearch for fuzzy search when q is provided.
     """
     community = session.get(Community, id)
     if not community:
@@ -547,17 +549,87 @@ def read_community_item_facets(
     if not membership and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Must be a member to view community items")
 
+    # Optimization: Check collection index total
+    if community.collection_index:
+        total = community.collection_index.get("total")
+        if total == 0:
+             return {"data": [], "count": 0}
+
+    # Meilisearch logic if q is present
+    if q:
+        from app.search import client as meili_client
+        try:
+            index = meili_client.index("items")
+            
+            # Map facet field
+            facet_field = group_by
+            if group_by == "subject":
+                facet_field = "subject"
+            
+            search_params = {
+                "filter": f'owner_id = "{id}" OR pooled_in = "{id}"',
+                "facets": [facet_field],
+                "limit": 0 # We only care about facets
+            }
+            
+            search_results = index.search(q, search_params)
+            distribution = search_results.get("facetDistribution", {}).get(facet_field, {})
+            
+            # Convert to list and sort by name
+            all_facets = [{"name": name, "count": count} for name, count in distribution.items()]
+            all_facets.sort(key=lambda x: x["name"].lower())
+            total_count = len(all_facets)
+            
+            # Slice for pagination
+            paged_facets = all_facets[skip : skip + limit]
+            
+            # Fetch sample images from DB for these facets
+            results = []
+            for f in paged_facets:
+                name = f["name"]
+                
+                # Items in this community (owned or pooled)
+                comm_item_ids = select(CommunityItem.item_id).where(CommunityItem.community_id == id)
+                base_filter = or_(Item.owner_id == id, Item.id.in_(comm_item_ids))
+                
+                stmt = select(Item.image_url).where(base_filter)
+                if group_by == "author":
+                    stmt = stmt.where(Item.author == name)
+                elif group_by in ["category", "genre"]:
+                    stmt = stmt.where(func.json_extract_path_text(Item.extra_data, group_by) == name)
+                elif group_by == "subject":
+                    stmt = stmt.join(WorkMetadata, (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title))\
+                               .where(cast(WorkMetadata.tags, String).ilike(f'%"{name}"%'))
+                
+                imgs = session.exec(stmt.where(Item.image_url.is_not(None)).limit(5)).all()
+                results.append({
+                    "name": name,
+                    "count": f["count"],
+                    "sample_images": list(imgs)
+                })
+            
+            return {"data": results, "count": len(all_facets)}
+        except Exception:
+            pass # Fallback to SQL if Meilisearch fails
+
+    # SQL Fallback
     # Filter for items in this community (owned or pooled)
     comm_item_ids = select(CommunityItem.item_id).where(CommunityItem.community_id == id)
     base_filter = or_(Item.owner_id == id, Item.id.in_(comm_item_ids))
     
     results = []
+    total_count = 0
     if group_by == "author":
+        count_stmt = select(func.count(func.distinct(Item.author))).where(base_filter)
+        if q:
+            count_stmt = count_stmt.where(Item.author.ilike(f"%{q}%"))
+        total_count = session.exec(count_stmt).one()
+
         stmt = select(Item.author, func.count(Item.id), func.array_agg(Item.image_url))\
             .where(base_filter)
         if q:
             stmt = stmt.where(Item.author.ilike(f"%{q}%"))
-        stmt = stmt.group_by(Item.author).order_by(Item.author.asc())
+        stmt = stmt.group_by(Item.author).order_by(Item.author.asc()).offset(skip).limit(limit)
         
         rows = session.exec(stmt).all()
         for author, count, imgs in rows:
@@ -567,6 +639,12 @@ def read_community_item_facets(
     elif group_by in ["category", "genre"]:
         json_field = group_by
         name_expr = func.json_extract_path_text(Item.extra_data, json_field)
+        
+        count_stmt = select(func.count(func.distinct(name_expr))).where(base_filter)
+        if q:
+            count_stmt = count_stmt.where(name_expr.ilike(f"%{q}%"))
+        total_count = session.exec(count_stmt).one()
+
         stmt = select(
             name_expr.label("name"),
             func.count(Item.id).label("count"),
@@ -574,7 +652,7 @@ def read_community_item_facets(
         ).where(base_filter)
         if q:
             stmt = stmt.where(name_expr.ilike(f"%{q}%"))
-        stmt = stmt.group_by("name").order_by(name_expr.asc())
+        stmt = stmt.group_by("name").order_by(name_expr.asc()).offset(skip).limit(limit)
         
         rows = session.exec(stmt).all()
         for name, count, imgs in rows:
@@ -615,15 +693,15 @@ def read_community_item_facets(
             full_stmt = tags_stmt.union_all(others_stmt)
 
         try:
-            # Use reliable text sorting for subqueries
-            rows = session.exec(select(full_stmt.subquery()).order_by(text("name ASC"))).all()
+            total_count = session.exec(select(func.count()).select_from(full_stmt.subquery())).one()
+            rows = session.exec(select(full_stmt.subquery()).order_by(text("name ASC")).offset(skip).limit(limit)).all()
             for name, count, imgs in rows:
                 valid_imgs = [img for img in (imgs or []) if img][:5]
                 results.append({"name": name, "count": count, "sample_images": valid_imgs})
         except Exception:
             pass
             
-    return results
+    return {"data": results, "count": total_count}
 
 
 @router.get("/{id}/items", response_model=ItemsPublic)
@@ -673,7 +751,6 @@ def read_community_items(
             index = meili_client.index("items")
             # Filter: item belongs to community (owned or pooled)
             filters = [f'(owner_id = "{id}" OR pooled_in = "{id}")']
-            filters.append("is_available = true")
             
             if category:
                 filters.append(f'category = "{category}"')
@@ -688,12 +765,12 @@ def read_community_items(
                 "limit": limit,
                 "offset": skip,
                 "filter": " AND ".join(filters),
-                "sort": [f"{sort_by if sort_by != 'created_at' else 'id'}:{sort_order}"]
+                "sort": [f"{sort_by}:{sort_order}"]
             }
             
             search_results = index.search(q, search_params)
             item_ids = [uuid.UUID(hit["id"]) for hit in search_results["hits"]]
-            count = search_results.get("totalHits", len(item_ids))
+            count = search_results.get("totalHits") or search_results.get("nbHits") or len(item_ids)
             facets = search_results.get("facetDistribution")
             facet_stats = search_results.get("facetStats")
             
@@ -725,19 +802,21 @@ def read_community_items(
             statement = select(Item).where(
                 q_filter,
                 or_(
-                    Item.id.in_(
-                        select(CommunityItem.item_id).where(CommunityItem.community_id == id)
-                    ),
-                    Item.owner_id == id
+                    Item.owner_id == id,
+                    select(CommunityItem).where(
+                        CommunityItem.item_id == Item.id,
+                        CommunityItem.community_id == id
+                    ).exists()
                 )
             ).where(Item.id.not_in(defaulted_item_ids))
         else:
             statement = select(Item).where(
                 or_(
-                    Item.id.in_(
-                        select(CommunityItem.item_id).where(CommunityItem.community_id == id)
-                    ),
-                    Item.owner_id == id
+                    Item.owner_id == id,
+                    select(CommunityItem).where(
+                        CommunityItem.item_id == Item.id,
+                        CommunityItem.community_id == id
+                    ).exists()
                 )
             ).where(Item.id.not_in(defaulted_item_ids))
 

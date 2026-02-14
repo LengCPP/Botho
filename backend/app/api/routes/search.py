@@ -52,10 +52,10 @@ def search(
     # 1. Search Users (ONLY by public_id as requested)
     user_statement = select(User).where(User.public_id == q).limit(limit)
     users_raw = session.exec(user_statement).all()
-    users_public = [filter_user_privacy(u, current_user.id, is_admin=current_user.is_superuser) for u in users_raw]
+    users_public = [filter_user_privacy(u, current_user.id, is_admin=current_user.is_superuser, session=session) for u in users_raw]
 
     # 2. Search Items
-    # Define accessibility
+    # Accessibility logic: items you own, your friends' items, or items in your communities
     friends_stmt = select(Friendship.friend_id).where(
         Friendship.user_id == current_user.id,
         Friendship.status == FriendshipStatus.ACCEPTED
@@ -74,7 +74,7 @@ def search(
     )
     user_comm_ids = session.exec(comm_stmt).all()
     
-    # Public communities
+    # Also include items from public communities
     public_comm_stmt = select(Community.id).where(Community.is_private == False)
     public_comm_ids = session.exec(public_comm_stmt).all()
 
@@ -89,35 +89,36 @@ def search(
             item_index = meili_client.index("items")
             search_res = item_index.search(q, {
                 "limit": limit * 3,
-                "attributesToSearchOn": ["title", "author"] # Reverted to title only
+                "attributesToSearchOn": ["title", "author"]
             })
-            item_ids = [hit["id"] for hit in search_res["hits"]]
+            item_ids = [uuid.UUID(hit["id"]) for hit in search_res["hits"]]
             if item_ids:
+                # Use EXISTS to check community accessibility to avoid duplicates and DISTINCT on JSON
                 stmt = (
                     select(Item)
-                    .outerjoin(CommunityItem)
                     .where(
                         Item.id.in_(item_ids),
                         or_(
                             Item.owner_id.in_(list(accessible_owner_ids)),
-                            CommunityItem.community_id.in_(list(all_accessible_comm_ids))
+                            select(CommunityItem).where(
+                                CommunityItem.item_id == Item.id,
+                                CommunityItem.community_id.in_(list(all_accessible_comm_ids))
+                            ).exists()
                         )
                     )
-                    .distinct()
                     .limit(limit)
                 )
                 items_raw = session.exec(stmt).all()
                 if items_raw:
                     use_sql_fallback = False
-                    id_to_item = {str(item.id): item for item in items_raw}
-                    items_raw = [id_to_item[id_str] for id_str in item_ids if id_str in id_to_item][:limit]
+                    id_to_item = {item.id: item for item in items_raw}
+                    items_raw = [id_to_item[iid] for iid in item_ids if iid in id_to_item][:limit]
         except Exception:
             pass
 
     if use_sql_fallback:
         item_statement = (
             select(Item)
-            .outerjoin(CommunityItem)
             .where(
                 or_(
                     col(Item.title).ilike(f"%{q}%"),
@@ -125,10 +126,12 @@ def search(
                 ),
                 or_(
                     Item.owner_id.in_(list(accessible_owner_ids)),
-                    CommunityItem.community_id.in_(list(all_accessible_comm_ids))
+                    select(CommunityItem).where(
+                        CommunityItem.item_id == Item.id,
+                        CommunityItem.community_id.in_(list(all_accessible_comm_ids))
+                    ).exists()
                 )
             )
-            .distinct()
             .limit(limit)
         )
         items_raw = session.exec(item_statement).all()
@@ -149,7 +152,7 @@ def search(
         owner_pub = None
         community_pub = None
         if item.user_owner:
-            owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser)
+            owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser, session=session)
             owner_pub.is_available = is_avail
         elif item.community_owner:
             community_pub = item.community_owner

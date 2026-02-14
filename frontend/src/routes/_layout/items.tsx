@@ -13,7 +13,7 @@ import {
 } from "@chakra-ui/react"
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { FaChevronLeft, FaFileImport } from "react-icons/fa"
 import { FiSearch } from "react-icons/fi"
 import { z } from "zod"
@@ -85,10 +85,6 @@ function ItemsTable() {
   } = Route.useSearch()
   const { user } = useAuth()
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
-
-  // Use variables to avoid lint errors
-  const _unused = { subject, author }
-  console.debug("Current collection filters:", _unused)
 
   useEffect(() => {
     localStorage.setItem("view_mode", view_mode)
@@ -185,11 +181,14 @@ function ItemsTable() {
     enabled: !!user,
   })
 
-  const updateSearch = (newParams: any) => {
-    navigate({
-      search: (prev: any) => ({ ...prev, ...newParams, page: 1 }),
-    })
-  }
+  const updateSearch = useCallback(
+    (newParams: any) => {
+      navigate({
+        search: (prev: any) => ({ ...prev, ...newParams, page: 1 }),
+      })
+    },
+    [navigate],
+  )
 
   const handleOpenCollection = (name: string) => {
     if (organize_by === "author") {
@@ -224,7 +223,7 @@ function ItemsTable() {
   }
 
   const allFacets = useMemo(() => {
-    if (user?.collection_index?.[organize_by]) {
+    if (!q && user?.collection_index?.[organize_by]) {
       const raw = user.collection_index[organize_by]
       return Object.entries(raw as any)
         .map(([name, data]: any) => ({
@@ -242,12 +241,12 @@ function ItemsTable() {
         sample_images: f.sample_images,
       }),
     ) as CollectionItem[]
-  }, [user, organize_by, infiniteFacets])
+  }, [user, organize_by, infiniteFacets, q])
 
   const totalFacetCount = useMemo(() => {
-    if (user?.collection_index?.[organize_by]) return allFacets.length
+    if (!q && user?.collection_index?.[organize_by]) return allFacets.length
     return (infiniteFacets?.pages[0] as any)?.count || 0
-  }, [user, organize_by, allFacets, infiniteFacets])
+  }, [user, organize_by, allFacets, infiniteFacets, q])
 
   const allItems = useMemo(
     () => infiniteData?.pages.flatMap((p) => p.data as any[]) ?? [],
@@ -457,11 +456,14 @@ function Items() {
     tab,
   } = Route.useSearch()
 
-  const updateSearch = (newParams: any) => {
-    navigate({
-      search: (prev: any) => ({ ...prev, ...newParams, page: 1 }),
-    })
-  }
+  const updateSearch = useCallback(
+    (newParams: any) => {
+      navigate({
+        search: (prev: any) => ({ ...prev, ...newParams, page: 1 }),
+      })
+    },
+    [navigate],
+  )
 
   const collectionIndex = user?.collection_index as any
   const totalCount = collectionIndex?.total ?? 0

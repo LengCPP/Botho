@@ -538,13 +538,23 @@ def ensure_work_metadata(
     return meta
 
 
-def filter_user_privacy(user: User, current_user_id: Any = None, is_admin: bool = False, is_friend: bool = False) -> UserPublic:
+def filter_user_privacy(user: User, current_user_id: Any = None, is_admin: bool = False, is_friend: bool = False, session: Session | None = None) -> UserPublic:
     """
     Apply privacy filters to a user object based on their settings.
     Superusers or friends bypass these filters.
     """
     # If the user is the current user or an admin or a friend, don't filter anything
     is_me = current_user_id and str(user.id) == str(current_user_id)
+
+    # Auto-check friendship if session provided
+    if not is_me and not is_admin and not is_friend and session and current_user_id:
+        is_friend = session.exec(
+            select(Friendship).where(
+                Friendship.user_id == current_user_id,
+                Friendship.friend_id == user.id,
+                Friendship.status == FriendshipStatus.ACCEPTED
+            )
+        ).first() is not None
 
     settings = user.settings or {}
     show_contact = settings.get("show_contact_details", False)
@@ -553,34 +563,48 @@ def filter_user_privacy(user: User, current_user_id: Any = None, is_admin: bool 
     user_public = UserPublic.model_validate(user)
     user_public.show_contact_details = show_contact
 
-    if not is_me and not is_admin and not is_friend:
-        if not show_contact:
-            # Hide email
-            user_public.email = "[Hidden]"
+    # Privacy bypass: me, system admin, or confirmed friend
+    if is_me or is_admin or is_friend:
+        return user_public
 
-        if not show_name:
-            # Replace name with alias if available
-            if user.profile and user.profile.alias:
-                user_public.full_name = user.profile.alias
-            else:
-                user_public.full_name = "Private User"
+    if not show_contact:
+        user_public.email = "[Hidden]"
+
+    if not show_name:
+        if user.profile and user.profile.alias:
+            user_public.full_name = user.profile.alias
+        else:
+            user_public.full_name = "Private User"
 
     return user_public
 
-def filter_owner_privacy(owner: User, current_user_id: Any = None, is_admin: bool = False, is_friend: bool = False) -> ItemOwnerPublic:
+def filter_owner_privacy(owner: User, current_user_id: Any = None, is_admin: bool = False, is_friend: bool = False, session: Session | None = None) -> ItemOwnerPublic:
     """
     Apply privacy filters to an owner object for item listings.
     Superusers or friends bypass these filters.
     """
     is_me = current_user_id and str(owner.id) == str(current_user_id)
 
+    # Auto-check friendship if session provided
+    if not is_me and not is_admin and not is_friend and session and current_user_id:
+        is_friend = session.exec(
+            select(Friendship).where(
+                Friendship.user_id == current_user_id,
+                Friendship.friend_id == owner.id,
+                Friendship.status == FriendshipStatus.ACCEPTED
+            )
+        ).first() is not None
+
     settings = owner.settings or {}
     show_contact = settings.get("show_contact_details", False)
     show_name = settings.get("show_full_name", False)
 
-    email = owner.email if (is_me or is_admin or is_friend or show_contact) else "[Hidden]"
+    # Privacy bypass
+    bypass = is_me or is_admin or is_friend
 
-    if is_me or is_admin or is_friend or show_name:
+    email = owner.email if (bypass or show_contact) else "[Hidden]"
+
+    if bypass or show_name:
         full_name = owner.full_name
     else:
         full_name = "Private User"

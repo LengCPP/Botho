@@ -66,13 +66,23 @@ Botho facilitates the lending of items between users and communities.
 
 ---
 
-## 🔍 Search & Notifications
+## 🔍 Search & Filtering
 
-### 8. Search
-- Use the global search bar to find **Items**, **Users**, and **Communities** instantly, powered by Meilisearch.
-- Filter search results to find exactly what you're looking for.
+### 8. Global Quick Search
+- **Location**: Found at the top of the **Dashboard**.
+- **Function**: Searches across the entire application for **Items**, **Users**, and **Communities** simultaneously.
+- **Dropdown Results**: As you type, a dropdown shows the most relevant matches. Clicking a result will take you directly to that user's profile, community board, or the specific item location.
 
-### 9. Notifications
+### 9. Quick Find (Find in Catalogue)
+The "Find in Catalogue" search field is a context-aware tool for filtering items and collections within specific pages.
+- **Location**: Found in the toolbar of the **My Items** page, the **Community Items** tab, and **User Profiles**.
+- **Context-Aware**:
+    - **Items View**: Filters individual items by Title, Author, or metadata.
+    - **Collections View**: Filters the names of the collections (e.g., searching "Fantasy" while in the Genre collections view).
+- **Instant Response**: The search is debounced (500ms), automatically updating the grid as you type without requiring a page refresh.
+- **Deep Linking**: Your search term is stored in the URL, making it easy to share a specific filtered view with others.
+
+### 10. Notifications
 - **Real-time Alerts**: Receive instant notifications for loan requests, community messages, and status updates via WebSockets.
 - **Push Notifications**: Enable push notifications in your browser settings to stay updated even when the app is closed.
 

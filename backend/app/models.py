@@ -315,6 +315,7 @@ class UserUpdate(SQLModel):
     password: str | None = Field(default=None, min_length=8, max_length=40)
     is_active: bool | None = None
     is_superuser: bool | None = None
+    is_verified: bool | None = None
     full_name: str | None = Field(default=None, max_length=255)
     honor_score: float | None = None
     reliability_rate: float | None = None

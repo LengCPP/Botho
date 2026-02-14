@@ -18,7 +18,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { BsThreeDotsVertical } from "react-icons/bs"
 import { FaChevronLeft } from "react-icons/fa"
 import { FiShare2, FiUserCheck, FiUserMinus, FiUserPlus } from "react-icons/fi"
@@ -116,11 +116,14 @@ function UserProfilePage() {
     localStorage.setItem("limit", String(limit))
   }, [view_mode, display_type, organize_by, sort_by, sort_order, limit])
 
-  const updateSearch = (newParams: any) => {
-    navigate({
-      search: (prev: any) => ({ ...prev, ...newParams, page: 1 }),
-    })
-  }
+  const updateSearch = useCallback(
+    (newParams: any) => {
+      navigate({
+        search: (prev: any) => ({ ...prev, ...newParams, page: 1 }),
+      })
+    },
+    [navigate],
+  )
 
   const handleOpenCollection = (name: string) => {
     const params: any = {

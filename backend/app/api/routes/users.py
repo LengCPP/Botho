@@ -466,8 +466,9 @@ def read_user_by_id(
         Friendship.friend_id == user_id
     )
     friendship = session.exec(statement).first()
+    is_friend = friendship.status == FriendshipStatus.ACCEPTED if friendship else False
 
-    user_public = filter_user_privacy(user, current_user.id, is_admin=current_user.is_superuser)
+    user_public = filter_user_privacy(user, current_user.id, is_admin=current_user.is_superuser, is_friend=is_friend)
     user_public.friendship_status = friendship.status if friendship else None
 
     # Restrict data if not friends (and not the same user, though this route is for "other" users)

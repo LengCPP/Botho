@@ -478,7 +478,7 @@ def recommend_items(
             owner_pub = None
             community_pub = None
             if item.user_owner:
-                owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser)
+                owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser, session=session)
                 owner_pub.is_available = is_avail
             elif item.community_owner:
                 community_pub = item.community_owner
@@ -525,7 +525,7 @@ def read_item_facets(
 ) -> Any:
     """
     Get unique values and counts for a specific facet for user or community items.
-    Returns paginated results.
+    Returns paginated results. Uses Meilisearch for fuzzy search when q is provided.
     """
     target_owner_id = owner_id or current_user.id
     
@@ -568,16 +568,67 @@ def read_item_facets(
         if total == 0:
              return {"data": [], "count": 0}
 
-    # Map 'subject' to 'tags' for Meilisearch indexing
-    facet_field = group_by
+    # Meilisearch logic if q is present
+    if q:
+        from app.search import client as meili_client
+        try:
+            index = meili_client.index("items")
+            
+            # Map facet field
+            facet_field = group_by
+            if group_by == "subject":
+                facet_field = "subject"
+            
+            search_params = {
+                "filter": f'owner_id = "{target_owner_id}" OR pooled_in = "{target_owner_id}"',
+                "facets": [facet_field],
+                "limit": 0 # We only care about facets
+            }
+            
+            search_results = index.search(q, search_params)
+            distribution = search_results.get("facetDistribution", {}).get(facet_field, {})
+            
+            # Convert to list and sort by count desc or name
+            all_facets = [{"name": name, "count": count} for name, count in distribution.items()]
+            all_facets.sort(key=lambda x: x["name"].lower())
+            
+            # Slice for pagination
+            paged_facets = all_facets[skip : skip + limit]
+            
+            # Fetch sample images from DB for these facets
+            results = []
+            for f in paged_facets:
+                name = f["name"]
+                # Fallback to SQL to get sample images for these specific facets
+                stmt = select(Item.image_url).where(Item.owner_id == target_owner_id)
+                if group_by == "author":
+                    stmt = stmt.where(Item.author == name)
+                elif group_by in ["category", "genre"]:
+                    stmt = stmt.where(func.json_extract_path_text(Item.extra_data, group_by) == name)
+                elif group_by == "subject":
+                    stmt = stmt.join(WorkMetadata, (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title))\
+                               .where(cast(WorkMetadata.tags, String).ilike(f'%"{name}"%'))
+                
+                imgs = session.exec(stmt.where(Item.image_url.is_not(None)).limit(5)).all()
+                results.append({
+                    "name": name,
+                    "count": f["count"],
+                    "sample_images": list(imgs)
+                })
+            
+            return {"data": results, "count": len(all_facets)}
+        except Exception:
+            pass # Fallback to SQL if Meilisearch fails
 
+    # SQL Fallback
     results = []
     total_count = 0
     
     if group_by == "author":
-        total_count = session.exec(
-            select(func.count(func.distinct(Item.author))).where(Item.owner_id == target_owner_id)
-        ).one()
+        count_stmt = select(func.count(func.distinct(Item.author))).where(Item.owner_id == target_owner_id)
+        if q:
+            count_stmt = count_stmt.where(Item.author.ilike(f"%{q}%"))
+        total_count = session.exec(count_stmt).one()
 
         stmt = select(Item.author, func.count(Item.id), func.array_agg(Item.image_url))\
             .where(Item.owner_id == target_owner_id)
@@ -795,12 +846,12 @@ def read_items(
                 "offset": skip,
                 "filter": " AND ".join(filters) if filters else None,
                 "facets": ["category", "genre", "author", "item_type", "subject"],
-                "sort": [f"{sort_by if sort_by != 'created_at' else 'id'}:{sort_order}"]
+                "sort": [f"{sort_by}:{sort_order}"]
             }
             
             search_results = index.search(q, search_params)
             item_ids = [uuid.UUID(hit["id"]) for hit in search_results["hits"]]
-            count = search_results.get("totalHits", len(item_ids))
+            count = search_results.get("totalHits") or search_results.get("nbHits") or len(item_ids)
             facets = search_results.get("facetDistribution")
             facet_stats = search_results.get("facetStats")
 
@@ -826,7 +877,132 @@ def read_items(
             db_items = session.exec(db_stmt).all()
             item_map = {item.id: item for item in db_items}
             items = [item_map[iid] for iid in item_ids if iid in item_map]
-            meili_success = True
+            
+            # Pre-fetch availability, possession, and donation status for all items
+            item_ids = [item.id for item in items]
+            active_loan_item_ids = set(session.exec(
+                select(Loan.item_id).where(
+                    Loan.item_id.in_(item_ids),
+                    Loan.status.in_([
+                        LoanStatus.ACTIVE, LoanStatus.PENDING, LoanStatus.ACCEPTED, 
+                        LoanStatus.RETURN_PENDING, LoanStatus.EXTENSION_PENDING, LoanStatus.DEFAULTED
+                    ])
+                )
+            ).all())
+
+            possession_loan_item_ids = set(session.exec(
+                select(Loan.item_id).where(
+                    Loan.item_id.in_(item_ids),
+                    Loan.requester_id == current_user.id,
+                    Loan.status.in_([
+                        LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING, 
+                        LoanStatus.RETURNED, LoanStatus.EXTENSION_PENDING
+                    ])
+                )
+            ).all())
+
+            pending_donation_item_ids = set(session.exec(
+                select(CommunityItem.item_id).where(
+                    CommunityItem.item_id.in_(item_ids),
+                    CommunityItem.is_donation_pending == True
+                )
+            ).all())
+
+            if minimal:
+                minimal_items = []
+                for item in items:
+                    owner_name = "Unknown"
+                    if item.user_owner:
+                        owner_name = item.user_owner.full_name or item.user_owner.email
+                    elif item.community_owner:
+                        owner_name = item.community_owner.name
+
+                    minimal_items.append(ItemMinimal(
+                        id=item.id,
+                        owner_id=item.owner_id,
+                        title=item.title,
+                        description=item.description,
+                        author=item.author,
+                        item_type=item.item_type,
+                        image_url=item.image_url,
+                        count=item.count,
+                        created_at=item.created_at,
+                        is_available=item.id not in active_loan_item_ids,
+                        had_possession=item.owner_id == current_user.id or item.id in possession_loan_item_ids,
+                        is_community_owned=item.community_owner is not None,
+                        is_donation_pending=item.id in pending_donation_item_ids,
+                        owner_name=owner_name,
+                        category=item.extra_data.get("category") if item.extra_data else None,
+                        genre=item.extra_data.get("genre") if item.extra_data else None
+                    ))
+                return ItemsMinimalPublic(data=minimal_items, count=count, facets=facets)
+
+            # Full ItemPublic mapping
+            # Privacy bypass flags
+            is_friend_of_target = False
+            if target_owner_id:
+                is_friend_of_target = session.exec(
+                    select(Friendship).where(
+                        ((Friendship.user_id == current_user.id) & (Friendship.friend_id == target_owner_id)) |
+                        ((Friendship.user_id == target_owner_id) & (Friendship.friend_id == current_user.id)),
+                        Friendship.status == FriendshipStatus.ACCEPTED
+                    )
+                ).first() is not None
+
+            admin_comm_ids = session.exec(
+                select(CommunityMember.community_id).where(
+                    CommunityMember.user_id == current_user.id,
+                    CommunityMember.role == CommunityMemberRole.ADMIN,
+                    CommunityMember.status == CommunityMemberStatus.ACCEPTED
+                )
+            ).all()
+
+            # Map to Public
+            items_public_data = []
+            for item in items:
+                is_avail = item.id not in active_loan_item_ids
+                owner_pub = None
+                community_pub = None
+                
+                bypass = is_friend_of_target or current_user.is_superuser
+                if not bypass and item.owner_id in admin_comm_ids:
+                    bypass = True
+
+                if item.user_owner:
+                    item_is_friend = bypass or session.exec(
+                        select(Friendship).where(
+                            ((Friendship.user_id == current_user.id) & (Friendship.friend_id == item.owner_id)) |
+                            ((Friendship.user_id == item.owner_id) & (Friendship.friend_id == current_user.id)),
+                            Friendship.status == FriendshipStatus.ACCEPTED
+                        )
+                    ).first() is not None
+                    
+                    owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser, is_friend=item_is_friend)
+                    owner_pub.is_available = is_avail
+                elif item.community_owner:
+                    community_pub = item.community_owner
+
+                items_public_data.append(ItemPublic(
+                    id=item.id,
+                    owner_id=item.owner_id,
+                    title=item.title,
+                    description=item.description,
+                    author=item.author,
+                    item_type=item.item_type,
+                    image_url=item.image_url,
+                    extra_data=item.extra_data,
+                    info=item.info,
+                    count=item.count,
+                    created_at=item.created_at,
+                    owner=owner_pub,
+                    community_owner=community_pub,
+                    is_available=is_avail,
+                    work_metadata=get_work_metadata(session, item.author, item.title),
+                    had_possession=item.owner_id == current_user.id or item.id in possession_loan_item_ids,
+                    is_donation_pending=item.id in pending_donation_item_ids
+                ))
+            
+            return ItemsPublic(data=items_public_data, count=count, facets=facets, facet_stats=facet_stats)
         except Exception:
             meili_success = False
 
@@ -995,7 +1171,7 @@ def read_items(
         owner_pub = None
         community_pub = None
         if item.user_owner:
-            owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser)
+            owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser, session=session)
             owner_pub.is_available = is_avail
         elif item.community_owner:
             community_pub = item.community_owner
@@ -1065,7 +1241,7 @@ def read_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> 
     owner_pub = None
     community_pub = None
     if item.user_owner:
-        owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser)
+        owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser, session=session)
         owner_pub.is_available = is_avail
     elif item.community_owner:
         community_pub = item.community_owner
@@ -1378,7 +1554,7 @@ async def update_item(
         owner_pub = None
         community_pub = None
         if db_item.user_owner:
-            owner_pub = filter_owner_privacy(db_item.user_owner, current_user.id, is_admin=current_user.is_superuser)
+            owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser, session=session)
             owner_pub.is_available = is_avail
         elif db_item.community_owner:
             community_pub = db_item.community_owner
@@ -1766,7 +1942,41 @@ def read_item_condition_ratings(
 ) -> Any:
     """
     Get all condition ratings for a physical item.
+    Only visible to owner, friends of owner, or members of the owning community.
     """
+    item = session.get(Item, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    # Permission check
+    allowed = False
+    if current_user.is_superuser or item.owner_id == current_user.id:
+        allowed = True
+    else:
+        if item.user_owner:
+            is_friend = session.exec(
+                select(Friendship).where(
+                    ((Friendship.user_id == current_user.id) & (Friendship.friend_id == item.owner_id)) |
+                    ((Friendship.user_id == item.owner_id) & (Friendship.friend_id == current_user.id)),
+                    Friendship.status == FriendshipStatus.ACCEPTED
+                )
+            ).first()
+            if is_friend:
+                allowed = True
+        elif item.community_owner:
+            is_member = session.exec(
+                select(CommunityMember).where(
+                    CommunityMember.community_id == item.owner_id,
+                    CommunityMember.user_id == current_user.id,
+                    CommunityMember.status == CommunityMemberStatus.ACCEPTED
+                )
+            ).first()
+            if is_member:
+                allowed = True
+
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Not enough permissions to view condition history")
+
     ratings = session.exec(
         select(ItemConditionRating).where(ItemConditionRating.item_id == item_id)
     ).all()

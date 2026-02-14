@@ -45,6 +45,16 @@ def update_staged_item(*, session: SessionDep, current_user: CurrentUser, id: uu
     session.add(db); session.commit(); session.refresh(db)
     return db
 
+@router.patch("/bulk/update", response_model=Message)
+def bulk_update_staged_items(*, session: SessionDep, current_user: CurrentUser, items: dict[uuid.UUID, dict[str, Any]]) -> Any:
+    for id, raw_data in items.items():
+        db = session.get(StagedItem, id)
+        if db and db.owner_id == current_user.id:
+            db.raw_data = raw_data
+            session.add(db)
+    session.commit()
+    return Message(message="Updated")
+
 @router.delete("/{id}", response_model=Message)
 def delete_staged_item(*, session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> Any:
     db = session.get(StagedItem, id)

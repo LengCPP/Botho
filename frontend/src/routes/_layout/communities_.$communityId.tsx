@@ -27,7 +27,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query"
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { FaChevronLeft, FaFileImport } from "react-icons/fa"
 import {
   FiBell,
@@ -199,14 +199,17 @@ function CommunityBoard() {
   // NAVIGATION HELPERS
   // ========================================================================
 
-  const updateSearch = (params: any) =>
-    navigate({
-      search: (prev: any) => ({
-        ...prev,
-        ...params,
-        page: 1,
+  const updateSearch = useCallback(
+    (params: any) =>
+      navigate({
+        search: (prev: any) => ({
+          ...prev,
+          ...params,
+          page: 1,
+        }),
       }),
-    })
+    [navigate],
+  )
 
   const handleOrganizeClick = (name: string) =>
     updateSearch(
@@ -514,17 +517,17 @@ function CommunityBoard() {
   )
 
   const allCollections = useMemo(() => {
-    if (comm?.collection_index?.[organize_by]) {
-      return Object.entries(comm.collection_index[organize_by])
-        .map(([name, data]: any) => ({
-          name,
-          count: data.count,
-          sample_images: data.sample_images,
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name))
+    if (qP || !comm?.collection_index?.[organize_by]) {
+      return facets?.pages.flatMap((p: any) => p.data) || []
     }
-    return facets?.pages.flatMap((p) => p.data) || []
-  }, [comm, organize_by, facets])
+    return Object.entries(comm.collection_index[organize_by])
+      .map(([name, data]: any) => ({
+        name,
+        count: data.count,
+        sample_images: data.sample_images,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [comm, organize_by, facets, qP])
 
   // ========================================================================
   // RENDER HELPERS

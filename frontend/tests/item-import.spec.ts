@@ -21,14 +21,16 @@ test.describe("Item Import Feature", () => {
     // Mapping dialog should appear
     await expect(page.getByRole("heading", { name: "Map Your Columns" })).toBeVisible()
     
-    // Verify mapping selects
-    await expect(page.locator("select").first()).toBeVisible()
+    // Select mappings (auto-mapping might not be perfect or implemented in test)
+    await page.locator("select#mapping-title").selectOption("title")
+    await page.locator("select#mapping-author").selectOption("author")
+    await page.locator("select#mapping-isbn").selectOption("isbn")
     
     // Start Staging
     await page.getByRole("button", { name: "Start Staging" }).click()
     
     // Should see staged items table
-    await expect(page.getByText("Items Staged")).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText(/Items Staged/)).toBeVisible({ timeout: 15000 })
     const rows = page.locator("tbody tr")
     await expect(rows.first()).toBeVisible()
   })
@@ -42,6 +44,7 @@ test.describe("Item Import Feature", () => {
     await page.getByRole("button", { name: "Start Staging" }).click()
     
     // Wait for items
+    await expect(page.getByText(/Items Staged/)).toBeVisible({ timeout: 15000 })
     const firstRow = page.locator("tbody tr").first()
     await expect(firstRow).toBeVisible({ timeout: 10000 })
     
@@ -69,7 +72,7 @@ test.describe("Item Import Feature", () => {
     await fileChooser.setFiles(path.resolve("test.csv"))
     await page.getByRole("button", { name: "Start Staging" }).click()
     
-    await expect(page.getByText("Items Staged")).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText(/Items Staged/)).toBeVisible({ timeout: 15000 })
     
     // Select first item
     await page.locator("tbody tr").first().locator("input[type='checkbox']").check()

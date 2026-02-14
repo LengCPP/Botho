@@ -10,7 +10,7 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   FaBook,
   FaFilter,
@@ -102,19 +102,40 @@ export function ItemsViewOptions({
   organizeOptions = ["subject", "genre", "category", "author"],
 }: ItemsViewOptionsProps) {
   const [localQ, setLocalQ] = useState(q || "")
+  // Track the external 'q' to avoid resetting local state on internal changes
+  const lastExternalQ = useRef(q || "")
+  // Track the last value we sent to the parent to avoid infinite loops
+  const lastPropagatedQ = useRef(q || "")
+  const isInitialMount = useRef(true)
 
+  // Update local state if the external 'q' prop changes from something other than what we last sent
   useEffect(() => {
-    setLocalQ(q || "")
+    if (q !== lastExternalQ.current) {
+      setLocalQ(q || "")
+      lastExternalQ.current = q || ""
+      lastPropagatedQ.current = q || ""
+    }
   }, [q])
 
+  // Debounce logic for internal state changes
   useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false
+      return
+    }
+
     const timer = setTimeout(() => {
-      if (onChangeQ && localQ !== q) {
+      const normalizedLocalQ = localQ.trim()
+      const normalizedPropagatedQ = lastPropagatedQ.current.trim()
+
+      if (onChangeQ && normalizedLocalQ !== normalizedPropagatedQ) {
+        lastPropagatedQ.current = localQ
+        lastExternalQ.current = localQ // Prevent the sync effect from firing back
         onChangeQ(localQ)
       }
     }, 500)
     return () => clearTimeout(timer)
-  }, [localQ, onChangeQ, q])
+  }, [localQ, onChangeQ])
 
   const selectBg = useColorModeValue("white", "gray.800")
   const selectColor = useColorModeValue("black", "white")

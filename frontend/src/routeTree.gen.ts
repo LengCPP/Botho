@@ -18,7 +18,6 @@ import { Route as ResetPasswordImport } from './routes/reset-password'
 import { Route as RecoverPasswordImport } from './routes/recover-password'
 import { Route as LoginImport } from './routes/login'
 import { Route as LayoutImport } from './routes/_layout'
-import { Route as LayoutBookArchiveImport } from './routes/_layout/book-archive'
 import { Route as LayoutIndexImport } from './routes/_layout/index'
 import { Route as LayoutSettingsImport } from './routes/_layout/settings'
 import { Route as LayoutReadingLogImport } from './routes/_layout/reading-log'
@@ -27,6 +26,7 @@ import { Route as LayoutLoansImport } from './routes/_layout/loans'
 import { Route as LayoutItemsImport } from './routes/_layout/items'
 import { Route as LayoutFriendsImport } from './routes/_layout/friends'
 import { Route as LayoutCommunitiesImport } from './routes/_layout/communities'
+import { Route as LayoutBookArchiveImport } from './routes/_layout/book-archive'
 import { Route as LayoutAdminImport } from './routes/_layout/admin'
 import { Route as LayoutUsersUserIdImport } from './routes/_layout/users/$userId'
 import { Route as LayoutCommunitiesCommunityIdImport } from './routes/_layout/communities_.$communityId'
@@ -68,11 +68,6 @@ const LayoutRoute = LayoutImport.update({
   getParentRoute: () => rootRoute,
 } as any)
 
-const LayoutBookArchiveRoute = LayoutBookArchiveImport.update({
-  path: '/book-archive',
-  getParentRoute: () => LayoutRoute,
-} as any)
-
 const LayoutIndexRoute = LayoutIndexImport.update({
   path: '/',
   getParentRoute: () => LayoutRoute,
@@ -110,6 +105,11 @@ const LayoutFriendsRoute = LayoutFriendsImport.update({
 
 const LayoutCommunitiesRoute = LayoutCommunitiesImport.update({
   path: '/communities',
+  getParentRoute: () => LayoutRoute,
+} as any)
+
+const LayoutBookArchiveRoute = LayoutBookArchiveImport.update({
+  path: '/book-archive',
   getParentRoute: () => LayoutRoute,
 } as any)
 
@@ -165,6 +165,10 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutAdminImport
       parentRoute: typeof LayoutImport
     }
+    '/_layout/book-archive': {
+      preLoaderRoute: typeof LayoutBookArchiveImport
+      parentRoute: typeof LayoutImport
+    }
     '/_layout/communities': {
       preLoaderRoute: typeof LayoutCommunitiesImport
       parentRoute: typeof LayoutImport
@@ -205,10 +209,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutUsersUserIdImport
       parentRoute: typeof LayoutImport
     }
-    '/_layout/book-archive': {
-      preLoaderRoute: typeof LayoutBookArchiveImport
-      parentRoute: typeof LayoutImport
-    }
   }
 }
 
@@ -217,6 +217,7 @@ declare module '@tanstack/react-router' {
 export const routeTree = rootRoute.addChildren([
   LayoutRoute.addChildren([
     LayoutAdminRoute,
+    LayoutBookArchiveRoute,
     LayoutCommunitiesRoute,
     LayoutFriendsRoute,
     LayoutItemsRoute,
@@ -227,7 +228,6 @@ export const routeTree = rootRoute.addChildren([
     LayoutIndexRoute,
     LayoutCommunitiesCommunityIdRoute,
     LayoutUsersUserIdRoute,
-    LayoutBookArchiveRoute,
   ]),
   LoginRoute,
   RecoverPasswordRoute,
