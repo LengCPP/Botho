@@ -1,8 +1,6 @@
 import {
   Box,
   Button,
-  Flex,
-  HStack,
   Input,
   Separator,
   Text,
@@ -14,12 +12,7 @@ import { useEffect, useState } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { FaPen } from "react-icons/fa"
 
-import {
-  type ItemConditionRatingCreate,
-  type ItemPublic,
-  type ItemReviewCreate,
-  ItemsService,
-} from "@/client"
+import { type ItemPublic, type ItemReviewCreate, ItemsService } from "@/client"
 import { Rating } from "@/components/Common/Rating"
 import {
   DialogBody,

@@ -1,24 +1,16 @@
-import { type SearchResults, SearchService } from "@/client"
-import UserCard from "@/components/Common/UserCard"
-import CommunityCard from "@/components/Communities/CommunityCard"
-import ItemCard from "@/components/Items/ItemCard"
+import { SearchService } from "@/client"
 import { InputGroup } from "@/components/ui/input-group"
 import useAuth from "@/hooks/useAuth"
-import { groupItems } from "@/utils"
 import {
-  Badge,
   Box,
   Flex,
-  Grid,
   HStack,
   Heading,
   Icon,
   Input,
-  SimpleGrid,
   Spinner,
   Stack,
   Text,
-  VStack,
 } from "@chakra-ui/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
@@ -83,7 +75,7 @@ export const QuickSearch = ({
             setShowResults(true)
           }}
           onFocus={() => setShowResults(true)}
-          variant="filled"
+          variant="subtle"
           bg="bg.panel"
           _focus={{ bg: "bg.panel", borderColor: "ui.main" }}
         />
@@ -116,12 +108,7 @@ export const QuickSearch = ({
               </Text>
             </Box>
           ) : (
-            <Stack
-              gap={0}
-              divider={
-                <Box borderBottomWidth="1px" borderColor="border.subtle" />
-              }
-            >
+            <Stack gap={0}>
               {/* Users */}
               {results.users.length > 0 && (
                 <Box p={4}>
@@ -145,7 +132,7 @@ export const QuickSearch = ({
                       >
                         <HStack
                           p={2}
-                          hover={{ bg: "bg.muted" }}
+                          _hover={{ bg: "bg.muted" }}
                           borderRadius="md"
                         >
                           {/* Simple User Row */}
@@ -153,9 +140,9 @@ export const QuickSearch = ({
                             <Text fontWeight="medium">
                               {user.full_name || user.email}
                             </Text>
-                            {user.alias && (
+                            {(user as any).alias && (
                               <Text fontSize="xs" color="fg.muted">
-                                @{user.alias}
+                                @{(user as any).alias}
                               </Text>
                             )}
                           </Box>
@@ -168,46 +155,100 @@ export const QuickSearch = ({
 
               {/* Items */}
               {results.items.length > 0 && (
-                <Box p={4}>
-                  <Heading
-                    size="xs"
-                    mb={3}
-                    color="fg.muted"
-                    textTransform="uppercase"
-                    letterSpacing="wider"
-                  >
-                    Items
-                  </Heading>
-                  <Stack gap={2}>
-                    {results.items.map((item) => {
-                      const primaryCommunity =
-                        item.community_owner || item.communities?.[0]
-                      const isOwner = item.owner_id === currentUser?.id
+                <>
+                  <Box borderBottomWidth="1px" borderColor="border.subtle" />
+                  <Box p={4}>
+                    <Heading
+                      size="xs"
+                      mb={3}
+                      color="fg.muted"
+                      textTransform="uppercase"
+                      letterSpacing="wider"
+                    >
+                      Items
+                    </Heading>
+                    <Stack gap={2}>
+                      {results.items.map((item) => {
+                        const primaryCommunity =
+                          item.community_owner || item.communities?.[0]
+                        const isOwner = item.owner_id === currentUser?.id
 
-                      let to = "/items"
-                      let params: any = {}
-                      let search: any = { q: item.title }
+                        let to = "/items"
+                        let params: any = {}
+                        let search: any = { q: item.title }
 
-                      if (primaryCommunity) {
-                        to = "/communities/$communityId"
-                        params = { communityId: primaryCommunity.id }
-                        search = { tab: "items", q: item.title }
-                      } else if (isOwner) {
-                        to = "/items"
-                        params = {}
-                        search = { q: item.title }
-                      } else {
-                        to = "/users/$userId"
-                        params = { userId: item.owner_id }
-                        search = { q: item.title }
-                      }
+                        if (primaryCommunity) {
+                          to = "/communities/$communityId"
+                          params = { communityId: primaryCommunity.id }
+                          search = { tab: "items", q: item.title }
+                        } else if (isOwner) {
+                          to = "/items"
+                          params = {}
+                          search = { q: item.title }
+                        } else {
+                          to = "/users/$userId"
+                          params = { userId: item.owner_id }
+                          search = { q: item.title }
+                        }
 
-                      return (
+                        return (
+                          <Link
+                            key={item.id}
+                            to={to}
+                            params={params}
+                            search={search}
+                            onClick={() => setShowResults(false)}
+                          >
+                            <HStack
+                              p={2}
+                              _hover={{ bg: "bg.muted" }}
+                              borderRadius="md"
+                            >
+                              <Icon as={FiBook} color="ui.main" />
+                              <Box>
+                                <Text fontWeight="medium" lineClamp={1}>
+                                  {item.title}
+                                </Text>
+                                <Text
+                                  fontSize="xs"
+                                  color="fg.muted"
+                                  lineClamp={1}
+                                >
+                                  by {item.author || "Unknown"}
+                                  {item.community_owner
+                                    ? ` (in ${item.community_owner.name})`
+                                    : ""}
+                                </Text>
+                              </Box>
+                            </HStack>
+                          </Link>
+                        )
+                      })}
+                    </Stack>
+                  </Box>
+                </>
+              )}
+
+              {/* Communities */}
+              {results.communities.length > 0 && (
+                <>
+                  <Box borderBottomWidth="1px" borderColor="border.subtle" />
+                  <Box p={4}>
+                    <Heading
+                      size="xs"
+                      mb={3}
+                      color="fg.muted"
+                      textTransform="uppercase"
+                      letterSpacing="wider"
+                    >
+                      Communities
+                    </Heading>
+                    <Stack gap={2}>
+                      {results.communities.map((community) => (
                         <Link
-                          key={item.id}
-                          to={to}
-                          params={params}
-                          search={search}
+                          key={community.id}
+                          to="/communities/$communityId"
+                          params={{ communityId: community.id }}
                           onClick={() => setShowResults(false)}
                         >
                           <HStack
@@ -215,62 +256,14 @@ export const QuickSearch = ({
                             _hover={{ bg: "bg.muted" }}
                             borderRadius="md"
                           >
-                            <Icon as={FiBook} color="ui.main" />
-                            <Box>
-                              <Text fontWeight="medium" lineClamp={1}>
-                                {item.title}
-                              </Text>
-                              <Text
-                                fontSize="xs"
-                                color="fg.muted"
-                                lineClamp={1}
-                              >
-                                by {item.author || "Unknown"}
-                                {item.community_owner
-                                  ? ` (in ${item.community_owner.name})`
-                                  : ""}
-                              </Text>
-                            </Box>
+                            <Icon as={FiUsers} color="purple.500" />
+                            <Text fontWeight="medium">{community.name}</Text>
                           </HStack>
                         </Link>
-                      )
-                    })}
-                  </Stack>
-                </Box>
-              )}
-
-              {/* Communities */}
-              {results.communities.length > 0 && (
-                <Box p={4}>
-                  <Heading
-                    size="xs"
-                    mb={3}
-                    color="fg.muted"
-                    textTransform="uppercase"
-                    letterSpacing="wider"
-                  >
-                    Communities
-                  </Heading>
-                  <Stack gap={2}>
-                    {results.communities.map((community) => (
-                      <Link
-                        key={community.id}
-                        to="/communities/$communityId"
-                        params={{ communityId: community.id }}
-                        onClick={() => setShowResults(false)}
-                      >
-                        <HStack
-                          p={2}
-                          _hover={{ bg: "bg.muted" }}
-                          borderRadius="md"
-                        >
-                          <Icon as={FiUsers} color="purple.500" />
-                          <Text fontWeight="medium">{community.name}</Text>
-                        </HStack>
-                      </Link>
-                    ))}
-                  </Stack>
-                </Box>
+                      ))}
+                    </Stack>
+                  </Box>
+                </>
               )}
             </Stack>
           )}

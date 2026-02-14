@@ -3,29 +3,18 @@ import { useColorModeValue } from "@/components/ui/color-mode"
 import {
   Badge,
   Box,
-  Flex,
   HStack,
   Heading,
   Icon,
   Link,
-  Separator,
-  SimpleGrid,
   Spinner,
   Text,
-  Timeline,
   VStack,
 } from "@chakra-ui/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link as RouterLink } from "@tanstack/react-router"
 import { format } from "date-fns"
-import {
-  FiAward,
-  FiCheckCircle,
-  FiClock,
-  FiMessageSquare,
-  FiStar,
-  FiUser,
-} from "react-icons/fi"
+import { FiAward, FiStar, FiUser } from "react-icons/fi"
 
 interface BorrowerReportCardProps {
   userId: string
@@ -42,7 +31,6 @@ const BorrowerReportCard = ({ userId }: BorrowerReportCardProps) => {
   })
 
   const borderColor = useColorModeValue("gray.200", "gray.700")
-  const mutedColor = useColorModeValue("gray.500", "gray.400")
 
   if (isLoading) return <Spinner size="sm" />
   if (error || !reportCard)
@@ -108,7 +96,7 @@ const BorrowerReportCard = ({ userId }: BorrowerReportCardProps) => {
       </Box>
 
       <Box>
-        <Heading size="3xs" mb={3} textTransform="uppercase" color="gray.500">
+        <Heading size="xs" mb={3} textTransform="uppercase" color="gray.500">
           Recent Peer Feedback
         </Heading>
         {reviews.length === 0 ? (

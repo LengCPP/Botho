@@ -65,7 +65,8 @@ export const usePushNotifications = () => {
         return
       }
 
-      const { publicKey } = await NotificationsService.getVapidPublicKey()
+      const { publicKey } =
+        (await NotificationsService.getVapidPublicKey()) as any
       const subscribeOptions = {
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(publicKey),

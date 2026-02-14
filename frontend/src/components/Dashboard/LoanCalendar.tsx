@@ -1,10 +1,9 @@
-import { type LoanPublic, LoansService } from "@/client"
+import { LoansService } from "@/client"
 import {
   Box,
   Flex,
   Grid,
   Heading,
-  Icon,
   IconButton,
   PopoverArrow,
   PopoverBody,
@@ -22,14 +21,13 @@ import {
   format,
   getDay,
   isSameDay,
-  isSameMonth,
   isToday,
   parseISO,
   startOfMonth,
   subMonths,
 } from "date-fns"
 import { useState } from "react"
-import { FiChevronLeft, FiChevronRight, FiInfo } from "react-icons/fi"
+import { FiChevronLeft, FiChevronRight } from "react-icons/fi"
 
 export const LoanCalendar = () => {
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -41,7 +39,7 @@ export const LoanCalendar = () => {
 
   // Filter for active loans
   const activeLoans =
-    loansData?.data.filter((loan) =>
+    (loansData as any)?.data.filter((loan: any) =>
       ["ACTIVE", "RETURN_PENDING"].includes(loan.status),
     ) || []
 
@@ -50,8 +48,6 @@ export const LoanCalendar = () => {
 
   const monthStart = startOfMonth(currentDate)
   const monthEnd = endOfMonth(currentDate)
-  const startDate = monthStart // We'll just start from 1st for simplicity or handle padding
-  const endDate = monthEnd
 
   // Create grid days (padding for start of week)
   const startDayOfWeek = getDay(monthStart) // 0 (Sun) - 6 (Sat)
@@ -60,7 +56,7 @@ export const LoanCalendar = () => {
   const days = eachDayOfInterval({ start: monthStart, end: monthEnd })
 
   const getLoansForDate = (date: Date) => {
-    return activeLoans.filter((loan) =>
+    return activeLoans.filter((loan: any) =>
       isSameDay(parseISO(loan.end_date), date),
     )
   }
@@ -175,7 +171,7 @@ export const LoanCalendar = () => {
                         Due on {format(day, "MMM d")}:
                       </Text>
                       <VStack align="start" gap={1}>
-                        {loansDue.map((loan) => (
+                        {loansDue.map((loan: any) => (
                           <Text key={loan.id} lineClamp={1}>
                             • {loan.item.title}
                           </Text>

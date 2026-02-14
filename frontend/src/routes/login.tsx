@@ -1,12 +1,4 @@
-import {
-  Box,
-  Container,
-  Flex,
-  Image,
-  Input,
-  Separator,
-  Text,
-} from "@chakra-ui/react"
+import { Box, Container, Flex, Image, Input, Text } from "@chakra-ui/react"
 import {
   Link as RouterLink,
   createFileRoute,
@@ -21,7 +13,6 @@ import { z } from "zod"
 
 import type { Body_login_login_access_token as AccessToken } from "@/client"
 import { Button } from "@/components/ui/button"
-import { useColorMode } from "@/components/ui/color-mode"
 import { Field } from "@/components/ui/field"
 import { InputGroup } from "@/components/ui/input-group"
 import { PasswordInput } from "@/components/ui/password-input"
@@ -51,7 +42,6 @@ export const Route = createFileRoute("/login")({
 })
 
 function Login() {
-  const { colorMode } = useColorMode()
   const { loginMutation, error, resetError } = useAuth()
   const navigate = useNavigate()
   const { token, new_user } = Route.useSearch()

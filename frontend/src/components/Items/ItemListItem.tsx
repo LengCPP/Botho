@@ -7,13 +7,9 @@ import { FiBook, FiUser } from "react-icons/fi"
 
 interface ItemListItemProps {
   item: ItemPublic | ItemPublic[]
-  linkToOwner?: boolean
 }
 
-export const ItemListItem = ({
-  item: itemProp,
-  linkToOwner = false,
-}: ItemListItemProps) => {
+export const ItemListItem = ({ item: itemProp }: ItemListItemProps) => {
   const { user } = useAuth()
   const items = Array.isArray(itemProp) ? itemProp : [itemProp]
   const item = items[0]
@@ -23,12 +19,9 @@ export const ItemListItem = ({
   const isOwner = item.owner_id === user?.id
 
   // Logic for destination
-  // If linkToOwner is true:
   //   - If community owner: /communities/$communityId
   //   - If user owner (self): /profile
   //   - If user owner (other): /users/$userId
-  // Else:
-  //   - /items/$itemId
 
   const primaryCommunity = item.community_owner || item.communities?.[0]
 

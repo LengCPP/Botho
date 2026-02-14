@@ -13,10 +13,15 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
-import { useState } from "react"
-import { FiPlus, FiSend, FiUserPlus, FiUsers } from "react-icons/fi"
+import { useMemo, useState } from "react"
+import { FiSend, FiUserPlus, FiUsers } from "react-icons/fi"
 
 import { FriendsService } from "@/client"
 import UserCard from "@/components/Common/UserCard"
@@ -31,13 +36,14 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Field } from "@/components/ui/field"
-import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
 import { formatPublicId } from "@/utils"
 
 export const Route = createFileRoute("/_layout/friends")({
   component: Friends,
 })
+
+const FRIENDS_PER_PAGE = 12
 
 function AddFriendModal() {
   const [searchId, setSearchId] = useState("")
@@ -85,7 +91,7 @@ function AddFriendModal() {
                 placeholder="u-xxxxxxx"
                 value={searchId}
                 onChange={(e) => setSearchId(e.target.value)}
-                autofocus
+                autoFocus
               />
             </Field>
           </VStack>
@@ -110,14 +116,34 @@ function AddFriendModal() {
 }
 
 function Friends() {
-  const { user: currentUser } = useAuth()
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
-  const { data: friends, isLoading: isLoadingFriends } = useQuery({
-    queryKey: ["friends"],
-    queryFn: () => FriendsService.readFriends({}),
+  const {
+    data: infiniteFriends,
+    isLoading: isLoadingFriends,
+    fetchNextPage: fetchNextFriends,
+    hasNextPage: hasNextFriends,
+    isFetchingNextPage: isFetchingNextFriends,
+  } = useInfiniteQuery({
+    queryKey: ["friendsInfinite"],
+    queryFn: ({ pageParam = 0 }) =>
+      FriendsService.readFriends({
+        skip: pageParam as number,
+        limit: FRIENDS_PER_PAGE,
+      }),
+    getNextPageParam: (last, all) => {
+      const loaded = all.length * FRIENDS_PER_PAGE
+      return loaded < last.count ? loaded : undefined
+    },
+    initialPageParam: 0,
   })
+
+  const allFriends = useMemo(
+    () => infiniteFriends?.pages.flatMap((p) => p.data) || [],
+    [infiniteFriends],
+  )
+  const totalFriendsCount = infiniteFriends?.pages[0]?.count || 0
 
   const { data: requestsReceived, isLoading: isLoadingRequests } = useQuery({
     queryKey: ["friendRequests"],
@@ -134,7 +160,7 @@ function Friends() {
       FriendsService.acceptFriendRequest({ friendId: id }),
     onSuccess: () => {
       showSuccessToast("Friend request accepted!")
-      queryClient.invalidateQueries({ queryKey: ["friends"] })
+      queryClient.invalidateQueries({ queryKey: ["friendsInfinite"] })
       queryClient.invalidateQueries({ queryKey: ["friendRequests"] })
     },
     onError: () => showErrorToast("Failed to accept friend request"),
@@ -144,7 +170,7 @@ function Friends() {
     mutationFn: (id: string) => FriendsService.removeFriend({ friendId: id }),
     onSuccess: () => {
       showSuccessToast("Friend removed/Request cancelled")
-      queryClient.invalidateQueries({ queryKey: ["friends"] })
+      queryClient.invalidateQueries({ queryKey: ["friendsInfinite"] })
       queryClient.invalidateQueries({ queryKey: ["friendRequests"] })
       queryClient.invalidateQueries({ queryKey: ["friendRequestsSent"] })
     },
@@ -279,7 +305,7 @@ function Friends() {
         </Heading>
         {isLoadingFriends ? (
           <Text>Loading friends...</Text>
-        ) : friends?.data.length === 0 ? (
+        ) : allFriends.length === 0 ? (
           <EmptyState.Root>
             <EmptyState.Content>
               <EmptyState.Indicator>
@@ -294,11 +320,27 @@ function Friends() {
             </EmptyState.Content>
           </EmptyState.Root>
         ) : (
-          <SimpleGrid columns={{ base: 1, md: 2, lg: 3, xl: 4 }} gap={6}>
-            {friends?.data.map((user) => (
-              <UserCard key={user.id} user={user} />
-            ))}
-          </SimpleGrid>
+          <VStack align="stretch" gap={8}>
+            <SimpleGrid columns={{ base: 1, md: 2, lg: 3, xl: 4 }} gap={6}>
+              {allFriends.map((user) => (
+                <UserCard key={user.id} user={user} />
+              ))}
+            </SimpleGrid>
+
+            {hasNextFriends && (
+              <Flex justify="center" mb={10}>
+                <Button
+                  variant="ghost"
+                  colorPalette="accent"
+                  onClick={() => fetchNextFriends()}
+                  loading={isFetchingNextFriends}
+                >
+                  Load More Friends (Showing {allFriends.length} of{" "}
+                  {totalFriendsCount})
+                </Button>
+              </Flex>
+            )}
+          </VStack>
         )}
       </Box>
     </Container>

@@ -1,6 +1,6 @@
 import {
-  Badge,
   Box,
+  Button,
   Flex,
   HStack,
   IconButton,
@@ -10,9 +10,13 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query"
 import { format } from "date-fns"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { FaEllipsisV, FaRegTrashAlt } from "react-icons/fa"
 import {
   FiBookOpen,
@@ -51,6 +55,8 @@ interface ReadingLogTableProps {
   status: ReadingLogStatus
 }
 
+const LOGS_PER_PAGE = 10
+
 const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
@@ -67,10 +73,21 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
   const dateTextColor = useColorModeValue("gray.700", "gray.200")
   const mutedTextColor = useColorModeValue("gray.600", "gray.400")
 
-  const { data: logs, isLoading } = useQuery({
-    queryKey: ["reading-log", status],
-    queryFn: () => ReadingLogService.readReadingLog({ status }),
-  })
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useInfiniteQuery({
+      queryKey: ["reading-log-infinite", status],
+      queryFn: ({ pageParam = 0 }) =>
+        ReadingLogService.readReadingLog({
+          status,
+          skip: pageParam as number,
+          limit: LOGS_PER_PAGE,
+        }),
+      getNextPageParam: (last, all) => {
+        const loaded = all.length * LOGS_PER_PAGE
+        return loaded < last.count ? loaded : undefined
+      },
+      initialPageParam: 0,
+    })
 
   const updateStatusMutation = useMutation({
     mutationFn: ({
@@ -83,7 +100,7 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
       }),
     onSuccess: () => {
       showSuccessToast("Status updated")
-      queryClient.invalidateQueries({ queryKey: ["reading-log"] })
+      queryClient.invalidateQueries({ queryKey: ["reading-log-infinite"] })
     },
     onError: () => showErrorToast("Failed to update status"),
   })
@@ -92,7 +109,7 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
     mutationFn: (id: string) => ReadingLogService.deleteReadingLogEntry({ id }),
     onSuccess: () => {
       showSuccessToast("Entry removed")
-      queryClient.invalidateQueries({ queryKey: ["reading-log"] })
+      queryClient.invalidateQueries({ queryKey: ["reading-log-infinite"] })
     },
     onError: () => showErrorToast("Failed to remove entry"),
   })
@@ -102,7 +119,13 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
     setIsInfoOpen(true)
   }
 
-  if (isLoading) {
+  const allLogs = useMemo(
+    () => data?.pages.flatMap((p) => p.data) || [],
+    [data],
+  )
+  const totalCount = data?.pages[0]?.count || 0
+
+  if (isLoading && !allLogs.length) {
     return (
       <Flex justify="center" py={10}>
         <Spinner color="ui.primary" />
@@ -110,7 +133,7 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
     )
   }
 
-  if (!logs?.data.length) {
+  if (!allLogs.length) {
     return (
       <Box textAlign="center" py={10} color="gray.500">
         No books in this section.
@@ -120,44 +143,48 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
 
   return (
     <>
-      <Box
-        overflowX="auto"
-        borderRadius="lg"
-        borderWidth="1px"
-        borderColor={borderColor}
-        bg={bgColor}
-        boxShadow="sm"
-      >
-        <Table.Root variant="line" interactive size="sm" width="full">
-          <Table.Header>
-            <Table.Row bg={headerBg}>
-              <Table.ColumnHeader py={2} color={headerTextColor}>
-                Book
-              </Table.ColumnHeader>
-              <Table.ColumnHeader py={2} color={headerTextColor}>
-                Date
-              </Table.ColumnHeader>
-              <Table.ColumnHeader
-                py={2}
-                textAlign="left"
-                color={headerTextColor}
-              >
-                Actions
-              </Table.ColumnHeader>
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {logs.data.map((log) => (
-              <Table.Row key={log.id} _hover={{ bg: rowHoverBg }}>
-                <Table.Cell py={2}>
-                  <HStack gap={3} width="full">
-                    <Image
-                      src={
-                        log.work_metadata?.image_url
-                          ? getImageUrl(log.work_metadata.image_url)
-                          : undefined
-                      }
-                      fallback={
+      <VStack align="stretch" gap={4}>
+        <Box
+          overflowX="auto"
+          borderRadius="lg"
+          borderWidth="1px"
+          borderColor={borderColor}
+          bg={bgColor}
+          boxShadow="sm"
+        >
+          <Table.Root variant="line" interactive size="sm" width="full">
+            <Table.Header>
+              <Table.Row bg={headerBg}>
+                <Table.ColumnHeader py={2} color={headerTextColor}>
+                  Book
+                </Table.ColumnHeader>
+                <Table.ColumnHeader py={2} color={headerTextColor}>
+                  Date
+                </Table.ColumnHeader>
+                <Table.ColumnHeader
+                  py={2}
+                  textAlign="left"
+                  color={headerTextColor}
+                >
+                  Actions
+                </Table.ColumnHeader>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {allLogs.map((log) => (
+                <Table.Row key={log.id} _hover={{ bg: rowHoverBg }}>
+                  <Table.Cell py={2}>
+                    <HStack gap={3} width="full">
+                      {log.work_metadata?.image_url ? (
+                        <Image
+                          src={getImageUrl(log.work_metadata.image_url)}
+                          w="35px"
+                          h="50px"
+                          objectFit="cover"
+                          borderRadius="sm"
+                          boxShadow="xs"
+                        />
+                      ) : (
                         <Flex
                           w="35px"
                           h="50px"
@@ -170,68 +197,52 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
                         >
                           <FiBookOpen size="12px" color="gray.400" />
                         </Flex>
-                      }
-                      w="35px"
-                      h="50px"
-                      objectFit="cover"
-                      borderRadius="sm"
-                      boxShadow="xs"
-                    />
-                    <VStack align="start" gap={0} minW="0">
-                      <Text
-                        fontWeight="bold"
-                        fontSize="sm"
-                        lineClamp={1}
-                        color={titleColor}
-                      >
-                        {log.title}
-                      </Text>
-                      <Text fontSize="2xs" color={mutedTextColor} lineClamp={1}>
-                        {log.author}
-                      </Text>
-                    </VStack>
-                    <HStack gap={0} ml="auto">
-                      <Tooltip content="Quick Info">
-                        <IconButton
-                          variant="ghost"
-                          size="xs"
-                          aria-label="View Info"
-                          onClick={() => handleOpenInfo(log)}
-                          colorPalette="main"
+                      )}
+                      <VStack align="start" gap={0} minW="0">
+                        <Text
+                          fontWeight="bold"
+                          fontSize="sm"
+                          lineClamp={1}
+                          color={titleColor}
                         >
-                          <FiInfo size="14px" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip content="Full Details">
-                        <IconButton
-                          variant="ghost"
-                          size="xs"
-                          aria-label="View Details"
-                          onClick={() => handleOpenInfo(log)}
-                          colorPalette="main"
+                          {log.title}
+                        </Text>
+                        <Text
+                          fontSize="2xs"
+                          color={mutedTextColor}
+                          lineClamp={1}
                         >
-                          <FiMaximize2 size="14px" />
-                        </IconButton>
-                      </Tooltip>
+                          {log.author}
+                        </Text>
+                      </VStack>
+                      <HStack gap={0} ml="auto">
+                        <Tooltip content="Quick Info">
+                          <IconButton
+                            variant="ghost"
+                            size="xs"
+                            aria-label="View Info"
+                            onClick={() => handleOpenInfo(log)}
+                            colorPalette="main"
+                          >
+                            <FiInfo size="14px" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip content="Full Details">
+                          <IconButton
+                            variant="ghost"
+                            size="xs"
+                            aria-label="View Details"
+                            onClick={() => handleOpenInfo(log)}
+                            colorPalette="main"
+                          >
+                            <FiMaximize2 size="14px" />
+                          </IconButton>
+                        </Tooltip>
+                      </HStack>
                     </HStack>
-                  </HStack>
-                </Table.Cell>
-                <Table.Cell py={2}>
-                  <VStack align="start" gap={0}>
-                    <HStack gap={1}>
-                      <Text
-                        fontSize="3xs"
-                        fontWeight="bold"
-                        color="ui.primary"
-                        textTransform="uppercase"
-                      >
-                        Start:
-                      </Text>
-                      <Text fontSize="2xs" color={dateTextColor}>
-                        {format(new Date(log.created_at), "MMM d, yy")}
-                      </Text>
-                    </HStack>
-                    {(status === "COMPLETED" || status === "DROPPED") && (
+                  </Table.Cell>
+                  <Table.Cell py={2}>
+                    <VStack align="start" gap={0}>
                       <HStack gap={1}>
                         <Text
                           fontSize="3xs"
@@ -239,91 +250,121 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
                           color="ui.primary"
                           textTransform="uppercase"
                         >
-                          {status === "COMPLETED" ? "End:" : "Drop:"}
+                          Start:
                         </Text>
                         <Text fontSize="2xs" color={dateTextColor}>
-                          {format(new Date(log.updated_at), "MMM d, yy")}
+                          {format(new Date(log.created_at), "MMM d, yy")}
                         </Text>
                       </HStack>
-                    )}
-                  </VStack>
-                </Table.Cell>
-                <Table.Cell py={3} textAlign="left">
-                  <MenuRoot>
-                    <MenuTrigger asChild>
-                      <IconButton
-                        variant="ghost"
-                        size="sm"
-                        aria-label="Actions"
-                      >
-                        <FaEllipsisV />
-                      </IconButton>
-                    </MenuTrigger>
-                    <MenuContent>
-                      <MenuItem
-                        onClick={() => handleOpenInfo(log)}
-                        value="info"
-                      >
-                        <FiBookOpen style={{ marginRight: "8px" }} /> Review /
-                        Info
-                      </MenuItem>
-                      {status !== "READING" && (
-                        <MenuItem
-                          onClick={() =>
-                            updateStatusMutation.mutate({
-                              id: log.id,
-                              newStatus: "READING",
-                            })
-                          }
-                          value="move-reading"
-                        >
-                          <FiBookOpen style={{ marginRight: "8px" }} /> Move to
-                          Reading
-                        </MenuItem>
+                      {(status === "COMPLETED" || status === "DROPPED") && (
+                        <HStack gap={1}>
+                          <Text
+                            fontSize="3xs"
+                            fontWeight="bold"
+                            color="ui.primary"
+                            textTransform="uppercase"
+                          >
+                            {status === "COMPLETED" ? "End:" : "Drop:"}
+                          </Text>
+                          <Text fontSize="2xs" color={dateTextColor}>
+                            {format(new Date(log.updated_at), "MMM d, yy")}
+                          </Text>
+                        </HStack>
                       )}
-                      {status !== "COMPLETED" && (
-                        <MenuItem
-                          onClick={() =>
-                            updateStatusMutation.mutate({
-                              id: log.id,
-                              newStatus: "COMPLETED",
-                            })
-                          }
-                          value="move-completed"
+                    </VStack>
+                  </Table.Cell>
+                  <Table.Cell py={3} textAlign="left">
+                    <MenuRoot>
+                      <MenuTrigger asChild>
+                        <IconButton
+                          variant="ghost"
+                          size="sm"
+                          aria-label="Actions"
                         >
-                          <FiCheckCircle style={{ marginRight: "8px" }} /> Mark
-                          Completed
-                        </MenuItem>
-                      )}
-                      {status !== "DROPPED" && (
+                          <FaEllipsisV />
+                        </IconButton>
+                      </MenuTrigger>
+                      <MenuContent>
                         <MenuItem
-                          onClick={() =>
-                            updateStatusMutation.mutate({
-                              id: log.id,
-                              newStatus: "DROPPED",
-                            })
-                          }
-                          value="move-dropped"
+                          onClick={() => handleOpenInfo(log)}
+                          value="info"
                         >
-                          <FiXCircle style={{ marginRight: "8px" }} /> Move to
-                          Dropped
+                          <FiBookOpen style={{ marginRight: "8px" }} /> Review /
+                          Info
                         </MenuItem>
-                      )}
-                      <MenuItem
-                        color="red.500"
-                        onClick={() => deleteMutation.mutate(log.id)}
-                        value="delete"
-                      >
-                        <FaRegTrashAlt style={{ marginRight: "8px" }} /> Remove
-                      </MenuItem>
-                    </MenuContent>
-                  </MenuRoot>
-                </Table.Cell>
-              </Table.Row>
-            ))}
-          </Table.Body>
-        </Table.Root>
-      </Box>
+                        {status !== "READING" && (
+                          <MenuItem
+                            onClick={() =>
+                              updateStatusMutation.mutate({
+                                id: log.id,
+                                newStatus: "READING",
+                              })
+                            }
+                            value="move-reading"
+                          >
+                            <FiBookOpen style={{ marginRight: "8px" }} /> Move
+                            to Reading
+                          </MenuItem>
+                        )}
+                        {status !== "COMPLETED" && (
+                          <MenuItem
+                            onClick={() =>
+                              updateStatusMutation.mutate({
+                                id: log.id,
+                                newStatus: "COMPLETED",
+                              })
+                            }
+                            value="move-completed"
+                          >
+                            <FiCheckCircle style={{ marginRight: "8px" }} />{" "}
+                            Mark Completed
+                          </MenuItem>
+                        )}
+                        {status !== "DROPPED" && (
+                          <MenuItem
+                            onClick={() =>
+                              updateStatusMutation.mutate({
+                                id: log.id,
+                                newStatus: "DROPPED",
+                              })
+                            }
+                            value="move-dropped"
+                          >
+                            <FiXCircle style={{ marginRight: "8px" }} /> Move to
+                            Dropped
+                          </MenuItem>
+                        )}
+                        <MenuItem
+                          color="red.500"
+                          onClick={() => deleteMutation.mutate(log.id)}
+                          value="delete"
+                        >
+                          <FaRegTrashAlt style={{ marginRight: "8px" }} />{" "}
+                          Remove
+                        </MenuItem>
+                      </MenuContent>
+                    </MenuRoot>
+                  </Table.Cell>
+                </Table.Row>
+              ))}
+            </Table.Body>
+          </Table.Root>
+        </Box>
+
+        {hasNextPage && (
+          <Flex justify="center" mt={4} mb={8}>
+            <Button
+              variant="outline"
+              size="sm"
+              colorPalette="accent"
+              onClick={() => fetchNextPage()}
+              loading={isFetchingNextPage}
+            >
+              Load More (Showing {allLogs.length} of {totalCount})
+            </Button>
+          </Flex>
+        )}
+      </VStack>
 
       <DialogRoot
         open={isInfoOpen}

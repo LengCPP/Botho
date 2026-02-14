@@ -375,7 +375,6 @@ const EditItem = ({
                   >
                     <Input
                       id="edit_grade"
-                      name="grade"
                       type="number"
                       min={1}
                       max={10}
@@ -386,7 +385,6 @@ const EditItem = ({
                   <Field label="Condition / Physical Description">
                     <Textarea
                       id="edit_physical_description"
-                      name="physical_description"
                       placeholder="Explain the physical state of your copy (e.g. 'Signed by author', 'Slightly torn cover')"
                       {...register("info.physical_description" as any)}
                       rows={4}
@@ -438,7 +436,6 @@ const EditItem = ({
                       >
                         <Input
                           id="edit_grade_full"
-                          name="grade"
                           type="number"
                           min={1}
                           max={10}
@@ -449,7 +446,6 @@ const EditItem = ({
                       <Field label="Condition / Physical Description">
                         <Textarea
                           id="edit_physical_description_full"
-                          name="physical_description"
                           placeholder="Explain the physical state of your copy (e.g. 'Signed by author', 'Slightly torn cover')"
                           {...register("info.physical_description" as any)}
                           rows={2}

@@ -53,7 +53,16 @@ const BarcodeScanner = ({ onScan, onClose }: BarcodeScannerProps) => {
 
       // Initialize scanner instance if not exists
       if (!scannerRef.current) {
-        scannerRef.current = new Html5Qrcode(containerRef.current.id)
+        scannerRef.current = new Html5Qrcode(containerRef.current.id, {
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.CODE_128,
+          ],
+          verbose: false,
+        })
       }
 
       setError(null)
@@ -63,13 +72,6 @@ const BarcodeScanner = ({ onScan, onClose }: BarcodeScannerProps) => {
         {
           fps: 10,
           qrbox: { width: 250, height: 150 },
-          formatsToSupport: [
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.EAN_8,
-            Html5QrcodeSupportedFormats.UPC_A,
-            Html5QrcodeSupportedFormats.UPC_E,
-            Html5QrcodeSupportedFormats.CODE_128,
-          ],
         },
         async (decodedText) => {
           // Success: Stop scanner then notify parent

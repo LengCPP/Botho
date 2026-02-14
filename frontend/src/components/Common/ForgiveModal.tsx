@@ -4,6 +4,7 @@ import {
   type LoanPublic,
   LoansService,
 } from "@/client"
+import { Field } from "@/components/ui/field"
 import { RadioGroup as ChakraRadioGroup, Radio } from "@/components/ui/radio"
 import useCustomToast from "@/hooks/useCustomToast"
 import {
@@ -15,7 +16,6 @@ import {
   DialogHeader,
   DialogRoot,
   DialogTitle,
-  Field,
   HStack,
   Input,
   Text,
@@ -69,7 +69,11 @@ const ForgiveModal = ({ loan, isOpen, onClose }: ForgiveModalProps) => {
   }
 
   return (
-    <DialogRoot open={isOpen} onOpenChange={onClose} size="md">
+    <DialogRoot
+      open={isOpen}
+      onOpenChange={(e) => !e.open && onClose()}
+      size="md"
+    >
       <DialogContent bg="bg.panel">
         <DialogHeader>
           <DialogTitle>Forgive Default</DialogTitle>
@@ -81,7 +85,7 @@ const ForgiveModal = ({ loan, isOpen, onClose }: ForgiveModalProps) => {
               delinquency status from the borrower's profile.
             </Text>
 
-            <Field.Root label="Forgiveness Reason">
+            <Field label="Forgiveness Reason">
               <ChakraRadioGroup
                 value={reason}
                 onValueChange={(details) =>
@@ -103,7 +107,7 @@ const ForgiveModal = ({ loan, isOpen, onClose }: ForgiveModalProps) => {
                   </Radio>
                 </VStack>
               </ChakraRadioGroup>
-            </Field.Root>
+            </Field>
 
             {reason === "REPLACED_ITEM" && (
               <VStack
@@ -117,7 +121,7 @@ const ForgiveModal = ({ loan, isOpen, onClose }: ForgiveModalProps) => {
                 <Text fontWeight="bold" fontSize="xs">
                   REPLACEMENT ITEM SPECS
                 </Text>
-                <Field.Root label="Title">
+                <Field label="Title">
                   <Input
                     id="replacement_title"
                     name="replacement_title"
@@ -126,8 +130,8 @@ const ForgiveModal = ({ loan, isOpen, onClose }: ForgiveModalProps) => {
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="New item title"
                   />
-                </Field.Root>
-                <Field.Root label="Author (Optional)">
+                </Field>
+                <Field label="Author (Optional)">
                   <Input
                     id="replacement_author"
                     name="replacement_author"
@@ -136,8 +140,8 @@ const ForgiveModal = ({ loan, isOpen, onClose }: ForgiveModalProps) => {
                     onChange={(e) => setAuthor(e.target.value)}
                     placeholder="Author"
                   />
-                </Field.Root>
-                <Field.Root label="Description">
+                </Field>
+                <Field label="Description">
                   <Textarea
                     id="replacement_description"
                     name="replacement_description"
@@ -146,7 +150,7 @@ const ForgiveModal = ({ loan, isOpen, onClose }: ForgiveModalProps) => {
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Physical condition, etc."
                   />
-                </Field.Root>
+                </Field>
               </VStack>
             )}
           </VStack>

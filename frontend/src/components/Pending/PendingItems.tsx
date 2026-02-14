@@ -1,11 +1,4 @@
-import {
-  Box,
-  Card,
-  HStack,
-  SimpleGrid,
-  Skeleton,
-  VStack,
-} from "@chakra-ui/react"
+import { Box, Card, SimpleGrid, Skeleton } from "@chakra-ui/react"
 
 const PendingItems = () => (
   <Box mt={8}>

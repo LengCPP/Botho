@@ -11,17 +11,17 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { BsThreeDotsVertical } from "react-icons/bs"
 import { FaChevronLeft } from "react-icons/fa"
-import {
-  FiShare2,
-  FiUserCheck,
-  FiUserMinus,
-  FiUserPlus,
-} from "react-icons/fi"
+import { FiShare2, FiUserCheck, FiUserMinus, FiUserPlus } from "react-icons/fi"
 import { z } from "zod"
 
 import {
@@ -36,6 +36,7 @@ import { CompactItemCard } from "@/components/Items/CompactItemCard"
 import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
+import PendingItems from "@/components/Pending/PendingItems"
 import UserInformation from "@/components/UserSettings/UserInformation"
 import UserProfilePicture from "@/components/UserSettings/UserProfilePicture"
 import { useColorModeValue } from "@/components/ui/color-mode"
@@ -45,12 +46,6 @@ import {
   MenuRoot,
   MenuTrigger,
 } from "@/components/ui/menu"
-import {
-  PaginationItems,
-  PaginationNextTrigger,
-  PaginationPrevTrigger,
-  PaginationRoot,
-} from "@/components/ui/pagination"
 import type { UserPublicExtended } from "@/customTypes"
 import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
@@ -94,7 +89,6 @@ export const Route = createFileRoute("/_layout/users/$userId")({
 function UserProfilePage() {
   const { userId } = Route.useParams()
   const {
-    page,
     sort_by,
     sort_order,
     limit,
@@ -128,11 +122,6 @@ function UserProfilePage() {
     })
   }
 
-  const setPage = (page: number) =>
-    navigate({
-      search: (prev: any) => ({ ...prev, page }),
-    })
-
   const handleOpenCollection = (name: string) => {
     const params: any = {
       subject: undefined,
@@ -164,51 +153,74 @@ function UserProfilePage() {
   const isFriend = user?.friendship_status === "ACCEPTED"
   const canSeeAll = isFriend || currentUser?.is_superuser
 
-  const { data: items, isLoading: isLoadingItems } = useQuery({
+  const {
+    data: infiniteItems,
+    isLoading: isLoadingItems,
+    fetchNextPage: fetchNextItems,
+    hasNextPage: hasNextItems,
+    isFetchingNextPage: isFetchingNextItems,
+  } = useInfiniteQuery({
     queryKey: [
-      "items",
+      "userItemsInfinite",
       userId,
-      {
-        page,
-        sort_by,
-        sort_order,
-        limit,
-        category,
-        genre,
-        subject,
-        q,
-      },
+      { sort_by, sort_order, limit, category, genre, subject, author, q },
     ],
-    queryFn: () =>
+    queryFn: ({ pageParam = 0 }) =>
       ItemsService.readItems({
         ownerId: userId,
-        skip: (page - 1) * limit,
+        skip: pageParam as number,
         limit,
         sortBy: sort_by,
         sortOrder: sort_order,
         category,
         genre,
         subject,
+        author,
         q,
+        minimal: true,
       }),
-    placeholderData: (prevData) => prevData,
-    enabled: canSeeAll && (!!subject || display_type === "items"),
+    getNextPageParam: (last, all) => {
+      const loaded = all.length * limit
+      return loaded < last.count ? loaded : undefined
+    },
+    initialPageParam: 0,
+    enabled:
+      canSeeAll &&
+      (!!subject ||
+        !!author ||
+        !!category ||
+        !!genre ||
+        display_type === "items"),
   })
 
-  const { data: facets, isLoading: isLoadingFacets } = useQuery<{
-    data: any[]
-    count: number
-  }>({
-    queryKey: ["itemFacets", userId, organize_by, q, page],
-    queryFn: () =>
+  const {
+    data: infiniteFacets,
+    isLoading: isLoadingFacets,
+    fetchNextPage: fetchNextFacets,
+    hasNextPage: hasNextFacets,
+    isFetchingNextPage: isFetchingNextFacets,
+  } = useInfiniteQuery({
+    queryKey: ["itemFacetsInfinite", userId, organize_by, q],
+    queryFn: ({ pageParam = 0 }) =>
       ItemsService.readItemFacets({
         ownerId: userId,
         groupBy: organize_by,
-        q: q,
-        skip: (page - 1) * COLLECTIONS_LIMIT,
+        q,
+        skip: pageParam as number,
         limit: COLLECTIONS_LIMIT,
       }),
-    enabled: canSeeAll && display_type === "collections" && !subject,
+    getNextPageParam: (last: any, all) => {
+      const loaded = all.length * COLLECTIONS_LIMIT
+      return loaded < (last.count || 0) ? loaded : undefined
+    },
+    initialPageParam: 0,
+    enabled:
+      canSeeAll &&
+      display_type === "collections" &&
+      !subject &&
+      !author &&
+      !category &&
+      !genre,
   })
 
   const friendMutation = useMutation({
@@ -243,8 +255,18 @@ function UserProfilePage() {
     }
   }
 
-  const userItems = items?.data || []
-  const activeGroups = groupItems(userItems)
+  const allItems = useMemo(
+    () => (infiniteItems?.pages.flatMap((p) => p.data as any[]) || []) as any[],
+    [infiniteItems],
+  )
+  const allFacets = useMemo(
+    () => infiniteFacets?.pages.flatMap((p) => (p as any).data) || [],
+    [infiniteFacets],
+  )
+  const totalItemCount = (infiniteItems?.pages[0] as any)?.count || 0
+  const totalFacetCount = (infiniteFacets?.pages[0] as any)?.count || 0
+
+  const activeGroups = groupItems(allItems as any)
 
   const currentFilterValue = subject || author || genre || category
   const isDrillDown = !!currentFilterValue
@@ -336,9 +358,7 @@ function UserProfilePage() {
                     ? `Items with unspecified ${organize_by}`
                     : `Items in ${currentFilterValue}`
                   : "Item Collections"
-                : `Items (${
-                    user?.collection_index?.total ?? items?.count ?? 0
-                  })`}
+                : `Items (${user?.collection_index?.total ?? totalItemCount})`}
             </Heading>
 
             <ItemsViewOptions
@@ -386,9 +406,10 @@ function UserProfilePage() {
             />
           </Flex>
 
-          {isLoadingItems || isLoadingFacets ? (
-            <Text>Loading items...</Text>
-          ) : userItems.length === 0 && !(facets && facets.data && facets.data.length > 0) ? (
+          {(isLoadingItems && !allItems.length) ||
+          (isLoadingFacets && !allFacets.length) ? (
+            <PendingItems />
+          ) : allItems.length === 0 && !allFacets.length ? (
             <Text color="gray.500">No items found.</Text>
           ) : (
             <>
@@ -414,26 +435,26 @@ function UserProfilePage() {
 
               {/* Render Collections Grid */}
               {display_type === "collections" && !isDrillDown ? (
-                <>
+                <VStack align="stretch" gap={8}>
                   <CollectionGrid
-                    items={facets?.data || []}
+                    items={allFacets}
                     type={organize_by}
                     onOpen={handleOpenCollection}
                   />
-                  <Flex justifyContent="center" mt={8}>
-                    <PaginationRoot
-                      count={facets?.count ?? 0}
-                      pageSize={COLLECTIONS_LIMIT}
-                      onPageChange={({ page }) => setPage(page)}
-                    >
-                      <Flex>
-                        <PaginationPrevTrigger />
-                        <PaginationItems />
-                        <PaginationNextTrigger />
-                      </Flex>
-                    </PaginationRoot>
-                  </Flex>
-                </>
+                  {hasNextFacets && (
+                    <Flex justify="center" mt={8}>
+                      <Button
+                        variant="ghost"
+                        colorPalette="accent"
+                        onClick={() => fetchNextFacets()}
+                        loading={isFetchingNextFacets}
+                      >
+                        Load More Collections (Showing {allFacets.length} of{" "}
+                        {totalFacetCount})
+                      </Button>
+                    </Flex>
+                  )}
+                </VStack>
               ) : (
                 /* Render Items Grid */
                 <VStack align="stretch" gap={8}>
@@ -462,19 +483,19 @@ function UserProfilePage() {
                     })}
                   </SimpleGrid>
 
-                  <Flex justifyContent="center">
-                    <PaginationRoot
-                      count={items?.count || 0}
-                      pageSize={limit}
-                      onPageChange={({ page }) => setPage(page)}
-                    >
-                      <Flex>
-                        <PaginationPrevTrigger />
-                        <PaginationItems />
-                        <PaginationNextTrigger />
-                      </Flex>
-                    </PaginationRoot>
-                  </Flex>
+                  {hasNextItems && (
+                    <Flex justify="center" mt={8}>
+                      <Button
+                        variant="ghost"
+                        colorPalette="accent"
+                        onClick={() => fetchNextItems()}
+                        loading={isFetchingNextItems}
+                      >
+                        Load More Items (Showing {allItems.length} of{" "}
+                        {totalItemCount})
+                      </Button>
+                    </Flex>
+                  )}
                 </VStack>
               )}
             </>

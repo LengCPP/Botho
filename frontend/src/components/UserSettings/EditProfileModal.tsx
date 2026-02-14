@@ -123,7 +123,7 @@ const EditProfileModal = ({ user, isOpen, onClose }: EditProfileModalProps) => {
             <Field
               label="Name"
               invalid={!!errors.full_name}
-              errorText={errors.full_name?.message}
+              errorText={errors.full_name?.message as string}
             >
               <Input
                 id="full_name"
@@ -134,7 +134,7 @@ const EditProfileModal = ({ user, isOpen, onClose }: EditProfileModalProps) => {
             <Field
               label="Alias"
               invalid={!!errors.alias}
-              errorText={errors.alias?.message}
+              errorText={errors.alias?.message as string}
             >
               <Input
                 id="alias"
@@ -145,7 +145,7 @@ const EditProfileModal = ({ user, isOpen, onClose }: EditProfileModalProps) => {
             <Field
               label="Bio"
               invalid={!!errors.bio}
-              errorText={errors.bio?.message}
+              errorText={errors.bio?.message as string}
             >
               <Textarea
                 id="bio"
@@ -159,7 +159,7 @@ const EditProfileModal = ({ user, isOpen, onClose }: EditProfileModalProps) => {
             <Field
               label="Email"
               invalid={!!errors.email}
-              errorText={errors.email?.message}
+              errorText={errors.email?.message as string}
             >
               <Input
                 id="email"

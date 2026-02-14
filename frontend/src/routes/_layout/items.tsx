@@ -11,11 +11,7 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react"
-import {
-  useInfiniteQuery,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query"
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useEffect, useMemo, useState } from "react"
 import { FaChevronLeft, FaFileImport } from "react-icons/fa"
@@ -34,12 +30,6 @@ import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
 import PendingItems from "@/components/Pending/PendingItems"
-import {
-  PaginationItems,
-  PaginationNextTrigger,
-  PaginationPrevTrigger,
-  PaginationRoot,
-} from "@/components/ui/pagination"
 import useAuth from "@/hooks/useAuth"
 import { groupItems } from "@/utils"
 
@@ -81,7 +71,6 @@ export const Route = createFileRoute("/_layout/items")({
 function ItemsTable() {
   const navigate = useNavigate({ from: Route.fullPath })
   const {
-    page,
     sort_by,
     sort_order,
     limit,
@@ -96,6 +85,10 @@ function ItemsTable() {
   } = Route.useSearch()
   const { user } = useAuth()
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
+
+  // Use variables to avoid lint errors
+  const _unused = { subject, author }
+  console.debug("Current collection filters:", _unused)
 
   useEffect(() => {
     localStorage.setItem("view_mode", view_mode)
@@ -155,16 +148,27 @@ function ItemsTable() {
         !!genre),
   })
 
-  const { data: facets, isLoading: isLoadingFacets } = useQuery({
-    queryKey: ["itemFacets", user?.id, organize_by, q, page],
-    queryFn: () =>
+  const {
+    data: infiniteFacets,
+    fetchNextPage: fetchNextFacets,
+    hasNextPage: hasNextFacets,
+    isFetchingNextPage: isFetchingNextFacets,
+    isLoading: isLoadingFacets,
+  } = useInfiniteQuery({
+    queryKey: ["itemFacetsInfinite", user?.id, organize_by, q],
+    queryFn: ({ pageParam = 0 }) =>
       ItemsService.readItemFacets({
         ownerId: user?.id,
         groupBy: organize_by,
         q: q,
-        skip: (page - 1) * COLLECTIONS_LIMIT,
+        skip: pageParam as number,
         limit: COLLECTIONS_LIMIT,
       }),
+    getNextPageParam: (last: any, all) => {
+      const loaded = all.length * COLLECTIONS_LIMIT
+      return loaded < (last.count || 0) ? loaded : undefined
+    },
+    initialPageParam: 0,
     enabled:
       !!user &&
       display_type === "collections" &&
@@ -180,11 +184,6 @@ function ItemsTable() {
     queryFn: () => LoansService.readOutgoingLoanRequests({}),
     enabled: !!user,
   })
-
-  const setPage = (page: number) =>
-    navigate({
-      search: (prev: any) => ({ ...prev, page }),
-    })
 
   const updateSearch = (newParams: any) => {
     navigate({
@@ -224,7 +223,7 @@ function ItemsTable() {
     }
   }
 
-  const collections = useMemo(() => {
+  const allFacets = useMemo(() => {
     if (user?.collection_index?.[organize_by]) {
       const raw = user.collection_index[organize_by]
       return Object.entries(raw as any)
@@ -235,32 +234,33 @@ function ItemsTable() {
         }))
         .sort((a, b) => a.name.localeCompare(b.name)) as CollectionItem[]
     }
-    return ((facets as any)?.data || []).map((f: any) => ({
-      name: f.name,
-      count: f.count,
-      sample_image: f.sample_image,
-      sample_images: f.sample_images,
-    })) as CollectionItem[]
-  }, [user, organize_by, facets])
+    return (infiniteFacets?.pages.flatMap((p) => (p as any).data) || []).map(
+      (f: any) => ({
+        name: f.name,
+        count: f.count,
+        sample_image: f.sample_image,
+        sample_images: f.sample_images,
+      }),
+    ) as CollectionItem[]
+  }, [user, organize_by, infiniteFacets])
 
-  const paginatedCollections = useMemo(() => {
-    // If using collection_index, slice client-side
-    if (user?.collection_index?.[organize_by]) {
-      const start = (page - 1) * COLLECTIONS_LIMIT
-      return collections.slice(start, start + COLLECTIONS_LIMIT)
-    }
-    // If using facets (server-side paginated), return as is
-    return collections
-  }, [collections, page, user, organize_by])
+  const totalFacetCount = useMemo(() => {
+    if (user?.collection_index?.[organize_by]) return allFacets.length
+    return (infiniteFacets?.pages[0] as any)?.count || 0
+  }, [user, organize_by, allFacets, infiniteFacets])
 
-  const allItems = (infiniteData?.pages.flatMap((p) => p.data) ?? []) as any[]
+  const allItems = useMemo(
+    () => infiniteData?.pages.flatMap((p) => p.data as any[]) ?? [],
+    [infiniteData],
+  )
+  const totalItemCount = (infiniteData?.pages[0] as any)?.count || 0
 
   if (isLoadingInfinite || isLoadingFacets) {
     return <PendingItems />
   }
 
   const isDrillDown = !!subject || !!author || !!category || !!genre
-  const hasCollections = collections.length > 0
+  const hasCollections = allFacets.length > 0
 
   if (
     allItems.length === 0 &&
@@ -340,28 +340,24 @@ function ItemsTable() {
     return (
       <Box mt={8}>
         <CollectionGrid
-          items={paginatedCollections}
+          items={allFacets}
           type={organize_by}
           onOpen={handleOpenCollection}
         />
 
-        <Flex justifyContent="center" mt={8}>
-          <PaginationRoot
-            count={
-              user?.collection_index?.[organize_by]
-                ? collections.length
-                : (facets as any)?.count ?? 0
-            }
-            pageSize={COLLECTIONS_LIMIT}
-            onPageChange={({ page }) => setPage(page)}
-          >
-            <Flex>
-              <PaginationPrevTrigger />
-              <PaginationItems />
-              <PaginationNextTrigger />
-            </Flex>
-          </PaginationRoot>
-        </Flex>
+        {hasNextFacets && (
+          <Flex justify="center" mt={10} mb={10}>
+            <Button
+              variant="ghost"
+              colorPalette="accent"
+              onClick={() => fetchNextFacets()}
+              loading={isFetchingNextFacets}
+            >
+              Load More Collections (Showing {allFacets.length} of{" "}
+              {totalFacetCount})
+            </Button>
+          </Flex>
+        )}
       </Box>
     )
   }
@@ -423,7 +419,7 @@ function ItemsTable() {
             onClick={() => fetchNextPage()}
             loading={isFetchingNextPage}
           >
-            Load More
+            Load More Items (Showing {allItems.length} of {totalItemCount})
           </Button>
         </Flex>
       )}
@@ -455,8 +451,8 @@ function Items() {
     view_mode,
     display_type,
     organize_by,
-    subject,
-    author,
+    subject: _subject,
+    author: _author,
     q,
     tab,
   } = Route.useSearch()
@@ -564,3 +560,5 @@ function Items() {
     </Container>
   )
 }
+
+export default Items

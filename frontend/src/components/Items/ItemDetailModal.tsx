@@ -1,22 +1,17 @@
 import {
   Badge,
   Box,
-  Button,
   Flex,
   HStack,
   Heading,
-  Input,
   Separator,
   Text,
-  Textarea,
   VStack,
 } from "@chakra-ui/react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { FaStar } from "react-icons/fa"
 
 import { type ItemPublic, ItemsService } from "@/client"
-import { useColorModeValue } from "@/components/ui/color-mode"
 import {
   DialogBody,
   DialogCloseTrigger,
@@ -25,9 +20,6 @@ import {
   DialogRoot,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Field } from "@/components/ui/field"
-import useAuth from "@/hooks/useAuth"
-import useCustomToast from "@/hooks/useCustomToast"
 
 interface ItemDetailModalProps {
   item: ItemPublic | null

@@ -654,7 +654,10 @@ export const ImportItems = ({
                           {item.status === "FAILED" && (
                             <HStack color="red.500" gap={1}>
                               <Icon as={FaExclamationTriangle} />
-                              <Text fontSize="xs" title={item.error_log || undefined}>
+                              <Text
+                                fontSize="xs"
+                                title={item.error_log || undefined}
+                              >
                                 Failed
                               </Text>
                             </HStack>

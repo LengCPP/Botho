@@ -14,7 +14,7 @@ import {
   VStack,
 } from "@chakra-ui/react"
 import { useQuery } from "@tanstack/react-query"
-import { FiAlertCircle, FiAward, FiStar, FiTrendingUp } from "react-icons/fi"
+import { FiAlertCircle, FiAward, FiTrendingUp } from "react-icons/fi"
 import MyReviewsList from "./MyReviewsList"
 
 const ReputationDashboard = () => {
@@ -181,12 +181,12 @@ const ReputationDashboard = () => {
             color="gray.600"
             lineHeight="tall"
           >
-            {reputation.ai_honor_summary ||
+            {(reputation as any).ai_honor_summary ||
               "We're still gathering feedback to generate your personal summary. Keep engaging with the community to see your mirror!"}
           </Text>
 
-          {reputation.ai_improvement_tips &&
-            reputation.ai_improvement_tips.length > 0 && (
+          {(reputation as any).ai_improvement_tips &&
+            (reputation as any).ai_improvement_tips.length > 0 && (
               <>
                 <Separator />
                 <VStack align="start" gap={2} width="full">
@@ -196,21 +196,23 @@ const ReputationDashboard = () => {
                       Path to Growth
                     </Text>
                   </HStack>
-                  {reputation.ai_improvement_tips.map((tip, idx) => (
-                    <HStack
-                      key={idx}
-                      align="start"
-                      gap={3}
-                      p={2}
-                      bg="gray.50"
-                      borderRadius="md"
-                      width="full"
-                    >
-                      <Text fontSize="xs" color="gray.700">
-                        • {tip}
-                      </Text>
-                    </HStack>
-                  ))}
+                  {(reputation as any).ai_improvement_tips.map(
+                    (tip: string, idx: number) => (
+                      <HStack
+                        key={idx}
+                        align="start"
+                        gap={3}
+                        p={2}
+                        bg="gray.50"
+                        borderRadius="md"
+                        width="full"
+                      >
+                        <Text fontSize="xs" color="gray.700">
+                          • {tip}
+                        </Text>
+                      </HStack>
+                    ),
+                  )}
                 </VStack>
               </>
             )}

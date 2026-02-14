@@ -39,7 +39,6 @@ import {
   DialogBody,
   DialogCloseTrigger,
   DialogContent,
-  DialogFooter,
   DialogHeader,
   DialogRoot,
   DialogTrigger,
@@ -71,7 +70,6 @@ const MAX_FILE_SIZE = 1 * 1024 * 1024 // 1MB
 
 const AddItem = ({
   communityId,
-  collectionId,
   isAdmin,
 }: {
   communityId?: string
@@ -214,7 +212,7 @@ const AddItem = ({
 
       return newItem
     },
-    onSuccess: (newItem) => {
+    onSuccess: (_newItem) => {
       showSuccessToast(
         communityId
           ? "Community item created successfully."
@@ -265,12 +263,12 @@ const AddItem = ({
     })
   }
 
-  const filteredItems = myItems?.data.filter((item) => {
+  const filteredItems = myItems?.data.filter((item: any) => {
     const matchesSearch = item.title
       .toLowerCase()
       .includes(searchQuery.toLowerCase())
     const alreadyInCommunity = item.communities?.some(
-      (c) => c.id === communityId,
+      (c: any) => c.id === communityId,
     )
     return matchesSearch && !alreadyInCommunity
   })

@@ -8,7 +8,7 @@ export interface BookResult {
   isbn: string
   thumbnail: string
   categories: string[]
-  source?: "local" | "google"
+  source?: "local" | "google" | "openlibrary"
 }
 
 const FALLBACK_BOOK_COVER =

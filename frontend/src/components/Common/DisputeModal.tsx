@@ -31,7 +31,7 @@ interface DisputeModalProps {
 const DisputeModal = ({ review, isOpen, onClose }: DisputeModalProps) => {
   const [reason, setReason] = useState("")
   const queryClient = useQueryClient()
-  const showToast = useCustomToast()
+  const { showSuccessToast, showErrorToast } = useCustomToast()
   const id = useId()
 
   const mutation = useMutation({
@@ -41,22 +41,20 @@ const DisputeModal = ({ review, isOpen, onClose }: DisputeModalProps) => {
         requestBody: data,
       }),
     onSuccess: () => {
-      showToast("Dispute submitted successfully", "success")
+      showSuccessToast("Dispute submitted successfully")
       queryClient.invalidateQueries({ queryKey: ["reviews", "me"] })
       onClose()
     },
     onError: (err: ApiError) => {
-      const errDetail = (err.body as any)?.detail
-      showToast("Failed to submit dispute", "error", errDetail)
+      const errDetail = (err.body as any)?.detail || "Unknown error"
+      showErrorToast(`Failed to submit dispute: ${errDetail}`)
     },
   })
 
   const handleSubmit = () => {
     if (reason.length < 10) {
-      showToast(
-        "Reason is too short",
-        "error",
-        "Please provide at least 10 characters.",
+      showErrorToast(
+        "Reason is too short. Please provide at least 10 characters.",
       )
       return
     }

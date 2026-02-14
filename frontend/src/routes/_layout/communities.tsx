@@ -1,14 +1,14 @@
 import {
+  Button,
   Container,
   EmptyState,
   Flex,
   Grid,
   Heading,
-  SimpleGrid,
   Text,
   VStack,
 } from "@chakra-ui/react"
-import { useQuery } from "@tanstack/react-query"
+import { useInfiniteQuery } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
 import { FiGlobe } from "react-icons/fi"
 import { z } from "zod"
@@ -21,18 +21,32 @@ const communitiesSearchSchema = z.object({
   page: z.number().catch(1),
 })
 
+const PER_PAGE = 12
+
 export const Route = createFileRoute("/_layout/communities")({
   component: Communities,
   validateSearch: (search) => communitiesSearchSchema.parse(search),
 })
 
 function Communities() {
-  const { data, isLoading } = useQuery({
-    queryKey: ["communities"],
-    queryFn: () => CommunitiesService.readCommunities({ memberOnly: true }),
-  })
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useInfiniteQuery({
+      queryKey: ["communitiesInfinite"],
+      queryFn: ({ pageParam = 0 }) =>
+        CommunitiesService.readCommunities({
+          memberOnly: true,
+          skip: pageParam as number,
+          limit: PER_PAGE,
+        }),
+      getNextPageParam: (lastPage, allPages) => {
+        const loadedCount = allPages.length * PER_PAGE
+        return loadedCount < lastPage.count ? loadedCount : undefined
+      },
+      initialPageParam: 0,
+    })
 
-  const communities = data?.data ?? []
+  const allCommunities = data?.pages.flatMap((p) => p.data) || []
+  const totalCount = data?.pages[0]?.count || 0
 
   return (
     <Container maxW="full">
@@ -43,7 +57,7 @@ function Communities() {
 
       {isLoading ? (
         <Text mt={6}>Loading...</Text>
-      ) : communities.length === 0 ? (
+      ) : allCommunities.length === 0 ? (
         <EmptyState.Root mt={6}>
           <EmptyState.Content>
             <EmptyState.Indicator>
@@ -58,15 +72,27 @@ function Communities() {
           </EmptyState.Content>
         </EmptyState.Root>
       ) : (
-        <Grid
-          templateColumns="repeat(auto-fill, minmax(300px, 1fr))"
-          gap={6}
-          mt={6}
-        >
-          {communities.map((community) => (
-            <CommunityCard key={community.id} community={community} />
-          ))}
-        </Grid>
+        <VStack align="stretch" gap={8} mt={6}>
+          <Grid templateColumns="repeat(auto-fill, minmax(300px, 1fr))" gap={6}>
+            {allCommunities.map((community) => (
+              <CommunityCard key={community.id} community={community} />
+            ))}
+          </Grid>
+
+          {hasNextPage && (
+            <Flex justify="center" mb={10}>
+              <Button
+                variant="ghost"
+                colorPalette="accent"
+                onClick={() => fetchNextPage()}
+                loading={isFetchingNextPage}
+              >
+                Load More Communities (Showing {allCommunities.length} of{" "}
+                {totalCount})
+              </Button>
+            </Flex>
+          )}
+        </VStack>
       )}
     </Container>
   )

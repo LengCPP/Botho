@@ -86,7 +86,7 @@ const MyReviewsList = () => {
                     {format(new Date(review.created_at), "MMM d, yyyy")}
                   </Text>
                 </HStack>
-                {review.is_disputed ? (
+                {(review as any).is_disputed ? (
                   <Badge colorPalette="orange" variant="solid">
                     Disputed
                   </Badge>
@@ -149,7 +149,7 @@ const MyReviewsList = () => {
                 </Box>
               )}
 
-              {review.is_disputed && (
+              {(review as any).is_disputed && (
                 <HStack
                   gap={2}
                   bg="orange.50"

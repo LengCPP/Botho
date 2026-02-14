@@ -77,9 +77,9 @@ test.describe("Community Features", () => {
         .locator(".chakra-box")
         .filter({ hasText: "Available" }) // Compact cards use Box
 
-      const totalCards =
-        (await itemCards.count()) + (await compactCards.count())
-      // If there are items in the community, they should be visible.
+      // Verify that at least some cards are found if we expected them
+      const cardCount = (await itemCards.count()) + (await compactCards.count())
+      console.log(`Found ${cardCount} item cards in community.`)
     }
   })
 

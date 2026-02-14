@@ -119,7 +119,7 @@ export const CompactItemCard = ({
     if (isPending) {
       return (
         <Button
-          size="2xs"
+          size="xs"
           colorPalette="red"
           variant="subtle"
           onClick={(e) => {
@@ -137,7 +137,7 @@ export const CompactItemCard = ({
       return (
         <HStack gap={1}>
           <Button
-            size="2xs"
+            size="xs"
             colorPalette="main"
             onClick={(e) => {
               e.stopPropagation()
@@ -147,7 +147,7 @@ export const CompactItemCard = ({
             <FiClock />
           </Button>
           <Button
-            size="2xs"
+            size="xs"
             variant="outline"
             onClick={(e) => {
               e.stopPropagation()
@@ -171,7 +171,7 @@ export const CompactItemCard = ({
 
     return (
       <Button
-        size="2xs"
+        size="xs"
         colorPalette="accent"
         onClick={(e) => {
           e.stopPropagation()
@@ -232,7 +232,7 @@ export const CompactItemCard = ({
                 bottom={0}
                 right={0}
                 colorPalette="accent"
-                size="2xs"
+                size="xs"
                 borderRadius="xs"
               >
                 {items.length}
@@ -246,7 +246,7 @@ export const CompactItemCard = ({
                 {item.title}
               </Text>
               {category && (
-                <Badge size="2xs" colorPalette="blue" variant="subtle">
+                <Badge size="xs" colorPalette="blue" variant="subtle">
                   {category}
                 </Badge>
               )}
@@ -267,7 +267,7 @@ export const CompactItemCard = ({
               {isGrouped && (
                 <IconButton
                   aria-label="Next Item"
-                  size="2xs"
+                  size="xs"
                   variant="ghost"
                   onClick={(e) => {
                     e.stopPropagation()

@@ -10,7 +10,7 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react"
-import { type ReactNode, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import {
   FaBook,
   FaFilter,

@@ -1,10 +1,4 @@
-import {
-  CommunitiesService,
-  type CommunityPublic,
-  type ItemPublic,
-  ItemsService,
-} from "@/client"
-import useAuth from "@/hooks/useAuth"
+import { CommunitiesService, type ItemPublic, ItemsService } from "@/client"
 import useCustomToast from "@/hooks/useCustomToast"
 import {
   Button,
@@ -15,14 +9,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { BsThreeDotsVertical } from "react-icons/bs"
-import {
-  FiBookOpen,
-  FiCopy,
-  FiEye,
-  FiHeart,
-  FiMinusCircle,
-  FiTrash2,
-} from "react-icons/fi"
+import { FiCopy, FiEye, FiHeart, FiMinusCircle, FiTrash2 } from "react-icons/fi"
 import DeleteItem from "../Items/DeleteItem"
 import EditItem from "../Items/EditItem"
 import { LoanRequestModal } from "../Items/LoanRequestModal"
@@ -32,8 +19,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogRoot,
-  DialogTitle,
-  DialogTrigger,
 } from "../ui/dialog"
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from "../ui/menu"
 import ConfirmationModal from "./ConfirmationModal"
@@ -56,7 +41,6 @@ export const ItemActionsMenu = ({
   onShowDetails,
 }: ItemActionsMenuProps) => {
   const queryClient = useQueryClient()
-  const { user: currentUser } = useAuth()
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const [confirmationType, setConfirmationType] = useState<
     "donate" | "removeCommunity" | "removeCollection" | null
@@ -341,15 +325,13 @@ export const ItemActionsMenu = ({
           placement="center"
           size="xs"
         >
-          <DialogTrigger asChild>
+          <MenuTrigger asChild>
             <IconButton variant="ghost" color="inherit">
               <BsThreeDotsVertical />
             </IconButton>
-          </DialogTrigger>
+          </MenuTrigger>
           <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Item Actions</DialogTitle>
-            </DialogHeader>
+            <DialogHeader>Item Actions</DialogHeader>
             <DialogBody pb={6}>
               <VStack gap={2} align="stretch">
                 {actions}

@@ -16,7 +16,12 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import {
@@ -42,12 +47,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Field } from "@/components/ui/field"
-import {
-  PaginationItems,
-  PaginationNextTrigger,
-  PaginationPrevTrigger,
-  PaginationRoot,
-} from "@/components/ui/pagination.tsx"
 import { Radio, RadioGroup } from "@/components/ui/radio"
 import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
@@ -58,22 +57,7 @@ const archiveSearchSchema = z.object({
   filter_missing: z.string().optional(),
 })
 
-const PER_PAGE = 10
-
-function getBooksQueryOptions({
-  page,
-  filter_missing,
-}: { page: number; filter_missing?: string }) {
-  return {
-    queryFn: () =>
-      ItemsService.listBookRegistry({
-        skip: (page - 1) * PER_PAGE,
-        limit: PER_PAGE,
-        filterMissing: filter_missing === "all" ? undefined : filter_missing,
-      }),
-    queryKey: ["book-archive", { page, filter_missing }],
-  }
-}
+const PER_PAGE = 100
 
 export const Route = createFileRoute("/_layout/book-archive")({
   component: BookArchive,
@@ -91,12 +75,28 @@ function BooksTable({
 }) {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
-  const navigate = useNavigate({ from: Route.fullPath })
-  const { page, filter_missing } = Route.useSearch()
+  const { filter_missing } = Route.useSearch()
 
-  const { data, isLoading, isPlaceholderData } = useQuery({
-    ...getBooksQueryOptions({ page, filter_missing }),
-    placeholderData: (prevData) => prevData,
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    isPlaceholderData,
+  } = useInfiniteQuery({
+    queryKey: ["book-archive-infinite", { filter_missing }],
+    queryFn: ({ pageParam = 0 }) =>
+      ItemsService.listBookRegistry({
+        skip: pageParam as number,
+        limit: PER_PAGE,
+        filterMissing: filter_missing === "all" ? undefined : filter_missing,
+      }),
+    getNextPageParam: (lastPage, allPages) => {
+      const loadedCount = allPages.length * PER_PAGE
+      return loadedCount < lastPage.count ? loadedCount : undefined
+    },
+    initialPageParam: 0,
   })
 
   // Listen for WebSocket updates
@@ -106,7 +106,7 @@ function BooksTable({
       if (message.type === "BOOK_ARCHIVE_UPDATED") {
         const action = message.action || "enriched"
         showSuccessToast(`Archive updated: ${message.count} books ${action}`)
-        queryClient.invalidateQueries({ queryKey: ["book-archive"] })
+        queryClient.invalidateQueries({ queryKey: ["book-archive-infinite"] })
       }
     }
 
@@ -119,25 +119,20 @@ function BooksTable({
     }
   }, [queryClient, showSuccessToast])
 
-  const books = data?.data
-  const totalCount = data?.count || 0
+  const allBooks = data?.pages.flatMap((p) => p.data) || []
+  const totalCount = data?.pages[0]?.count || 0
 
   const deleteMutation = useMutation({
     mutationFn: ({ author, title }: { author: string; title: string }) =>
       ItemsService.deleteWorkMetadata({ author, title }),
     onSuccess: () => {
       showSuccessToast("Book deleted from registry")
-      queryClient.invalidateQueries({ queryKey: ["book-archive"] })
+      queryClient.invalidateQueries({ queryKey: ["book-archive-infinite"] })
     },
     onError: () => {
       showErrorToast("Failed to delete book")
     },
   })
-
-  const setPage = (page: number) =>
-    navigate({
-      search: (prev: any) => ({ ...prev, page }),
-    })
 
   const handleDelete = (author: string, title: string) => {
     if (
@@ -148,33 +143,28 @@ function BooksTable({
   }
 
   const handleSelectAll = (checked: boolean) => {
-    if (checked && books) {
+    if (checked && allBooks) {
       const newSelection = [...selectedBooks]
-      for (const book of books) {
+      for (const book of allBooks) {
         if (
           !newSelection.some(
             (b) => b.author === book.author && b.title === book.title,
           )
         ) {
-          newSelection.push({ author: book.author, title: book.title, isbn: book.isbn })
+          newSelection.push({
+            author: book.author,
+            title: book.title,
+            isbn: book.isbn,
+          })
         }
       }
       onSelectionChange(newSelection)
-    } else if (books) {
-      const newSelection = selectedBooks.filter(
-        (b) =>
-          !books.some(
-            (book) => book.author === b.author && book.title === b.title,
-          ),
-      )
-      onSelectionChange(newSelection)
+    } else {
+      onSelectionChange([])
     }
   }
 
-  const handleSelectRow = (
-    book: SelectedBook,
-    checked: boolean,
-  ) => {
+  const handleSelectRow = (book: SelectedBook, checked: boolean) => {
     if (checked) {
       onSelectionChange([...selectedBooks, book])
     } else {
@@ -190,8 +180,8 @@ function BooksTable({
     return <Text p={8}>Loading archive...</Text>
   }
 
-  const allSelected = books?.length
-    ? books.every((book) =>
+  const allSelected = allBooks.length
+    ? allBooks.every((book) =>
         selectedBooks.some(
           (b) => b.author === book.author && b.title === book.title,
         ),
@@ -218,7 +208,7 @@ function BooksTable({
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {books?.map((book) => {
+          {allBooks.map((book) => {
             const isSelected = selectedBooks.some(
               (b) => b.author === book.author && b.title === book.title,
             )
@@ -234,7 +224,11 @@ function BooksTable({
                     checked={isSelected}
                     onCheckedChange={(e) =>
                       handleSelectRow(
-                        { author: book.author, title: book.title, isbn: book.isbn },
+                        {
+                          author: book.author,
+                          title: book.title,
+                          isbn: book.isbn,
+                        },
                         !!e.checked,
                       )
                     }
@@ -334,20 +328,23 @@ function BooksTable({
         </Table.Body>
       </Table.Root>
 
-      {totalCount > PER_PAGE && (
-        <Flex justifyContent="flex-end">
-          <PaginationRoot
-            count={totalCount}
-            pageSize={PER_PAGE}
-            onPageChange={({ page }) => setPage(page)}
+      {hasNextPage && (
+        <Flex justify="center" mt={4} mb={8}>
+          <Button
+            variant="outline"
+            colorPalette="accent"
+            onClick={() => fetchNextPage()}
+            loading={isFetchingNextPage}
           >
-            <Flex>
-              <PaginationPrevTrigger />
-              <PaginationItems />
-              <PaginationNextTrigger />
-            </Flex>
-          </PaginationRoot>
+            Load More (Showing {allBooks.length} of {totalCount})
+          </Button>
         </Flex>
+      )}
+
+      {!hasNextPage && allBooks.length > 0 && (
+        <Text textAlign="center" color="gray.500" py={4}>
+          You've reached the end of the archive.
+        </Text>
       )}
     </VStack>
   )
@@ -356,13 +353,22 @@ function BooksTable({
 function BookArchive() {
   const queryClient = useQueryClient()
   const navigate = useNavigate({ from: Route.fullPath })
-  const { page, tab, filter_missing } = Route.useSearch()
-  const { data } = useQuery(getBooksQueryOptions({ page, filter_missing }))
-  const totalCount = data?.count || 0
+  const { tab, filter_missing } = Route.useSearch()
   const { user } = useAuth()
   const [selectedBooks, setSelectedBooks] = useState<
     { author: string; title: string }[]
   >([])
+
+  const { data: firstPage } = useQuery({
+    queryKey: ["book-archive-infinite", { filter_missing }],
+    queryFn: () =>
+      ItemsService.listBookRegistry({
+        skip: 0,
+        limit: 1,
+        filterMissing: filter_missing === "all" ? undefined : filter_missing,
+      }),
+  })
+  const totalCount = firstPage?.count || 0
 
   // Enrichment Options State
   const [enrichFields, setEnrichFields] = useState<string[]>([

@@ -182,7 +182,7 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
             right={0}
             mt={1}
             bg="white"
-            _dark={{ bg: "gray.800" }}
+            _dark={{ bg: "gray.800", borderColor: "gray.700" }}
             borderRadius="md"
             boxShadow="md"
             zIndex={1000}
@@ -190,7 +190,6 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
             overflowY="auto"
             borderWidth="1px"
             borderColor="gray.200"
-            _darkBorder={{ borderColor: "gray.700" }}
           >
             {isLoading && !interests.length ? (
               <Box p={4} textAlign="center">

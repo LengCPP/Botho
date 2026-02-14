@@ -74,9 +74,9 @@ function VerifyEmail() {
           {errDetail}
         </Text>
         <Text>The link might be invalid or expired.</Text>
-        <Button as={Link} to="/login" variant="outline">
-          Back to Login
-        </Button>
+        <Link to="/login">
+          <Button variant="outline">Back to Login</Button>
+        </Link>
       </VStack>
     )
   }

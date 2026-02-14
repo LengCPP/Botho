@@ -17,7 +17,7 @@ export const Route = createFileRoute("/signup-success")({
 
 function SignupSuccess() {
   const { email } = Route.useSearch()
-  const showToast = useCustomToast()
+  const { showSuccessToast, showErrorToast } = useCustomToast()
   const [cooldown, setCooldown] = useState(0)
 
   useEffect(() => {
@@ -34,16 +34,12 @@ function SignupSuccess() {
     mutationFn: (email: string) =>
       LoginService.resendVerificationEmail({ email }),
     onSuccess: () => {
-      showToast(
-        "Email sent",
-        "Verification email resent successfully.",
-        "success",
-      )
+      showSuccessToast("Verification email resent successfully.")
       setCooldown(60)
     },
     onError: (err: any) => {
       const errDetail = err.body?.detail || "Something went wrong"
-      showToast("Error", errDetail, "error")
+      showErrorToast(errDetail)
     },
   })
 
@@ -68,8 +64,8 @@ function SignupSuccess() {
         <Button
           colorPalette="accent"
           onClick={handleResend}
-          isLoading={mutation.isPending}
-          isDisabled={cooldown > 0 || !email}
+          loading={mutation.isPending}
+          disabled={cooldown > 0 || !email}
           width="full"
         >
           {cooldown > 0

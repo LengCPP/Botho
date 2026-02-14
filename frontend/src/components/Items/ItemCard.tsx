@@ -26,7 +26,6 @@ import {
 } from "@chakra-ui/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
-import { format } from "date-fns"
 import type React from "react"
 import { useState } from "react"
 import {
@@ -71,7 +70,6 @@ const ItemCard = ({
   loan: loanProp,
   communityId,
   isAdmin,
-  displayOwnerId,
   onRemoveFromCollection,
   onShowDetails,
   onReview,
@@ -91,7 +89,6 @@ const ItemCard = ({
   const items = Array.isArray(itemProp) ? itemProp : [itemProp]
   const isGrouped = items.length > 1
   const item = items[itemIndex]
-  const availableCount = items.filter((i) => i.is_available).length
 
   // Fetch user's outgoing loans to check status
   const { data: outgoingLoans } = useQuery({
@@ -241,10 +238,6 @@ const ItemCard = ({
     ["ACTIVE", "RETURN_PENDING"].includes(currentLoan.status)
 
   const isBook = item.item_type === "book"
-  const extraData = (item as any).extra_data || {
-    category: (item as any).category,
-    genre: (item as any).genre,
-  }
 
   const { data: community } = useQuery({
     queryKey: ["community", communityId],
@@ -637,14 +630,7 @@ const ItemCard = ({
               </Flex>
 
               {showAdditionalInfo ? (
-                <VStack
-                  align="start"
-                  gap={3}
-                  mb={3}
-                  flex="1"
-                  overflowY="auto"
-                  animate={{ opacity: [0, 1] }}
-                >
+                <VStack align="start" gap={3} mb={3} flex="1" overflowY="auto">
                   <ItemExtendedInfo item={item} isOwner={isOwner} />
                 </VStack>
               ) : (
@@ -708,7 +694,7 @@ const ItemCard = ({
                       </Text>
                       <IconButton
                         aria-label="Next Owner"
-                        size="2xs"
+                        size="xs"
                         variant="ghost"
                         onClick={handleNextItem}
                       >

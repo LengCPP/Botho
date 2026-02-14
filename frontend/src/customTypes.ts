@@ -45,6 +45,12 @@ export interface UserProfilePublicExtended
   image_url?: string | null
 }
 
+export interface UserUpdateMe {
+  full_name?: string
+  email?: string
+  password?: string
+}
+
 export interface UserPublicExtended extends Omit<UserPublic, "profile"> {
   profile?: UserProfilePublicExtended
   settings?: UserSettingsSchema

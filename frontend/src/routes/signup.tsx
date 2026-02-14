@@ -10,7 +10,6 @@ import { FiLock, FiUser } from "react-icons/fi"
 
 import type { UserRegister } from "@/client"
 import { Button } from "@/components/ui/button"
-import { useColorMode } from "@/components/ui/color-mode"
 import { Field } from "@/components/ui/field"
 import { InputGroup } from "@/components/ui/input-group"
 import { PasswordInput } from "@/components/ui/password-input"
@@ -39,7 +38,6 @@ interface UserRegisterForm extends UserRegister {
 }
 
 function SignUp() {
-  const { colorMode } = useColorMode()
   const { signUpMutation } = useAuth()
   const {
     register,

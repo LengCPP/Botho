@@ -1,4 +1,4 @@
-import { type ItemPublic, LoansService } from "@/client"
+import { LoansService } from "@/client"
 import {
   DialogBody,
   DialogCloseTrigger,

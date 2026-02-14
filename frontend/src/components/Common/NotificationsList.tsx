@@ -38,8 +38,6 @@ const NotificationsList = ({
   const [swipingId, setSwipingId] = useState<string | null>(null)
   const [swipeOffset, setSwipeOffset] = useState(0)
 
-  const minSwipeDistance = 50
-
   const markAsReadMutation = useMutation({
     mutationFn: (id: string) =>
       NotificationsService.markNotificationAsRead({ id }),

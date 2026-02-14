@@ -7,7 +7,6 @@ import {
   Button,
   Flex,
   HStack,
-  IconButton,
   Link,
   Text,
   VStack,
@@ -15,7 +14,7 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link as RouterLink } from "@tanstack/react-router"
 import { format } from "date-fns"
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { FiCheckCircle, FiStar, FiXCircle } from "react-icons/fi"
 
 import { type LoanPublic, LoansService } from "@/client"
@@ -25,16 +24,10 @@ import useCustomToast from "@/hooks/useCustomToast"
 interface LoanCardProps {
   loan: LoanPublic
   type: "incoming" | "outgoing"
-  otherAdminsExist?: boolean
   onReview?: (loan: LoanPublic) => void
 }
 
-export function LoanCard({
-  loan,
-  type,
-  otherAdminsExist,
-  onReview,
-}: LoanCardProps) {
+export function LoanCard({ loan, type, onReview }: LoanCardProps) {
   const queryClient = useQueryClient()
   const { showSuccessToast } = useCustomToast()
   const { user: currentUser } = useAuth()
@@ -134,7 +127,7 @@ export function LoanCard({
 
   const isSelfRequested =
     type === "incoming" && loan.requester_id === currentUser?.id
-  const restrictionApplies = isSelfRequested && loan.other_admins_exist
+  const restrictionApplies = isSelfRequested && (loan as any).other_admins_exist
 
   // Modal Configuration
   const getModalConfig = () => {
@@ -304,12 +297,12 @@ export function LoanCard({
               {loan.status.replace("_", " ").toUpperCase()}
             </Badge>
             {restrictionApplies && (
-              <Badge colorPalette="gray" variant="subtle" fontSize="3xs">
+              <Badge colorPalette="gray" variant="subtle" fontSize="2xs">
                 Your Request (Requires Other Admin)
               </Badge>
             )}
             {canCancel && (
-              <IconButton
+              <Button
                 aria-label="Cancel Loan"
                 size="xs"
                 variant="ghost"
@@ -318,7 +311,7 @@ export function LoanCard({
                 disabled={restrictionApplies}
               >
                 <FiXCircle />
-              </IconButton>
+              </Button>
             )}
           </VStack>
         </Flex>

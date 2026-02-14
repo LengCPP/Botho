@@ -65,7 +65,7 @@ export function LoanRequestModal({
   const isPrivateContext = community?.is_private || sharedPrivateComm
 
   // Show notice if borrowing from a user (not community-owned) and it's not a private context
-  const isUserOwned = !!item.user_owner
+  const isUserOwned = !!(item as any).user_owner
   const showPrivacyNotice = !isOwner && isUserOwned && !isPrivateContext
 
   return (
@@ -87,7 +87,12 @@ export function LoanRequestModal({
                 fontSize="sm"
               >
                 <VStack align="start" gap={1}>
-                  <Text fontWeight="bold" display="flex" align="center" gap={2}>
+                  <Text
+                    fontWeight="bold"
+                    display="flex"
+                    alignItems="center"
+                    gap={2}
+                  >
                     <FiAlertCircle /> Privacy Notice
                   </Text>
                   <Text>
@@ -109,7 +114,12 @@ export function LoanRequestModal({
                 fontSize="sm"
               >
                 <VStack align="start" gap={1}>
-                  <Text fontWeight="bold" display="flex" align="center" gap={2}>
+                  <Text
+                    fontWeight="bold"
+                    display="flex"
+                    alignItems="center"
+                    gap={2}
+                  >
                     <FiShield /> Community Trust
                   </Text>
                   <Text>

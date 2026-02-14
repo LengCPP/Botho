@@ -38,7 +38,7 @@ const useAuth = () => {
     mutationFn: (data: UserRegister) =>
       UsersService.registerUser({ requestBody: data }),
 
-    onSuccess: (data, variables) => {
+    onSuccess: (_data, variables) => {
       navigate({
         to: "/signup-success",
         search: { email: variables.email },

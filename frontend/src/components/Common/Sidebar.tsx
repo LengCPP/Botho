@@ -1,13 +1,8 @@
-import { Box, Flex, Text } from "@chakra-ui/react"
-import { Link as RouterLink } from "@tanstack/react-router"
-import { FiSettings } from "react-icons/fi"
+import { Box } from "@chakra-ui/react"
 
-import useAuth from "@/hooks/useAuth"
 import SidebarItems from "./SidebarItems"
 
 const Sidebar = () => {
-  const { user: currentUser } = useAuth()
-
   return (
     <Box
       display={{ base: "none", md: "flex" }}
@@ -22,11 +17,11 @@ const Sidebar = () => {
       zIndex="sticky"
       borderRightWidth="1px"
     >
-      <Flex w="100%" direction="column" justify="space-between">
+      <Box w="100%">
         <Box>
           <SidebarItems />
         </Box>
-      </Flex>
+      </Box>
     </Box>
   )
 }
