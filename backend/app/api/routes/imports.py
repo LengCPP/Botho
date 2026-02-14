@@ -157,7 +157,9 @@ async def enrich_and_import_item(staged_id: uuid.UUID, owner_id: uuid.UUID, comm
                 session.add(item); session.flush()
                 session.add(Contribution(user_id=owner_id, item_id=item.id, work_author=a, work_title=t, description=f"Imported: {t}"))
                 if a and t: ensure_work_metadata(session, a, t, isbn=extra.get("isbn") or i, description=desc, category=extra.get("cat"), image_url=img)
-                s.status = StagedItemStatus.COMPLETED; session.add(s); session.commit(); sync_item_to_search(item)
+                s.status = StagedItemStatus.COMPLETED; session.add(s); session.commit()
+                session.refresh(item)
+                sync_item_to_search(item)
                 await notification_manager.send_personal_message({"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "COMPLETED"}, owner_id)
             except Exception as e:
                 s.status, s.error_log = StagedItemStatus.FAILED, str(e); session.add(s); session.commit()

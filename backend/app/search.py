@@ -110,6 +110,27 @@ def sync_work_metadata_to_search(meta: WorkMetadata):
     }
     index.add_documents([document])
 
+def reindex_all_data(session: Session) -> None:
+    """Reindex all data into Meilisearch. Superuser only trigger."""
+    configure_search()
+    
+    # 1. Reindex Items
+    items = session.exec(select(Item)).all()
+    for item in items:
+        # Trigger loading of communities relationship
+        _ = item.communities
+        sync_item_to_search(item)
+        
+    # 2. Reindex Communities
+    communities = session.exec(select(Community)).all()
+    for community in communities:
+        sync_community_to_search(community)
+        
+    # 3. Reindex Work Metadata
+    works = session.exec(select(WorkMetadata)).all()
+    for work in works:
+        sync_work_metadata_to_search(work)
+
 # Aliases for compatibility if needed
 def sync_book_to_search(book: Item):
     sync_item_to_search(book)

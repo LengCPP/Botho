@@ -84,13 +84,17 @@ def trigger_rebuild_all_indexes(
     def rebuild_task():
         from app.core.db import engine
         from sqlmodel import Session
+        from app.search import reindex_all_data
         with Session(engine) as bg_session:
-            # Rebuild Communities
+            # 1. Rebuild Meilisearch Index
+            reindex_all_data(bg_session)
+            
+            # 2. Rebuild Communities Collection Indexes
             communities = bg_session.exec(select(Community.id)).all()
             for c_id in communities:
                 update_collection_index(bg_session, c_id)
             
-            # Rebuild Users
+            # 3. Rebuild Users Collection Indexes
             users = bg_session.exec(select(User.id)).all()
             for u_id in users:
                 update_collection_index(bg_session, u_id)
@@ -592,6 +596,9 @@ def read_item_facets(
             all_facets = [{"name": name, "count": count} for name, count in distribution.items()]
             all_facets.sort(key=lambda x: x["name"].lower())
             
+            if not all_facets:
+                raise Exception("No facets found in Meilisearch, falling back to SQL")
+
             # Slice for pagination
             paged_facets = all_facets[skip : skip + limit]
             
@@ -856,10 +863,11 @@ def read_items(
             facet_stats = search_results.get("facetStats")
 
             if not item_ids:
-                return ItemsPublic(data=[], count=count, facets=facets, facet_stats=facet_stats)
-
-            # Fetch from DB preserving order
-            db_stmt = select(Item).where(Item.id.in_(item_ids)).where(~Item.id.in_(defaulted_item_ids))
+                meili_success = False
+            else:
+                # Fetch from DB preserving order
+                db_stmt = select(Item).where(Item.id.in_(item_ids)).where(~Item.id.in_(defaulted_item_ids))
+                meili_success = True
             
             from sqlalchemy.orm import selectinload
             if minimal:

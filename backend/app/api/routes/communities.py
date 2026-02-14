@@ -580,6 +580,9 @@ def read_community_item_facets(
             all_facets.sort(key=lambda x: x["name"].lower())
             total_count = len(all_facets)
             
+            if not all_facets:
+                raise Exception("No facets found in Meilisearch, falling back to SQL")
+
             # Slice for pagination
             paged_facets = all_facets[skip : skip + limit]
             
@@ -775,17 +778,17 @@ def read_community_items(
             facet_stats = search_results.get("facetStats")
             
             if not item_ids:
-                return ItemsPublic(data=[], count=count, facets=facets, facet_stats=facet_stats)
-                    
-            # Fetch from DB preserving order
-            db_items = session.exec(
-                select(Item)
-                .where(Item.id.in_(item_ids))
-                .where(Item.id.not_in(defaulted_item_ids))
-            ).all()
-            item_map = {item.id: item for item in db_items}
-            items = [item_map[iid] for iid in item_ids if iid in item_map]
-            meili_success = True
+                meili_success = False
+            else:
+                # Fetch from DB preserving order
+                db_items = session.exec(
+                    select(Item)
+                    .where(Item.id.in_(item_ids))
+                    .where(Item.id.not_in(defaulted_item_ids))
+                ).all()
+                item_map = {item.id: item for item in db_items}
+                items = [item_map[iid] for iid in item_ids if iid in item_map]
+                meili_success = True
         except Exception:
             meili_success = False
 
