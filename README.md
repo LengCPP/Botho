@@ -23,7 +23,8 @@ Botho follows a modern, containerized monorepo architecture designed for scalabi
 ## Key Features
 
 - **Community-Centric Sharing**: Create and join private communities to pool resources (books, games, tools) with trusted circles.
-- **Item Management & Discovery**: Easily catalog items with integrated search (e.g., Book search) and organize them into personal collections.
+- **Bucket Collections**: Shared community collections where any member can contribute items, featuring automatic cleanup and shared ownership.
+- **Item Management & Discovery**: Easily catalog items with integrated search (e.g., Book search) and organize them into personal collections. Use faceted search for efficient filtering.
 - **Reading Log**: Track reading progress (Reading, Completed, Dropped), rate items, and add personal tags and reviews to any book in the system.
 - **Lending System**: Comprehensive tracking for borrowed and lent items, including due dates, return status, and approval workflows.
 - **Social Connectivity**: Connect with friends, manage relationships, and view user profiles with distinct custom styling.
@@ -64,8 +65,8 @@ Botho follows a modern, containerized monorepo architecture designed for scalabi
 
 ### 1. Prerequisites
 - [Docker and Docker Compose](https://www.docker.com/)
-- [Node.js](https://nodejs.org/) (for local development)
-- [Python 3.10+](https://www.python.org/) and [uv](https://docs.astral.sh/uv/)
+- [Node.js](https://nodejs.org/) (for local development IDE support)
+- [Python 3.10+](https://www.python.org/) and [uv](https://docs.astral.sh/uv/) (for local development IDE support)
 
 ### 2. Environment Configuration
 Copy the template `.env` file and update the variables:
@@ -75,15 +76,21 @@ cp .env.example .env
 Ensure you update `DOMAIN`, `SECRET_KEY`, `POSTGRES_PASSWORD`, and storage credentials.
 
 ### 3. Running with Docker
-The project follows a **Docker-Centric Workflow**. Development and deployment are strictly Docker-based.
+Botho follows a **Strictly Docker-Centric Workflow**. Development, testing, and deployment are all handled within Docker containers to ensure environment parity.
 
 Start the entire stack for development:
 ```bash
 docker compose up -d
 ```
-- **App**: [http://localhost](http://localhost)
-- **Backend API**: [http://localhost/api/v1/](http://localhost/api/v1/)
-- **API Docs**: [http://localhost/docs](http://localhost/docs)
+- **Dashboard**: [http://localhost](http://localhost) (or configured `DOMAIN`)
+- **Backend API**: [http://api.localhost/api/v1/](http://api.localhost/api/v1/)
+- **API Docs**: [http://api.localhost/docs](http://api.localhost/docs)
+
+For live-reloading during development:
+```bash
+docker compose watch
+```
+This will sync local file changes to the containers in real-time.
 
 ### 4. Environments
 The project is deployed across several environments:

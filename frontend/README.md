@@ -18,7 +18,7 @@ docker compose up -d
 docker compose watch
 ```
 
-The frontend will be available at [http://localhost:5173](http://localhost:5173) (or the configured domain). Localhost configuration is deprecated for staging and production environments.
+The frontend will be available at [http://localhost](http://localhost) (or the configured `DOMAIN`). The dashboard is also accessible at [http://dashboard.localhost](http://dashboard.localhost).
 
 ## Local Setup (IDE Support)
 

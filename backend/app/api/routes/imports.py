@@ -1,849 +1,154 @@
-import asyncio
-import json
-import logging
-import random
-import uuid
+import asyncio, json, logging, random, uuid
 from typing import Any
-
 from fastapi import APIRouter, BackgroundTasks, HTTPException
-from sqlmodel import func, select
-
+from sqlmodel import func, select, Session
 from app.api.deps import CurrentUser, SessionDep
-from app.api.utils import ensure_work_metadata
-from app.models import (
-    Item,
-    ItemType,
-    Message,
-    StagedItem,
-    StagedItemPublic,
-    StagedItemsPublic,
-    StagedItemStatus,
-)
+from app.api.utils import ensure_work_metadata, fetch_external_book_metadata
+from app.models import Item, ItemType, Message, StagedItem, StagedItemPublic, StagedItemsPublic, StagedItemStatus, Contribution, WorkMetadata
 from app.search import sync_item_to_search
 from app.storage import upload_image_from_url
-import httpx
-import asyncio
-from app.core.config import settings
 from app.api.websocket_manager import notification_manager
+from app.core.db import engine
 
 router = APIRouter(prefix="/imports", tags=["imports"])
-
-
-@router.post("/stage")
-async def stage_items(
-    *,
-    session: SessionDep,
-    current_user: CurrentUser,
-    data: list[dict[str, Any]], # Raw data from frontend
-    mapping: str,               # JSON string of mapping
-    community_id: uuid.UUID | None = None,
-) -> Any:
-    """
-    Process the raw data and stage items for review.
-    """
-    try:
-        mapping_dict = json.loads(mapping)
-        staged_count = 0
-        
-        for row in data:
-            raw_data = {}
-            for system_key, file_key in mapping_dict.items():
-                if file_key and file_key in row:
-                    raw_data[system_key] = row[file_key]
-
-            if not raw_data.get("title"):
-                continue
-
-            db_obj = StagedItem(
-                owner_id=current_user.id,
-                community_id=community_id,
-                raw_data=raw_data,
-                status=StagedItemStatus.PENDING,
-            )
-            session.add(db_obj)
-            staged_count += 1
-
-        session.commit()
-        return {"count": staged_count}
-    except Exception as e:
-        session.rollback()
-        raise HTTPException(status_code=400, detail=f"Failed to stage items: {str(e)}")
-
-
-@router.get("/", response_model=StagedItemsPublic)
-def read_staged_items(
-    session: SessionDep,
-    current_user: CurrentUser,
-    community_id: uuid.UUID | None = None,
-    skip: int = 0,
-    limit: int = 100,
-) -> Any:
-    """
-    Get staged items for current user or community.
-    """
-    statement = select(StagedItem).where(StagedItem.owner_id == current_user.id)
-    if community_id:
-        statement = statement.where(StagedItem.community_id == community_id)
-    else:
-        statement = statement.where(StagedItem.community_id == None)
-
-    # Filter data list to exclude COMPLETED items (they are now in the main collection)
-    data_statement = statement.where(StagedItem.status != StagedItemStatus.COMPLETED)
-    
-    count_stmt = select(func.count()).select_from(data_statement.subquery())
-    count = session.exec(count_stmt).one()
-    items = session.exec(data_statement.offset(skip).limit(limit)).all()
-
-    # Aggregate counts for progress tracking
-    def get_count_stmt(status: StagedItemStatus):
-        stmt = select(func.count(StagedItem.id)).where(
-            StagedItem.owner_id == current_user.id,
-            StagedItem.status == status
-        )
-        if community_id:
-            stmt = stmt.where(StagedItem.community_id == community_id)
-        else:
-            stmt = stmt.where(StagedItem.community_id == None)
-        return stmt
-
-    pending = session.exec(get_count_stmt(StagedItemStatus.PENDING)).one()
-    processing = session.exec(get_count_stmt(StagedItemStatus.PROCESSING)).one()
-    completed = session.exec(get_count_stmt(StagedItemStatus.COMPLETED)).one()
-    failed = session.exec(get_count_stmt(StagedItemStatus.FAILED)).one()
-
-    return StagedItemsPublic(
-        data=items, 
-        count=count,
-        pending_count=pending,
-        processing_count=processing,
-        completed_count=completed,
-        failed_count=failed
-    )
-
-
-@router.patch("/{id}", response_model=StagedItemPublic)
-def update_staged_item(
-    *,
-    session: SessionDep,
-    current_user: CurrentUser,
-    id: uuid.UUID,
-    raw_data: dict[str, Any],
-) -> Any:
-    """
-    Update a staged item's data (cleaning).
-    """
-    db_obj = session.get(StagedItem, id)
-    if not db_obj or db_obj.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Staged item not found")
-
-    db_obj.raw_data = raw_data
-    session.add(db_obj)
-    session.commit()
-    session.refresh(db_obj)
-    return db_obj
-
-
-@router.delete("/{id}", response_model=Message)
-def delete_staged_item(
-    *,
-    session: SessionDep,
-    current_user: CurrentUser,
-    id: uuid.UUID,
-) -> Any:
-    """
-    Delete a staged item.
-    """
-    db_obj = session.get(StagedItem, id)
-    if not db_obj or db_obj.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Staged item not found")
-
-    session.delete(db_obj)
-    session.commit()
-    return Message(message="Staged item deleted")
-
-
-@router.delete("/clean/all", response_model=Message)
-def clean_staged_items(
-    *,
-    session: SessionDep,
-    current_user: CurrentUser,
-    community_id: uuid.UUID | None = None,
-) -> Any:
-    """
-    Clear all staged items for the current user/community.
-    """
-    statement = select(StagedItem).where(StagedItem.owner_id == current_user.id)
-    if community_id:
-        statement = statement.where(StagedItem.community_id == community_id)
-    else:
-        statement = statement.where(StagedItem.community_id == None)
-
-    items = session.exec(statement).all()
-    for item in items:
-        session.delete(item)
-    session.commit()
-    return Message(message=f"Deleted {len(items)} staged items")
-
-
-@router.post("/process")
-async def process_staged_items(
-    *,
-    session: SessionDep,
-    current_user: CurrentUser,
-    background_tasks: BackgroundTasks,
-    ids: list[uuid.UUID],
-    community_id: uuid.UUID | None = None,
-) -> Any:
-    """
-    Start processing selected staged items.
-    """
-    statement = select(StagedItem).where(
-        StagedItem.id.in_(ids),
-        StagedItem.owner_id == current_user.id
-    )
-    items = session.exec(statement).all()
-
-    for item in items:
-        # Don't mark as PROCESSING here, do it inside the background task
-        background_tasks.add_task(
-            enrich_and_import_item,
-            None, # session_factory not strictly needed if we use engine
-            item.id,
-            current_user.id,
-            community_id
-        )
-
-    return {"message": f"Queued {len(items)} items for processing"}
-
-
-@router.post("/process-all")
-async def process_all_staged_items(
-    *,
-    session: SessionDep,
-    current_user: CurrentUser,
-    background_tasks: BackgroundTasks,
-    community_id: uuid.UUID | None = None,
-) -> Any:
-    """
-    Start processing all PENDING staged items.
-    """
-    # Get PENDING items
-    statement = select(StagedItem).where(
-        StagedItem.owner_id == current_user.id,
-        StagedItem.status == StagedItemStatus.PENDING
-    )
-    if community_id:
-        statement = statement.where(StagedItem.community_id == community_id)
-    else:
-        statement = statement.where(StagedItem.community_id == None)
-
-    pending_items = session.exec(statement).all()
-    
-    for item in pending_items:
-        # Just queue them, status will be updated when they actually start
-        background_tasks.add_task(
-            enrich_and_import_item,
-            None,
-            item.id,
-            current_user.id,
-            community_id
-        )
-
-    return {"message": f"Queued {len(pending_items)} items for processing"}
-
-
-@router.post("/sync-archive")
-async def sync_archive_items(
-    *,
-    session: SessionDep,
-    current_user: CurrentUser,
-    background_tasks: BackgroundTasks,
-    ids: list[uuid.UUID],
-) -> Any:
-    """
-    Start processing staged items directly into the global archive (superuser only).
-    """
-    if not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="Not enough permissions")
-
-    statement = select(StagedItem).where(
-        StagedItem.id.in_(ids),
-        StagedItem.owner_id == current_user.id
-    )
-    items = session.exec(statement).all()
-
-    for item in items:
-        background_tasks.add_task(
-            enrich_and_import_to_archive,
-            item.id,
-            current_user.id,
-        )
-
-    return {"message": f"Queued {len(items)} archive imports"}
-
-
-async def enrich_and_import_to_archive(
-    staged_id: uuid.UUID,
-    owner_id: uuid.UUID,
-):
-    """
-    Background task to enrich a book and import it into the global archive (WorkMetadata).
-    Does NOT create an Item record.
-    """
-    async with enrichment_semaphore:
-        from app.core.db import engine
-        from sqlmodel import Session
-
-        await asyncio.sleep(random.uniform(1.0, 3.0))
-
-        with Session(engine) as session:
-            staged = session.get(StagedItem, staged_id)
-            if not staged or staged.status == StagedItemStatus.COMPLETED:
-                return
-
-            staged.status = StagedItemStatus.PROCESSING
-            session.add(staged)
-            session.commit()
-            
-            await notification_manager.send_personal_message(
-                {"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "PROCESSING"},
-                owner_id
-            )
-
-            try:
-                data = staged.raw_data
-                title = str(data.get("title", "")).strip()
-                author = str(data.get("author", "")).strip()
-                isbn = str(data.get("isbn", "")).strip() if data.get("isbn") else None
-                
-                if not title or not author:
-                    staged.status = StagedItemStatus.FAILED
-                    staged.error_log = "Title and Author are required for archive import."
-                    session.add(staged)
-                    session.commit()
-                    await notification_manager.send_personal_message(
-                        {"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "FAILED"},
-                        owner_id
-                    )
-                    return
-
-                # 1. Search Local Registry
-                from app.models import WorkMetadata
-                meta = None
-                clean_isbn = None
-                if isbn:
-                    clean_isbn = "".join(c for c in isbn if c.isdigit() or c.upper() == "X").upper()
-                    meta = session.exec(select(WorkMetadata).where(WorkMetadata.isbn == clean_isbn)).first()
-                
-                if not meta:
-                    meta = session.get(WorkMetadata, (author, title))
-
-                # Initialize final image URL
-                final_image_url = None
-                raw_image_url = data.get("image_url")
-                image_download_failed = False
-
-                # 1.5 Try to download raw image if provided
-                if raw_image_url:
-                    try:
-                        stored_url = await upload_image_from_url(raw_image_url, folder="items")
-                        if stored_url:
-                            final_image_url = stored_url
-                        else:
-                            image_download_failed = True
-                    except Exception:
-                        image_download_failed = True
-
-                # 2. Search APIs for enrichment if needed
-                google_data = None
-                should_check_google = not meta and (not raw_image_url or image_download_failed)
-
-                if should_check_google:
-                    async with google_books_semaphore:
-                        await asyncio.sleep(0.5)
-                        search_query = f"isbn:{clean_isbn}" if clean_isbn else f"intitle:{title} inauthor:{author}"
-                        api_key = settings.VITE_GOOGLE_BOOKS_API_KEY
-                        url = f"https://www.googleapis.com/books/v1/volumes?q={search_query}&maxResults=1"
-                        if api_key: url += f"&key={api_key}"
-
-                        async with httpx.AsyncClient() as client:
-                            response = await client.get(url, timeout=10.0)
-                            if response.status_code == 429:
-                                await asyncio.sleep(5.0)
-                                response = await client.get(url, timeout=10.0)
-
-                            if response.status_code == 200:
-                                res_json = response.json()
-                                if res_json.get("items"):
-                                    google_data = res_json["items"][0]["volumeInfo"]
-
-                # 3. Search Open Library if still no results or just for better text
-                open_library_data = None
-                if not meta and not google_data:
-                    async with httpx.AsyncClient() as client:
-                        try:
-                            if clean_isbn:
-                                ol_url = f"https://openlibrary.org/api/books?bibkeys=ISBN:{clean_isbn}&format=json&jscmd=data"
-                                ol_res = await client.get(ol_url, timeout=10.0)
-                                if ol_res.status_code == 200:
-                                    ol_json = ol_res.json()
-                                    if f"ISBN:{clean_isbn}" in ol_json:
-                                        open_library_data = ol_json[f"ISBN:{clean_isbn}"]
-                            
-                            if not open_library_data:
-                                ol_search_url = f"https://openlibrary.org/search.json?title={title}&author={author}&limit=1"
-                                ol_res = await client.get(ol_search_url, timeout=10.0)
-                                if ol_res.status_code == 200:
-                                    ol_json = ol_res.json()
-                                    if ol_json.get("docs"):
-                                        doc = ol_json["docs"][0]
-                                        work_description = None
-                                        if doc.get("key"):
-                                            try:
-                                                work_url = f"https://openlibrary.org{doc.get('key')}.json"
-                                                work_res = await client.get(work_url, timeout=5.0)
-                                                if work_res.status_code == 200:
-                                                    work_data = work_res.json()
-                                                    desc = work_data.get("description")
-                                                    if isinstance(desc, dict):
-                                                        work_description = desc.get("value")
-                                                    elif isinstance(desc, str):
-                                                        work_description = desc
-                                            except Exception:
-                                                pass
-
-                                        open_library_data = {
-                                            "title": doc.get("title"),
-                                            "authors": [{"name": a} for a in doc.get("author_name", [])],
-                                            "cover": {"medium": f"https://covers.openlibrary.org/b/id/{doc.get('cover_i')}-M.jpg"} if doc.get("cover_i") else None,
-                                            "subjects": [{"name": s} for s in doc.get("subject", [])[:5]],
-                                            "description": work_description
-                                        }
-                        except Exception:
-                            pass
-
-                # Assemble final metadata
-                final_title = title
-                final_author = author
-                final_description = str(data.get("description", "")).strip() or None
-                final_category = None
-                final_isbn = clean_isbn
-                final_tags = []
-
-                if meta:
-                    final_title = meta.title
-                    final_author = meta.author
-                    final_description = meta.description or final_description
-                    final_image_url = meta.image_url or final_image_url
-                    final_category = meta.category
-                    final_isbn = meta.isbn or final_isbn
-                    final_tags = meta.tags
-                elif google_data:
-                    final_title = google_data.get("title", title)
-                    google_authors = google_data.get("authors", [])
-                    final_author = ", ".join(google_authors) if google_authors else author
-                    final_description = google_data.get("description", final_description)
-                    
-                    if not final_image_url:
-                        img_links = google_data.get("imageLinks", {})
-                        thumb = img_links.get("medium") or img_links.get("small") or img_links.get("thumbnail")
-                        if thumb:
-                            thumb = thumb.replace("http://", "https://")
-                            try:
-                                final_image_url = await upload_image_from_url(thumb, folder="items") or thumb
-                            except Exception:
-                                final_image_url = thumb
-                    
-                    industry_ids = google_data.get("industryIdentifiers", [])
-                    for id_obj in industry_ids:
-                        if id_obj["type"] in ["ISBN_13", "ISBN_10"]:
-                            final_isbn = id_obj["identifier"]
-                            if id_obj["type"] == "ISBN_13": break
-                    
-                    google_categories = google_data.get("categories", [])
-                    final_category = google_categories[0] if google_categories else None
-                elif open_library_data:
-                    final_title = open_library_data.get("title", title)
-                    ol_authors = [a["name"] for a in open_library_data.get("authors", [])] if isinstance(open_library_data.get("authors"), list) and isinstance(open_library_data.get("authors")[0], dict) else []
-                    if not ol_authors and isinstance(open_library_data.get("authors"), list):
-                         ol_authors = open_library_data.get("authors") # Simple list of strings case
-                    
-                    final_author = ", ".join(ol_authors) if ol_authors else author
-                    
-                    ol_desc = open_library_data.get("description")
-                    if isinstance(ol_desc, dict):
-                        ol_desc = ol_desc.get("value")
-                    final_description = ol_desc or open_library_data.get("notes") or final_description
-
-                    if not final_image_url:
-                        ol_cover = open_library_data.get("cover", {})
-                        thumb = ol_cover.get("large") or ol_cover.get("medium") or ol_cover.get("small")
-                        if thumb:
-                            try:
-                                final_image_url = await upload_image_from_url(thumb, folder="items") or thumb
-                            except Exception:
-                                final_image_url = thumb
-
-                # If everything failed, keep raw image url
-                if not final_image_url and raw_image_url and not image_download_failed:
-                     final_image_url = raw_image_url
-
-                # Create/Update WorkMetadata
-                ensure_work_metadata(
-                    session,
-                    final_author,
-                    final_title,
-                    isbn=final_isbn,
-                    description=final_description,
-                    category=final_category,
-                    image_url=final_image_url,
-                    tags=final_tags
-                )
-
-                staged.status = StagedItemStatus.COMPLETED
-                session.add(staged)
-                session.commit()
-                
-                await notification_manager.send_personal_message(
-                    {"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "COMPLETED"},
-                    owner_id
-                )
-
-            except Exception as e:
-                logger.exception(f"Archive import failed for staged item {staged_id}")
-                staged.status = StagedItemStatus.FAILED
-                staged.error_log = str(e)
-                session.add(staged)
-                session.commit()
-                await notification_manager.send_personal_message(
-                    {"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "FAILED"},
-                    owner_id
-                )
-
-
-import logging
-
 logger = logging.getLogger(__name__)
-google_books_semaphore = asyncio.Semaphore(2) # Throttling for external APIs
-# Limit concurrent enrichment tasks to avoid exhausting DB pool
 enrichment_semaphore = asyncio.Semaphore(2)
 
-async def enrich_and_import_item(
-    session_factory: Any,
-    staged_id: uuid.UUID,
-    owner_id: uuid.UUID,
-    community_id: uuid.UUID | None,
-):
-    """
-    Background task to enrich a book from Google Books and import it.
-    """
+@router.post("/stage")
+async def stage_items(*, session: SessionDep, current_user: CurrentUser, data: list[dict[str, Any]], mapping: str, community_id: uuid.UUID | None = None) -> Any:
+    try:
+        m, count = json.loads(mapping), 0
+        for row in data:
+            raw = {k: row[v] for k, v in m.items() if v in row}
+            if raw.get("title"):
+                session.add(StagedItem(owner_id=current_user.id, community_id=community_id, raw_data=raw, status=StagedItemStatus.PENDING))
+                count += 1
+        session.commit()
+        return {"count": count}
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(400, f"Failed to stage: {e}")
+
+@router.get("/", response_model=StagedItemsPublic)
+def read_staged_items(session: SessionDep, current_user: CurrentUser, community_id: uuid.UUID | None = None, skip: int = 0, limit: int = 100) -> Any:
+    base = select(StagedItem).where(StagedItem.owner_id == current_user.id, StagedItem.community_id == community_id if community_id else StagedItem.community_id == None)
+    data_stmt = base.where(StagedItem.status != StagedItemStatus.COMPLETED)
+    items = session.exec(data_stmt.offset(skip).limit(limit)).all()
+    cnt = lambda s: session.exec(select(func.count(StagedItem.id)).where(StagedItem.owner_id == current_user.id, StagedItem.community_id == community_id if community_id else StagedItem.community_id == None, StagedItem.status == s)).one()
+    return StagedItemsPublic(data=items, count=session.exec(select(func.count()).select_from(data_stmt.subquery())).one(), pending_count=cnt(StagedItemStatus.PENDING), processing_count=cnt(StagedItemStatus.PROCESSING), completed_count=cnt(StagedItemStatus.COMPLETED), failed_count=cnt(StagedItemStatus.FAILED))
+
+@router.patch("/{id}", response_model=StagedItemPublic)
+def update_staged_item(*, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, raw_data: dict[str, Any]) -> Any:
+    db = session.get(StagedItem, id)
+    if not db or db.owner_id != current_user.id: raise HTTPException(404)
+    db.raw_data = raw_data
+    session.add(db); session.commit(); session.refresh(db)
+    return db
+
+@router.delete("/{id}", response_model=Message)
+def delete_staged_item(*, session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> Any:
+    db = session.get(StagedItem, id)
+    if not db or db.owner_id != current_user.id: raise HTTPException(404)
+    session.delete(db); session.commit()
+    return Message(message="Deleted")
+
+@router.delete("/clean/all", response_model=Message)
+def clean_staged_items(*, session: SessionDep, current_user: CurrentUser, community_id: uuid.UUID | None = None) -> Any:
+    items = session.exec(select(StagedItem).where(StagedItem.owner_id == current_user.id, StagedItem.community_id == community_id if community_id else StagedItem.community_id == None)).all()
+    for i in items: session.delete(i)
+    session.commit()
+    return Message(message=f"Deleted {len(items)}")
+
+@router.post("/process")
+async def process_staged_items(*, session: SessionDep, current_user: CurrentUser, background_tasks: BackgroundTasks, ids: list[uuid.UUID], community_id: uuid.UUID | None = None) -> Any:
+    for i in ids: background_tasks.add_task(enrich_and_import_item, i, current_user.id, community_id)
+    return {"message": "Queued"}
+
+@router.post("/process-all")
+async def process_all_staged_items(*, session: SessionDep, current_user: CurrentUser, background_tasks: BackgroundTasks, community_id: uuid.UUID | None = None) -> Any:
+    items = session.exec(select(StagedItem).where(StagedItem.owner_id == current_user.id, StagedItem.status == StagedItemStatus.PENDING, StagedItem.community_id == community_id if community_id else StagedItem.community_id == None)).all()
+    for i in items: background_tasks.add_task(enrich_and_import_item, i.id, current_user.id, community_id)
+    return {"message": f"Queued {len(items)}"}
+
+@router.post("/sync-archive")
+async def sync_archive_items(*, session: SessionDep, current_user: CurrentUser, background_tasks: BackgroundTasks, ids: list[uuid.UUID]) -> Any:
+    if not current_user.is_superuser: raise HTTPException(403)
+    for i in ids: background_tasks.add_task(enrich_and_import_to_archive, i, current_user.id)
+    return {"message": "Queued"}
+
+async def enrich_and_import_to_archive(staged_id: uuid.UUID, owner_id: uuid.UUID):
     async with enrichment_semaphore:
-        from app.core.db import engine
-        from sqlmodel import Session
-
-        # Use a small random jitter to avoid synchronized spikes
-        import random
-        await asyncio.sleep(random.uniform(1.0, 3.0))
-
+        await asyncio.sleep(random.uniform(1, 3))
         with Session(engine) as session:
-            staged = session.get(StagedItem, staged_id)
-            if not staged or staged.status == StagedItemStatus.COMPLETED:
-                return
-
-            # Mark as PROCESSING ONLY when we actually start work
-            staged.status = StagedItemStatus.PROCESSING
-            session.add(staged)
-            session.commit()
-            
-            # Send WebSocket update so UI shows spinner for THIS item
-            await notification_manager.send_personal_message(
-                {"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "PROCESSING"},
-                owner_id
-            )
-
+            s = session.get(StagedItem, staged_id)
+            if not s or s.status == StagedItemStatus.COMPLETED: return
+            s.status = StagedItemStatus.PROCESSING; session.add(s); session.commit()
+            await notification_manager.send_personal_message({"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "PROCESSING"}, owner_id)
             try:
-                data = staged.raw_data
-                title = str(data.get("title", "")).strip()
-                author = str(data.get("author", "")).strip()
-                isbn = str(data.get("isbn", "")).strip() if data.get("isbn") else None
-                
-                logger.info(f"Enriching item: {title} by {author} (ISBN: {isbn})")
-
-                if not title:
-                    staged.status = StagedItemStatus.FAILED
-                    staged.error_log = "Title is required for enrichment."
-                    session.add(staged)
-                    session.commit()
-                    await notification_manager.send_personal_message(
-                        {"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "FAILED"},
-                        owner_id
-                    )
-                    return
-
-                # 1. Search Local Registry
-                from app.models import WorkMetadata
-                meta = None
-                clean_isbn = None
-                if isbn:
-                    # Support ISBN-10 with 'X' checksum while removing brackets/symbols
-                    clean_isbn = "".join(c for c in isbn if c.isdigit() or c.upper() == "X").upper()
-                    meta = session.exec(select(WorkMetadata).where(WorkMetadata.isbn == clean_isbn)).first()
-                
-                if not meta and author and title:
-                    # Try fuzzy-ish match or direct get
-                    meta = session.get(WorkMetadata, (author, title))
-
-                # Initialize final image URL
-                final_image_url = None
-                raw_image_url = data.get("image_url")
-                image_download_failed = False
-
-                # 1.5 Try to download raw image if provided
-                if raw_image_url:
-                    try:
-                        logger.info(f"Uploading image from raw data for {title}: {raw_image_url}")
-                        stored_url = await upload_image_from_url(raw_image_url, folder="items")
-                        if stored_url:
-                            final_image_url = stored_url
-                        else:
-                            # If stored_url is None, it means upload failed (likely 403 or network error)
-                            logger.warning(f"Failed to upload raw image, treating as failed: {raw_image_url}")
-                            image_download_failed = True
-                    except Exception as img_err:
-                        logger.error(f"Image upload raised exception for raw data {title}: {img_err}")
-                        image_download_failed = True
-                
-                # 2. Search Google Books if:
-                #    - Not in local registry
-                #    - AND (No raw image provided OR raw image download failed)
-                #    - OR we explicitly want metadata and don't trust OpenLibrary alone
-                google_data = None
-                should_check_google = not meta and (not raw_image_url or image_download_failed)
-                
-                if should_check_google:
-                    async with google_books_semaphore:
-                        await asyncio.sleep(0.5) # Forced delay between API calls
-                        
-                        search_query = f"isbn:{clean_isbn}" if clean_isbn else f"intitle:{title} inauthor:{author}"
-                        api_key = settings.VITE_GOOGLE_BOOKS_API_KEY
-                        url = f"https://www.googleapis.com/books/v1/volumes?q={search_query}&maxResults=1"
-                        if api_key:
-                            url += f"&key={api_key}"
-
-                        logger.info(f"Searching Google Books: {url}")
-                        async with httpx.AsyncClient() as client:
-                            response = await client.get(url, timeout=10.0)
-                            if response.status_code == 429:
-                                logger.warning("Google Books API Rate Limit hit (429). Waiting 5 seconds...")
-                                await asyncio.sleep(5.0)
-                                response = await client.get(url, timeout=10.0)
-
-                            if response.status_code == 200:
-                                res_json = response.json()
-                                if res_json.get("items"):
-                                    google_data = res_json["items"][0]["volumeInfo"]
-                                    logger.info(f"Found Google data for {title}")
-                                else:
-                                    logger.warning(f"No Google results for {title}")
-                            else:
-                                logger.error(f"Google API error {response.status_code}: {response.text}")
-
-                # 3. Search Open Library if still no results or if we just want better text data
-                # We prioritize this if we have a valid image (so we skipped Google) OR if Google failed
-                open_library_data = None
-                if not meta and not google_data:
-                    logger.info(f"Fallback to Open Library for {title}")
-                    async with httpx.AsyncClient() as client:
-                        try:
-                            # A. Try ISBN lookup (best for details/description)
-                            if clean_isbn:
-                                ol_url = f"https://openlibrary.org/api/books?bibkeys=ISBN:{clean_isbn}&format=json&jscmd=data"
-                                ol_res = await client.get(ol_url, timeout=10.0)
-                                if ol_res.status_code == 200:
-                                    ol_json = ol_res.json()
-                                    if f"ISBN:{clean_isbn}" in ol_json:
-                                        open_library_data = ol_json[f"ISBN:{clean_isbn}"]
-                            
-                            # B. Try Search API (fallback)
-                            if not open_library_data:
-                                ol_search_url = f"https://openlibrary.org/search.json?title={title}&author={author}&limit=1"
-                                ol_res = await client.get(ol_search_url, timeout=10.0)
-                                if ol_res.status_code == 200:
-                                    ol_json = ol_res.json()
-                                    if ol_json.get("docs"):
-                                        doc = ol_json["docs"][0]
-                                        
-                                        # Attempt to fetch full work details for description if 'key' exists
-                                        work_description = None
-                                        if doc.get("key"):
-                                            try:
-                                                work_url = f"https://openlibrary.org{doc.get('key')}.json"
-                                                work_res = await client.get(work_url, timeout=5.0)
-                                                if work_res.status_code == 200:
-                                                    work_data = work_res.json()
-                                                    desc = work_data.get("description")
-                                                    if isinstance(desc, dict):
-                                                        work_description = desc.get("value")
-                                                    elif isinstance(desc, str):
-                                                        work_description = desc
-                                            except Exception:
-                                                pass # Ignore work fetch errors
-
-                                        open_library_data = {
-                                            "title": doc.get("title"),
-                                            "authors": [{"name": a} for a in doc.get("author_name", [])],
-                                            "cover": {"medium": f"https://covers.openlibrary.org/b/id/{doc.get('cover_i')}-M.jpg"} if doc.get("cover_i") else None,
-                                            "subjects": [{"name": s} for s in doc.get("subject", [])[:5]],
-                                            "description": work_description
-                                        }
-                        except Exception as ol_err:
-                            logger.error(f"Open Library lookup failed: {ol_err}")
-
-                # Final data assembly
-                final_title = title
-                final_author = author
-                final_description = str(data.get("description", "")).strip() or None
-                final_extra = {}
-
-                if meta:
-                    logger.info(f"Using local metadata for {title}")
-                    final_title = meta.title
-                    final_author = meta.author
-                    final_description = meta.description or final_description
-                    final_image_url = meta.image_url or final_image_url
-                    final_extra = {
-                        "category": meta.category,
-                        "isbn": meta.isbn,
-                        "tags": meta.tags
-                    }
-                elif google_data:
-                    final_title = google_data.get("title", title)
-                    google_authors = google_data.get("authors", [])
-                    final_author = ", ".join(google_authors) if google_authors else author
-                    final_description = google_data.get("description", final_description)
-                    
-                    # Image processing - only if we don't have one from raw data (or it failed)
-                    if not final_image_url:
-                        img_links = google_data.get("imageLinks", {})
-                        thumb = img_links.get("medium") or img_links.get("small") or img_links.get("thumbnail")
-                        if thumb:
-                            thumb = thumb.replace("http://", "https://")
-                            try:
-                                logger.info(f"Uploading image from Google for {title}: {thumb}")
-                                stored_url = await upload_image_from_url(thumb, folder="items")
-                                final_image_url = stored_url or thumb
-                            except Exception as img_err:
-                                logger.error(f"Image upload failed for {title}: {img_err}")
-                                final_image_url = thumb
-                    
-                    # Extract clean ISBN from Google if possible
-                    industry_ids = google_data.get("industryIdentifiers", [])
-                    found_isbn = clean_isbn
-                    for id_obj in industry_ids:
-                        if id_obj["type"] in ["ISBN_13", "ISBN_10"]:
-                            found_isbn = id_obj["identifier"]
-                            if id_obj["type"] == "ISBN_13": break
-
-                    google_categories = google_data.get("categories", [])
-                    final_extra = {
-                        "isbn": found_isbn,
-                        "categories": google_categories,
-                        "category": google_categories[0] if google_categories else None,
-                        "pageCount": google_data.get("pageCount")
-                    }
-                elif open_library_data:
-                    logger.info(f"Using Open Library data for {title}")
-                    final_title = open_library_data.get("title", title)
-                    ol_authors = [a["name"] for a in open_library_data.get("authors", [])]
-                    final_author = ", ".join(ol_authors) if ol_authors else author
-                    
-                    # Handle Open Library description (can be string or dict with 'value')
-                    ol_desc = open_library_data.get("description")
-                    if isinstance(ol_desc, dict):
-                        ol_desc = ol_desc.get("value")
-                    final_description = ol_desc or open_library_data.get("notes") or final_description
-                    
-                    if not final_image_url:
-                        ol_cover = open_library_data.get("cover", {})
-                        thumb = ol_cover.get("large") or ol_cover.get("medium") or ol_cover.get("small")
-                        if thumb:
-                            try:
-                                logger.info(f"Uploading image from OpenLibrary for {title}: {thumb}")
-                                stored_url = await upload_image_from_url(thumb, folder="items")
-                                final_image_url = stored_url or thumb
-                            except Exception:
-                                final_image_url = thumb
-                    
-                    final_extra = {
-                        "isbn": clean_isbn,
-                        "subjects": [s["name"] for s in open_library_data.get("subjects", [])]
-                    }
-                else:
-                    logger.warning(f"No enrichment found for {title}. Using raw data.")
-                
-                # If everything failed, keep raw image url (even if broken, better than nothing?)
-                # user logic says "if returns broken image or 403 then google should be used".
-                # We tried google. If google failed too, we are here.
-                if not final_image_url and raw_image_url and not image_download_failed:
-                     final_image_url = raw_image_url
-
-                # Create Item
-                target_owner = community_id if community_id else owner_id
-                db_item = Item(
-                    title=final_title,
-                    author=final_author,
-                    description=final_description,
-                    image_url=final_image_url,
-                    owner_id=target_owner,
-                    item_type=ItemType.book,
-                    extra_data=final_extra,
-                )
-                session.add(db_item)
-                session.flush()
-
-                # Record contribution
-                from app.models import Contribution
-                contribution = Contribution(
-                    user_id=owner_id,
-                    item_id=db_item.id,
-                    work_author=final_author,
-                    work_title=final_title,
-                    description=f"Imported book: {final_title}"
-                )
-                session.add(contribution)
-                
-                # Create WorkMetadata if it didn't exist
-                if final_author and final_title:
-                    ensure_work_metadata(
-                        session,
-                        final_author,
-                        final_title,
-                        isbn=final_extra.get("isbn") or clean_isbn,
-                        description=final_description,
-                        category=final_extra.get("category"),
-                        image_url=final_image_url
-                    )
-
-                staged.status = StagedItemStatus.COMPLETED
-                session.add(staged)
-                session.commit()
-                session.refresh(db_item)
-                sync_item_to_search(db_item)
-                logger.info(f"Successfully imported and enriched: {final_title}")
-                
-                # Send WebSocket update
-                await notification_manager.send_personal_message(
-                    {"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "COMPLETED"},
-                    owner_id
-                )
-
+                d = s.raw_data; t, a, i = str(d.get("title", "")).strip(), str(d.get("author", "")).strip(), str(d.get("isbn", "")).strip() or None
+                if not t or not a: raise ValueError("Title/Author required")
+                m = session.exec(select(WorkMetadata).where(WorkMetadata.isbn == "".join(c for c in i if c.isdigit() or c.upper()=="X").upper())).first() if i else None
+                if not m: m = session.get(WorkMetadata, (a, t))
+                img = await upload_image_from_url(d["image_url"], "items") if d.get("image_url") else None
+                g, ol = await fetch_external_book_metadata(a, t, i)
+                desc, cat = str(d.get("description", "")).strip() or None, None
+                if m: t, a, desc, img, cat, i = m.title, m.author, m.description or desc, m.image_url or img, m.category, m.isbn or i
+                elif g:
+                    t, desc, cat = g.get("title", t), g.get("description", desc), (g.get("categories") or [None])[0]
+                    a, i = ", ".join(g.get("authors", [])) or a, next((x["identifier"] for x in g.get("industryIdentifiers", []) if x["type"] in ["ISBN_13", "ISBN_10"]), i)
+                    if not img and g.get("imageLinks"):
+                        try: img = await upload_image_from_url(g["imageLinks"].get("medium") or g["imageLinks"].get("thumbnail"), "items")
+                        except: pass
+                elif ol:
+                    t, desc = ol.get("title", t), ol.get("description") or desc
+                    a = ", ".join([x["name"] if isinstance(x, dict) else x for x in ol.get("authors", [])] or ol.get("author_name", [])) or a
+                    if not img:
+                        try: img = await upload_image_from_url(ol.get("cover_url") or f"https://covers.openlibrary.org/b/id/{ol.get('cover_i')}-L.jpg", "items")
+                        except: pass
+                ensure_work_metadata(session, a, t, isbn=i, description=desc, category=cat, image_url=img)
+                s.status = StagedItemStatus.COMPLETED; session.add(s); session.commit()
+                await notification_manager.send_personal_message({"type": "BOOK_ARCHIVE_UPDATED", "staged_id": str(staged_id), "status": "COMPLETED"}, owner_id)
             except Exception as e:
-                logger.exception(f"Enrichment failed for staged item {staged_id}")
-                staged.status = StagedItemStatus.FAILED
-                staged.error_log = str(e)
-                session.add(staged)
-                session.commit()
-                await notification_manager.send_personal_message(
-                    {"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "FAILED"},
-                    owner_id
-                )
+                s.status, s.error_log = StagedItemStatus.FAILED, str(e); session.add(s); session.commit()
+                await notification_manager.send_personal_message({"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "FAILED"}, owner_id)
+
+async def enrich_and_import_item(staged_id: uuid.UUID, owner_id: uuid.UUID, comm_id: uuid.UUID | None):
+    async with enrichment_semaphore:
+        await asyncio.sleep(random.uniform(1, 3))
+        with Session(engine) as session:
+            s = session.get(StagedItem, staged_id)
+            if not s or s.status == StagedItemStatus.COMPLETED: return
+            s.status = StagedItemStatus.PROCESSING; session.add(s); session.commit()
+            await notification_manager.send_personal_message({"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "PROCESSING"}, owner_id)
+            try:
+                d = s.raw_data; t, a, i = str(d.get("title", "")).strip(), str(d.get("author", "")).strip(), str(d.get("isbn", "")).strip() or None
+                if not t: raise ValueError("Title required")
+                m = session.exec(select(WorkMetadata).where(WorkMetadata.isbn == "".join(c for c in i if c.isdigit() or c.upper()=="X").upper())).first() if i else None
+                if not m and a: m = session.get(WorkMetadata, (a, t))
+                img = await upload_image_from_url(d["image_url"], "items") if d.get("image_url") else None
+                g, ol = await fetch_external_book_metadata(a, t, i)
+                desc, extra = str(d.get("description", "")).strip() or None, {}
+                if m: t, a, desc, img, extra = m.title, m.author, m.description or desc, m.image_url or img, {"cat": m.category, "isbn": m.isbn, "tags": m.tags}
+                elif g:
+                    t, desc = g.get("title", t), g.get("description", desc)
+                    a, i = ", ".join(g.get("authors", [])) or a, next((x["identifier"] for x in g.get("industryIdentifiers", []) if x["type"] in ["ISBN_13", "ISBN_10"]), i)
+                    if not img and g.get("imageLinks"):
+                        try: img = await upload_image_from_url(g["imageLinks"].get("medium") or g["imageLinks"].get("thumbnail"), "items")
+                        except: pass
+                    extra = {"isbn": i, "cat": (g.get("categories") or [None])[0]}
+                elif ol:
+                    t, desc = ol.get("title", t), ol.get("description") or desc
+                    a = ", ".join([x["name"] if isinstance(x, dict) else x for x in ol.get("authors", [])] or ol.get("author_name", [])) or a
+                    if not img:
+                        try: img = await upload_image_from_url(ol.get("cover_url") or f"https://covers.openlibrary.org/b/id/{ol.get('cover_i')}-L.jpg", "items")
+                        except: pass
+                    extra = {"isbn": i, "subjects": ol.get("subject", [])}
+                item = Item(title=t, author=a, description=desc, image_url=img, owner_id=comm_id or owner_id, item_type=ItemType.book, extra_data=extra)
+                session.add(item); session.flush()
+                session.add(Contribution(user_id=owner_id, item_id=item.id, work_author=a, work_title=t, description=f"Imported: {t}"))
+                if a and t: ensure_work_metadata(session, a, t, isbn=extra.get("isbn") or i, description=desc, category=extra.get("cat"), image_url=img)
+                s.status = StagedItemStatus.COMPLETED; session.add(s); session.commit(); sync_item_to_search(item)
+                await notification_manager.send_personal_message({"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "COMPLETED"}, owner_id)
+            except Exception as e:
+                s.status, s.error_log = StagedItemStatus.FAILED, str(e); session.add(s); session.commit()
+                await notification_manager.send_personal_message({"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "FAILED"}, owner_id)

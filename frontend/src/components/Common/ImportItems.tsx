@@ -18,7 +18,6 @@ import {
   HStack,
   Heading,
   Icon,
-  Image,
   Input,
   Stack,
   Table,
@@ -34,7 +33,6 @@ import {
   FaEdit,
   FaExclamationTriangle,
   FaFileImport,
-  FaInfoCircle,
   FaSpinner,
   FaTrash,
 } from "react-icons/fa"
@@ -146,7 +144,7 @@ const EditableCell = ({
 
 const validateItem = (item: StagedItemPublic) => {
   const errors: string[] = []
-  const data = item.raw_data
+  const data = item.raw_data as Record<string, string>
 
   if (!data.title?.trim()) {
     errors.push("Missing Title")
@@ -181,9 +179,6 @@ export const ImportItems = ({
   })
   const [isMappingOpen, setIsMappingOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const [filterMode, setFilterMode] = useState<"all" | "issues" | "pending">(
-    "all",
-  )
   const { showSuccessToast, showErrorToast, showInfoToast } = useCustomToast()
   const queryClient = useQueryClient()
 
@@ -236,17 +231,6 @@ export const ImportItems = ({
   })
 
   const items = stagedItems?.data || []
-  const filteredItems = items.filter((item) => {
-    if (filterMode === "all") return true
-    if (filterMode === "issues") return validateItem(item).length > 0
-    if (filterMode === "pending") return item.status === "PENDING"
-    return true
-  })
-  const totalStaged = stagedItems?.count || 0
-  const processingCount = stagedItems?.processing_count || 0
-  const completedCount = stagedItems?.completed_count || 0
-  const failedCount = stagedItems?.failed_count || 0
-
   const completedItems = items.filter((i) => i.status === "COMPLETED")
   const failedItems = items.filter((i) => i.status === "FAILED")
 
@@ -299,12 +283,13 @@ export const ImportItems = ({
   })
 
   const cleanMutation = useMutation({
-    mutationFn: (all: boolean) => {
+    mutationFn: async (all: boolean) => {
       if (all) return ImportsService.cleanStagedItems({ communityId })
       const finishedIds = [...completedItems, ...failedItems].map((i) => i.id)
-      return Promise.all(
+      await Promise.all(
         finishedIds.map((id) => ImportsService.deleteStagedItem({ id })),
       )
+      return { message: "Cleaned up items." }
     },
     onSuccess: () => {
       showSuccessToast("Cleaned up items.")
@@ -416,7 +401,6 @@ export const ImportItems = ({
             )}
             <Button
               as="label"
-              htmlFor="import-upload"
               variant="solid"
               bg="ui.hover"
               _hover={{ bg: "accent.600" }}
@@ -553,6 +537,7 @@ export const ImportItems = ({
                 <Table.Body>
                   {items.map((item) => {
                     const validationErrors = validateItem(item)
+                    const rawData = item.raw_data as Record<string, string>
                     return (
                       <Table.Row
                         key={item.id}
@@ -579,8 +564,8 @@ export const ImportItems = ({
                           />
                         </Table.Cell>
                         <Table.Cell>
-                          {item.raw_data.image_url ? (
-                            <Tooltip content={item.raw_data.image_url}>
+                          {rawData.image_url ? (
+                            <Tooltip content={rawData.image_url}>
                               <Text
                                 fontSize="xs"
                                 maxW="150px"
@@ -588,10 +573,10 @@ export const ImportItems = ({
                                 color="blue.500"
                                 cursor="pointer"
                                 onClick={() =>
-                                  window.open(item.raw_data.image_url, "_blank")
+                                  window.open(rawData.image_url, "_blank")
                                 }
                               >
-                                {item.raw_data.image_url}
+                                {rawData.image_url}
                               </Text>
                             </Tooltip>
                           ) : (
@@ -604,7 +589,7 @@ export const ImportItems = ({
                           <EditableCell
                             item={item}
                             field="title"
-                            value={item.raw_data.title}
+                            value={rawData.title}
                             onSave={handleCellSave}
                           />
                         </Table.Cell>
@@ -612,7 +597,7 @@ export const ImportItems = ({
                           <EditableCell
                             item={item}
                             field="author"
-                            value={item.raw_data.author}
+                            value={rawData.author}
                             onSave={handleCellSave}
                           />
                         </Table.Cell>
@@ -620,7 +605,7 @@ export const ImportItems = ({
                           <EditableCell
                             item={item}
                             field="isbn"
-                            value={item.raw_data.isbn}
+                            value={rawData.isbn}
                             onSave={handleCellSave}
                           />
                         </Table.Cell>
@@ -628,7 +613,7 @@ export const ImportItems = ({
                           <EditableCell
                             item={item}
                             field="description"
-                            value={item.raw_data.description}
+                            value={rawData.description}
                             onSave={handleCellSave}
                             isMultiline
                           />
@@ -669,7 +654,7 @@ export const ImportItems = ({
                           {item.status === "FAILED" && (
                             <HStack color="red.500" gap={1}>
                               <Icon as={FaExclamationTriangle} />
-                              <Text fontSize="xs" title={item.error_log}>
+                              <Text fontSize="xs" title={item.error_log || undefined}>
                                 Failed
                               </Text>
                             </HStack>

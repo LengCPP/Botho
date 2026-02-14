@@ -235,187 +235,198 @@ async def maintenance_bulk_classify(user_id: uuid.UUID):
             user_id
         )
 
+async def fetch_external_book_metadata(
+    author: str, 
+    title: str, 
+    isbn: str | None = None, 
+    source_api: str = "auto"
+) -> tuple[dict | None, dict | None]:
+    """Consolidated helper to fetch metadata from Google Books and OpenLibrary."""
+    import httpx
+    from app.core.config import settings
+    
+    google_data = None
+    open_library_data = None
+    clean_isbn = "".join(c for c in isbn if c.isdigit() or c.upper() == "X").upper() if isbn else None
+
+    # 1. Google Books
+    if source_api in ["auto", "google_books"]:
+        search_query = f"isbn:{clean_isbn}" if clean_isbn else f"intitle:{title} inauthor:{author}"
+        api_key = settings.VITE_GOOGLE_BOOKS_API_KEY
+        url = f"https://www.googleapis.com/books/v1/volumes?q={search_query}&maxResults=1"
+        if api_key: url += f"&key={api_key}"
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(url, timeout=10.0)
+                if response.status_code == 200:
+                    res_json = response.json()
+                    if res_json.get("items"):
+                        google_data = res_json["items"][0]["volumeInfo"]
+            except Exception:
+                pass
+
+    # 2. Open Library
+    if source_api == "open_library" or (source_api == "auto" and not google_data):
+        try:
+            async with httpx.AsyncClient() as client:
+                if clean_isbn:
+                    ol_url = f"https://openlibrary.org/api/books?bibkeys=ISBN:{clean_isbn}&format=json&jscmd=data"
+                    ol_res = await client.get(ol_url, timeout=10.0)
+                    if ol_res.status_code == 200:
+                        ol_json = ol_res.json()
+                        if f"ISBN:{clean_isbn}" in ol_json:
+                            raw = ol_json[f"ISBN:{clean_isbn}"]
+                            open_library_data = {
+                                "title": raw.get("title"),
+                                "isbn": [clean_isbn],
+                                "description": raw.get("description"),
+                                "authors": raw.get("authors"),
+                                "subject": [s.get("name") for s in raw.get("subjects", [])],
+                                "cover_url": raw.get("cover", {}).get("large") or raw.get("cover", {}).get("medium")
+                            }
+
+                if not open_library_data:
+                    ol_search_url = f"https://openlibrary.org/search.json?title={title}&author={author}&limit=1"
+                    ol_res = await client.get(ol_search_url, timeout=10.0)
+                    if ol_res.status_code == 200:
+                        ol_json = ol_res.json()
+                        if ol_json.get("docs"):
+                            open_library_data = ol_json["docs"][0]
+
+                # Second Call: Fetch description from Work API if missing
+                if open_library_data and not open_library_data.get("description"):
+                    work_key = open_library_data.get("key")
+                    if work_key:
+                        try:
+                            work_res = await client.get(f"https://openlibrary.org{work_key}.json", timeout=5.0)
+                            if work_res.status_code == 200:
+                                work_data = work_res.json()
+                                desc = work_data.get("description")
+                                open_library_data["description"] = desc.get("value") if isinstance(desc, dict) else desc
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
+    return google_data, open_library_data
+
 async def enrich_specific_books(
     books_to_enrich: list[dict[str, str]],
     user_id: uuid.UUID,
     fields_to_update: list[str] | None = None,
-    source_api: str = "auto"
+    source_api: str = "auto",
+    overwrite: bool = False
 ):
-    """
-    Background task to enrich specific books using external APIs (Google Books, OpenLibrary).
-    books_to_enrich: list of {"author": str, "title": str}
-    user_id: ID of the user who triggered the task
-    fields_to_update: list of fields to overwrite
-    source_api: "google_books", "open_library", or "auto"
-    """
-    import httpx
-    import logging
-    from app.core.config import settings
+    """Background task to enrich specific books using the consolidated helper."""
     from app.core.db import engine
     from app.storage import upload_image_from_url
     from app.search import sync_item_to_search
     from app.api.websocket_manager import notification_manager
 
-    logger = logging.getLogger(__name__)
-    logger.info(f"Starting enrichment for {len(books_to_enrich)} books. API: {source_api}, Fields: {fields_to_update}")
-
-    # Limit concurrent external API calls
-    semaphore = asyncio.Semaphore(3)
-
     # Defaults if not specified
     if not fields_to_update:
-        fields_to_update = ["description", "isbn", "image_url", "category"]
+        fields_to_update = ["description", "isbn", "image_url", "category", "genre", "tags"]
 
-    async def fetch_metadata(author: str, title: str):
-        # ... (same as before)
-        async with semaphore:
-            await asyncio.sleep(0.5) # Rate limiting
-            google_data = None
-            open_library_data = None
-            
-            # 1. Google Books
-            if source_api in ["auto", "google_books"]:
-                search_query = f"intitle:{title} inauthor:{author}"
-                api_key = settings.VITE_GOOGLE_BOOKS_API_KEY
-                url = f"https://www.googleapis.com/books/v1/volumes?q={search_query}&maxResults=1"
-                if api_key: url += f"&key={api_key}"
-
-                async with httpx.AsyncClient() as client:
-                    try:
-                        response = await client.get(url, timeout=10.0)
-                        if response.status_code == 200:
-                            res_json = response.json()
-                            if res_json.get("items"):
-                                google_data = res_json["items"][0]["volumeInfo"]
-                    except Exception as e:
-                        logger.error(f"Google Books API failed for {title}: {e}")
-
-            # 2. Open Library (if Google fails or misses data, OR if specifically requested)
-            should_fetch_ol = source_api == "open_library" or (source_api == "auto" and not google_data)
-            
-            if should_fetch_ol:
-                try:
-                    ol_search_url = f"https://openlibrary.org/search.json?title={title}&author={author}&limit=1"
-                    async with httpx.AsyncClient() as client:
-                        ol_res = await client.get(ol_search_url, timeout=10.0)
-                        if ol_res.status_code == 200:
-                            ol_json = ol_res.json()
-                            if ol_json.get("docs"):
-                                open_library_data = ol_json["docs"][0]
-                except Exception as e:
-                    logger.error(f"OpenLibrary API failed for {title}: {e}")
-
-            return google_data, open_library_data
+    semaphore = asyncio.Semaphore(3)
 
     with Session(engine) as session:
         count = 0
         for book_info in books_to_enrich:
-            # ... (same loop logic)
-            author = book_info.get("author")
-            title = book_info.get("title")
-            
-            if not author or not title:
-                continue
+            author, title, isbn = book_info.get("author"), book_info.get("title"), book_info.get("isbn")
+            if not author or not title: continue
 
-            # Fetch existing items to update
-            items = session.exec(
-                select(Item).where(Item.author == author, Item.title == title)
-            ).all()
-            
-            # Fetch WorkMetadata to update
+            # Attempt to find ISBN if not provided
+            items = session.exec(select(Item).where(Item.author == author, Item.title == title)).all()
             meta = session.get(WorkMetadata, (author, title))
+            if not isbn:
+                isbn = meta.isbn if meta and meta.isbn else next((i.extra_data.get("isbn") for i in items if i.extra_data and i.extra_data.get("isbn")), None)
             
-            google_data, ol_data = await fetch_metadata(author, title)
+            async with semaphore:
+                google_data, ol_data = await fetch_external_book_metadata(author, title, isbn, source_api)
             
-            new_desc = None
-            new_isbn = None
-            new_image_url = None
-            new_category = None
-            new_tags = []
+            new_desc, new_isbn, new_img, new_cat, new_genre, new_tags = None, None, None, None, None, []
 
             if google_data:
                 new_desc = google_data.get("description")
-                industry_ids = google_data.get("industryIdentifiers", [])
-                for id_obj in industry_ids:
+                for id_obj in google_data.get("industryIdentifiers", []):
                     if id_obj["type"] in ["ISBN_13", "ISBN_10"]:
                         new_isbn = id_obj["identifier"]
                         if id_obj["type"] == "ISBN_13": break
-                google_categories = google_data.get("categories", [])
-                if google_categories:
-                    new_category = google_categories[0]
+                
+                if google_data.get("categories"):
+                    new_cat = google_data["categories"][0]
+                    if len(google_data["categories"]) > 1:
+                        new_genre = google_data["categories"][1]
+
                 img_links = google_data.get("imageLinks", {})
-                thumb = img_links.get("medium") or img_links.get("small") or img_links.get("thumbnail")
+                thumb = (img_links.get("medium") or img_links.get("small") or img_links.get("thumbnail") or "").replace("http://", "https://")
                 if thumb:
-                    thumb = thumb.replace("http://", "https://")
-                    try:
-                        new_image_url = await upload_image_from_url(thumb, folder="items")
-                    except Exception:
-                        pass
+                    try: new_img = await upload_image_from_url(thumb, folder="items")
+                    except Exception: pass
 
             elif ol_data:
-                isbns = ol_data.get("isbn", [])
-                if isbns: new_isbn = isbns[0]
-                if ol_data.get("cover_i"):
-                    thumb = f"https://covers.openlibrary.org/b/id/{ol_data.get('cover_i')}-M.jpg"
-                    try:
-                        new_image_url = await upload_image_from_url(thumb, folder="items")
-                    except Exception:
-                        pass
-                new_tags = ol_data.get("subject", [])[:5]
+                new_isbn = ol_data.get("isbn", [None])[0]
+                new_desc = ol_data.get("description")
+                thumb = ol_data.get("cover_url") or (f"https://covers.openlibrary.org/b/id/{ol_data['cover_i']}-M.jpg" if ol_data.get("cover_i") else None)
+                if thumb:
+                    try: new_img = await upload_image_from_url(thumb, folder="items")
+                    except Exception: pass
+                new_tags = (ol_data.get("subject") or ol_data.get("subject_name", []))[:5]
+                if new_tags:
+                    new_cat = new_tags[0]
+                    if len(new_tags) > 1:
+                        new_genre = new_tags[1]
 
-            final_isbn = new_isbn if "isbn" in fields_to_update else (meta.isbn if meta else None)
-            final_desc = new_desc if "description" in fields_to_update else (meta.description if meta else None)
-            final_img = new_image_url if "image_url" in fields_to_update else (meta.image_url if meta else None)
-            final_cat = new_category if "category" in fields_to_update else (meta.category if meta else None)
+            # Determine final values. If field in fields_to_update, use new value (if found).
+            # Otherwise keep existing value.
+            final_isbn = new_isbn if "isbn" in fields_to_update and new_isbn else (meta.isbn if meta else None)
+            final_desc = new_desc if "description" in fields_to_update and new_desc else (meta.description if meta else None)
+            final_img = new_img if "image_url" in fields_to_update and new_img else (meta.image_url if meta else None)
+            final_cat = new_cat if "category" in fields_to_update and new_cat else (meta.category if meta else None)
+            final_genre = new_genre if "genre" in fields_to_update and new_genre else (meta.genre if meta else None)
             
             final_tags = meta.tags if meta else []
-            if new_tags:
+            if "tags" in fields_to_update and new_tags:
+                # For tags, we merge but prioritize new ones
                 final_tags = list(set(final_tags) | set(new_tags))
 
-            if final_isbn or final_desc or final_img or final_cat:
+            if final_isbn or final_desc or final_img or final_cat or final_genre or final_tags:
                 meta = ensure_work_metadata(
-                    session, author, title,
-                    isbn=final_isbn,
-                    description=final_desc,
-                    image_url=final_img,
-                    category=final_cat,
-                    tags=final_tags
+                    session, 
+                    author, 
+                    title, 
+                    isbn=final_isbn, 
+                    description=final_desc, 
+                    image_url=final_img, 
+                    category=final_cat, 
+                    genre=final_genre,
+                    tags=final_tags,
+                    overwrite=overwrite # Use the flag here
                 )
                 count += 1
 
             for item in items:
                 updated = False
                 extra = item.extra_data or {}
-                
-                if "isbn" in fields_to_update and new_isbn:
-                    extra["isbn"] = new_isbn
-                    updated = True
-                
-                if "description" in fields_to_update and new_desc:
-                    item.description = new_desc
-                    updated = True
-                
-                if "image_url" in fields_to_update and new_image_url:
-                    item.image_url = new_image_url
-                    updated = True
-                
-                if "category" in fields_to_update and new_category:
-                    extra["category"] = new_category
-                    updated = True
-
+                if "isbn" in fields_to_update and (overwrite or not extra.get("isbn")) and new_isbn: 
+                    extra["isbn"], updated = new_isbn, True
+                if "description" in fields_to_update and (overwrite or not item.description) and new_desc: 
+                    item.description, updated = new_desc, True
+                if "image_url" in fields_to_update and (overwrite or not item.image_url) and new_img: 
+                    item.image_url, updated = new_img, True
+                if "category" in fields_to_update and (overwrite or not extra.get("category")) and new_cat: 
+                    extra["category"], updated = new_cat, True
+                if "genre" in fields_to_update and (overwrite or not extra.get("genre")) and new_genre: 
+                    extra["genre"], updated = new_genre, True
                 if updated:
                     item.extra_data = extra
                     session.add(item)
                     sync_item_to_search(item)
+
         
         session.commit()
-        logger.info(f"Enrichment complete. Updated {count} books.")
-        
-        # Notify user to refresh
-        await notification_manager.send_personal_message(
-            {"type": "BOOK_ARCHIVE_UPDATED", "count": count},
-            user_id
-        )
+        await notification_manager.send_personal_message({"type": "BOOK_ARCHIVE_UPDATED", "count": count}, user_id)
 
 async def sync_item_to_archive(session: Session, item_id: uuid.UUID):
     """Sync a specific item's metadata to the global WorkMetadata archive."""
@@ -452,8 +463,10 @@ def ensure_work_metadata(
     isbn: str | None = None,
     description: str | None = None,
     category: str | None = None,
+    genre: str | None = None,
     image_url: str | None = None,
-    tags: list[str] | None = None
+    tags: list[str] | None = None,
+    overwrite: bool = False
 ) -> WorkMetadata | None:
     if not author:
         return None
@@ -465,19 +478,22 @@ def ensure_work_metadata(
             isbn=isbn,
             description=description,
             category=category,
+            genre=genre,
             image_url=image_url,
             tags=tags or []
         )
         session.add(meta)
     else:
-        # Update missing info if found
-        if isbn and not meta.isbn:
+        # Update info if missing OR if overwrite is requested
+        if isbn and (overwrite or not meta.isbn):
             meta.isbn = isbn
-        if description and not meta.description:
+        if description and (overwrite or not meta.description):
             meta.description = description
-        if category and not meta.category:
+        if category and (overwrite or not meta.category):
             meta.category = category
-        if image_url and not meta.image_url:
+        if genre and (overwrite or not meta.genre):
+            meta.genre = genre
+        if image_url and (overwrite or not meta.image_url):
             meta.image_url = image_url
         if tags:
             # Merge tags, avoiding duplicates

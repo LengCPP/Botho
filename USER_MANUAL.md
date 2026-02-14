@@ -24,12 +24,14 @@ Welcome to **Botho**, your platform for sharing, lending, and managing resources
 Communities are private groups where you can share items with trusted members.
 - **Join a Community**: Search for communities and click **Join**. If a community requires approval, your request will be sent to the administrators.
 - **Create a Community**: Start your own community, set its privacy (Public or Private), and decide if new members need approval.
-- **Collections**: Frontend-only collections allow for quick filtering and organizing items by subject, genre, category, or author.
+- **Bucket Collections**: Special community-owned collections that allow any member to contribute items. These collections feature automatic cleanup of orphaned entries and shared ownership.
+- **Personal Collections**: Organise items by subject, genre, category, or author. Use these for quick filtering within a community board.
 - **Management**: Community admins can manage members, post announcements, and moderate shared items.
 
 ### 4. Friends
 - **Connect**: Search for users by their Public ID or name and send a friend request.
 - **View Profiles**: Once connected, you can view your friends' public items and profiles.
+- **Privacy Settings**: Control who can see your items (Friends only, Community members, or Public).
 
 ---
 
@@ -38,9 +40,12 @@ Communities are private groups where you can share items with trusted members.
 ### 5. Adding Items
 You can add items to your personal collection or directly to a community.
 - **Book Search**: When adding a book, use the integrated search (Google Books) to automatically fetch metadata like Author, Title, and Cover Image.
-- **Bulk Import**: Quickly add your existing collection by uploading an Excel (.xlsx) or CSV file. Map your file's columns to fields like **Title**, **Author**, and **ISBN**. The system will automatically enrich your books with descriptions and covers from Google Books in the background.
+- **Bulk Import Staging**: Quickly add your existing collection by uploading an Excel (.xlsx) or CSV file.
+  - **Mapping**: Map your file's columns to fields like **Title**, **Author**, and **ISBN**.
+  - **Staging UI**: Before finalising the import, review all items in a dedicated staging interface. You can correct errors, select which items to import, and see real-time feedback on data enrichment.
+  - **Background Enrichment**: The system automatically enriches your books with descriptions and covers from Google Books in the background.
 - **General Items**: For other resources (tools, games, etc.), manually enter the details and upload an image.
-- **Collections**: Organize your items into groups (e.g., "Fiction", "DIY Tools") for easier browsing.
+- **Item Discovery**: Use faceted search to quickly filter items by category, condition, or availability. Facets are automatically sorted to show the most relevant options first.
 
 ### 6. Reading Log (Books Only)
 Track your reading progress for any book in the system.

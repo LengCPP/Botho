@@ -733,8 +733,9 @@ class WorkMetadataUpdate(SQLModel):
 
 class BookEnrichmentRequest(SQLModel):
     books: list[dict[str, str]] # List of {"author": str, "title": str}
-    fields_to_update: list[str] = ["description", "isbn", "image_url", "category"]
+    fields_to_update: list[str] = ["description", "isbn", "image_url", "category", "genre", "tags"]
     source_api: str = "auto" # "google_books", "open_library", "auto"
+    overwrite: bool = False
 
 
 class WorksMetadataPublic(SQLModel):

@@ -104,7 +104,8 @@ def trigger_enrich_books(
         request.books,
         current_user.id,
         request.fields_to_update, 
-        request.source_api
+        request.source_api,
+        request.overwrite
     )
     return Message(message=f"Enrichment task started for {len(request.books)} books.")
 

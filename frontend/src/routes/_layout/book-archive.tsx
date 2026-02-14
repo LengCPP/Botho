@@ -34,7 +34,6 @@ import { ImportItems } from "@/components/Common/ImportItems"
 import {
   DialogActionTrigger,
   DialogBody,
-  DialogCloseTrigger,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -70,7 +69,7 @@ function getBooksQueryOptions({
       ItemsService.listBookRegistry({
         skip: (page - 1) * PER_PAGE,
         limit: PER_PAGE,
-        filter_missing: filter_missing === "all" ? undefined : filter_missing,
+        filterMissing: filter_missing === "all" ? undefined : filter_missing,
       }),
     queryKey: ["book-archive", { page, filter_missing }],
   }
@@ -81,12 +80,14 @@ export const Route = createFileRoute("/_layout/book-archive")({
   validateSearch: (search) => archiveSearchSchema.parse(search),
 })
 
+type SelectedBook = { author: string; title: string; isbn?: string | null }
+
 function BooksTable({
   selectedBooks,
   onSelectionChange,
 }: {
-  selectedBooks: { author: string; title: string }[]
-  onSelectionChange: (books: { author: string; title: string }[]) => void
+  selectedBooks: SelectedBook[]
+  onSelectionChange: (books: SelectedBook[]) => void
 }) {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
@@ -155,7 +156,7 @@ function BooksTable({
             (b) => b.author === book.author && b.title === book.title,
           )
         ) {
-          newSelection.push({ author: book.author, title: book.title })
+          newSelection.push({ author: book.author, title: book.title, isbn: book.isbn })
         }
       }
       onSelectionChange(newSelection)
@@ -171,7 +172,7 @@ function BooksTable({
   }
 
   const handleSelectRow = (
-    book: { author: string; title: string },
+    book: SelectedBook,
     checked: boolean,
   ) => {
     if (checked) {
@@ -233,7 +234,7 @@ function BooksTable({
                     checked={isSelected}
                     onCheckedChange={(e) =>
                       handleSelectRow(
-                        { author: book.author, title: book.title },
+                        { author: book.author, title: book.title, isbn: book.isbn },
                         !!e.checked,
                       )
                     }
@@ -246,7 +247,6 @@ function BooksTable({
                       alt={book.title}
                       h="80px"
                       objectFit="contain"
-                      fallback={<Box h="80px" w="50px" bg="bg.muted" />}
                     />
                   ) : (
                     <Box
@@ -370,8 +370,11 @@ function BookArchive() {
     "isbn",
     "image_url",
     "category",
+    "genre",
+    "tags",
   ])
   const [enrichSource, setEnrichSource] = useState("auto")
+  const [overwriteExisting, setOverwriteExisting] = useState(false)
   const [isEnrichDialogOpen, setIsEnrichDialogOpen] = useState(false)
 
   const { showSuccessToast, showErrorToast } = useCustomToast()
@@ -386,7 +389,7 @@ function BookArchive() {
   })
 
   const syncRegistryMutation = useMutation({
-    queryKey: ["sync-registry"],
+    mutationKey: ["sync-registry"],
     mutationFn: () => ItemsService.syncItemsToRegistry(),
     onSuccess: () => {
       showSuccessToast("Registry sync started")
@@ -402,6 +405,7 @@ function BookArchive() {
       books: { author: string; title: string }[]
       fields_to_update: string[]
       source_api: string
+      overwrite: boolean
     }) => ItemsService.triggerEnrichBooks({ requestBody: data as any }),
     onSuccess: () => {
       showSuccessToast(`Enrichment started for ${selectedBooks.length} books`)
@@ -433,7 +437,9 @@ function BookArchive() {
     { value: "description", label: "Description" },
     { value: "isbn", label: "ISBN" },
     { value: "image_url", label: "Cover Image" },
-    { value: "category", label: "Category/Genre (From API)" },
+    { value: "category", label: "Category" },
+    { value: "genre", label: "Genre" },
+    { value: "tags", label: "Tags/Subjects" },
   ]
 
   const handleFieldChange = (field: string, isChecked: boolean) => {
@@ -501,11 +507,15 @@ function BookArchive() {
                           </RadioGroup>
                         </Field>
 
-                        <Field label="Fields to Update/Overwrite">
+                        <VStack align="start" gap={2} width="full">
+                          <Text fontWeight="medium" fontSize="sm">
+                            Fields to Fetch
+                          </Text>
                           <Stack gap={2}>
                             {ENRICH_OPTIONS.map((opt) => (
                               <Checkbox
                                 key={opt.value}
+                                inputProps={{ id: `enrich-field-${opt.value}` }}
                                 checked={enrichFields.includes(opt.value)}
                                 onCheckedChange={(e) =>
                                   handleFieldChange(opt.value, !!e.checked)
@@ -515,7 +525,22 @@ function BookArchive() {
                               </Checkbox>
                             ))}
                           </Stack>
-                        </Field>
+                        </VStack>
+
+                        <VStack align="start" gap={2} width="full">
+                          <Text fontWeight="medium" fontSize="sm">
+                            Overwrite Options
+                          </Text>
+                          <Checkbox
+                            inputProps={{ id: "enrich-overwrite" }}
+                            checked={overwriteExisting}
+                            onCheckedChange={(e) =>
+                              setOverwriteExisting(!!e.checked)
+                            }
+                          >
+                            Overwrite existing data if found
+                          </Checkbox>
+                        </VStack>
                       </Stack>
                     </DialogBody>
                     <DialogFooter>
@@ -530,6 +555,7 @@ function BookArchive() {
                             books: selectedBooks,
                             fields_to_update: enrichFields,
                             source_api: enrichSource,
+                            overwrite: overwriteExisting,
                           })
                         }
                       >

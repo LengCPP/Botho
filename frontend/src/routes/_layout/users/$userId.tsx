@@ -1,30 +1,22 @@
 import {
-  Badge,
   Box,
   Button,
-  Card,
   Container,
   Flex,
-  Grid,
   HStack,
   Heading,
   IconButton,
-  Image,
   Separator,
   SimpleGrid,
-  Tabs,
   Text,
   VStack,
-  useBreakpointValue,
 } from "@chakra-ui/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { BsThreeDotsVertical } from "react-icons/bs"
 import { FaChevronLeft } from "react-icons/fa"
 import {
-  FiBook,
-  FiLayers,
   FiShare2,
   FiUserCheck,
   FiUserMinus,
@@ -62,7 +54,7 @@ import {
 import type { UserPublicExtended } from "@/customTypes"
 import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
-import { formatPublicId, getImageUrl, groupItems, handleError } from "@/utils"
+import { formatPublicId, groupItems, handleError } from "@/utils"
 
 const userSearchSchema = z.object({
   page: z.number().catch(1),
@@ -203,7 +195,10 @@ function UserProfilePage() {
     enabled: canSeeAll && (!!subject || display_type === "items"),
   })
 
-  const { data: facets, isLoading: isLoadingFacets } = useQuery({
+  const { data: facets, isLoading: isLoadingFacets } = useQuery<{
+    data: any[]
+    count: number
+  }>({
     queryKey: ["itemFacets", userId, organize_by, q, page],
     queryFn: () =>
       ItemsService.readItemFacets({
@@ -393,7 +388,7 @@ function UserProfilePage() {
 
           {isLoadingItems || isLoadingFacets ? (
             <Text>Loading items...</Text>
-          ) : userItems.length === 0 && !facets?.data?.length ? (
+          ) : userItems.length === 0 && !(facets && facets.data && facets.data.length > 0) ? (
             <Text color="gray.500">No items found.</Text>
           ) : (
             <>
