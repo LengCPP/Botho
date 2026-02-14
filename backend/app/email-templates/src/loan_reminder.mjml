@@ -8,7 +8,7 @@
   </mj-head>
   <mj-body background-color="#f4f4f4">
     <!-- Top Accent Bar -->
-    <mj-section background-color="#fb6635" padding="5px 0">
+    <mj-section background-color="#5e2b3b" padding="5px 0">
     </mj-section>
     
     <mj-section background-color="#ffffff" padding="40px 20px">
@@ -20,7 +20,7 @@
         
         <!-- Content Section -->
         <mj-text align="center" font-size="20px" font-weight="bold" color="#333333" padding-bottom="20px">Item Return Reminder</mj-text>
-        <mj-text align="center" padding-bottom="10px">Hi!</mj-text>
+        <mj-text align="center" padding-bottom="10px">Hi {{ recipient_name }},</mj-text>
         <mj-text align="center" padding-bottom="20px">
           This is a friendly reminder from <strong>{{ lender_name }}</strong> to return the item <strong>'{{ item_title }}'</strong>.
         </mj-text>
@@ -34,7 +34,7 @@
         </mj-text>
         
         <!-- Action Button -->
-        <mj-button align="center" font-size="16px" font-weight="bold" background-color="#2b5e4e" border-radius="4px" color="#ffffff" href="{{ link }}" padding="20px 30px">
+        <mj-button align="center" font-size="16px" font-weight="bold" background-color="#fb6635" border-radius="4px" color="#ffffff" href="{{ link }}" padding="20px 30px">
           VIEW MY LOANS
         </mj-button>
         
@@ -45,7 +45,7 @@
     <mj-section padding="30px 20px">
       <mj-column width="100%">
         <mj-text align="center" font-size="12px" color="#999999">
-          &copy; 2026 {{ project_name }}. All rights reserved.<br/>
+          &copy; 2026 Botho. All rights reserved.<br/>
           This is an automated message, please do not reply.
         </mj-text>
       </mj-column>

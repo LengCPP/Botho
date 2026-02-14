@@ -167,6 +167,7 @@ def generate_donation_notification_email(
 def generate_loan_reminder_email(
     *,
     email_to: str,
+    recipient_name: str,
     lender_name: str,
     item_title: str,
     due_date: datetime,
@@ -178,6 +179,7 @@ def generate_loan_reminder_email(
         template_name="loan_reminder.html",
         context={
             "project_name": project_name,
+            "recipient_name": recipient_name,
             "lender_name": lender_name,
             "item_title": item_title,
             "due_date": due_date.strftime('%Y-%m-%d'),

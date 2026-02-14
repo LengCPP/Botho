@@ -879,6 +879,7 @@ async def send_return_reminder(
 
     email_data = generate_loan_reminder_email(
         email_to=borrower.email,
+        recipient_name=borrower.full_name or borrower.email,
         lender_name=lender_name,
         item_title=loan.item.title,
         due_date=loan.end_date
