@@ -1051,8 +1051,8 @@ class UserReputationSchema(SQLModel):
     honor_score: float
     reliability_rate: float
     is_delinquent: bool
-    ai_honor_summary: str | None
-    ai_improvement_tips: list[str] | None
+    ai_honor_summary: str | None = None
+    ai_improvement_tips: list[str] | None = []
     review_count: int
 
 

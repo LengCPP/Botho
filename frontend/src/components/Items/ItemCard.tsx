@@ -484,8 +484,9 @@ const ItemCard = ({
                 variant="solid"
                 size="sm"
                 borderRadius="full"
+                px={2}
               >
-                {items.length}
+                {items.length} copies
               </Badge>
             )}
 

@@ -966,7 +966,7 @@ function CommunityBoard() {
                       )}
 
                       <VStack align="stretch" gap={8}>
-                        {renderItemGrid(groupItems(allItems))}
+                        {renderItemGrid(groupItems(allItems, false))}
 
                         {hasNextItems && (
                           <Flex justify="center">

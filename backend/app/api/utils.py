@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+from datetime import datetime
 from typing import Any
 
 from sqlmodel import Session, and_, func, or_, select
@@ -27,22 +28,28 @@ def _update_collection_index_logic(session: Session, owner_id: uuid.UUID):
     Internal logic to update the collection_index for a user or community.
     Calculates totals and sample images for genre, category, subject, and author.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     user = session.get(User, owner_id)
     community = None
     if not user:
         community = session.get(Community, owner_id)
     
     if not user and not community:
+        logger.warning(f"Owner {owner_id} not found for index update.")
         return
 
     # Fetch all items for this owner
     if community:
         # Include pooled items for communities
-        comm_item_ids = select(CommunityItem.item_id).where(CommunityItem.community_id == owner_id)
-        items_stmt = select(Item).where(or_(Item.owner_id == owner_id, Item.id.in_(comm_item_ids)))
+        comm_item_stmt = select(CommunityItem.item_id).where(CommunityItem.community_id == owner_id)
+        items_stmt = select(Item).where(or_(Item.owner_id == owner_id, Item.id.in_(comm_item_stmt)))
         items = session.exec(items_stmt).all()
+        logger.info(f"Rebuilding index for community {owner_id}, found {len(items)} items.")
     else:
         items = session.exec(select(Item).where(Item.owner_id == owner_id)).all()
+        logger.info(f"Rebuilding index for user {owner_id}, found {len(items)} items.")
     
     # Pre-fetch work metadata for subjects (tags)
     work_keys = {(item.author, item.title) for item in items if item.author and item.title}
@@ -64,7 +71,8 @@ def _update_collection_index_logic(session: Session, owner_id: uuid.UUID):
         "category": {},
         "subject": {},
         "author": {},
-        "ownership": {}
+        "ownership": {},
+        "updated_at": datetime.now().isoformat()
     }
 
     for item in items:
@@ -137,6 +145,7 @@ def _update_collection_index_logic(session: Session, owner_id: uuid.UUID):
         session.add(community)
     
     session.commit()
+    logger.info(f"Successfully updated collection index for {owner_id}")
 
 def update_collection_index(session: Session, owner_id: uuid.UUID):
     """
@@ -144,6 +153,28 @@ def update_collection_index(session: Session, owner_id: uuid.UUID):
     Maintains synchronous behavior for legacy calls.
     """
     _update_collection_index_logic(session, owner_id)
+
+def invalidate_item_caches(session: Session, item_id: uuid.UUID, background_tasks: Any = None):
+    """
+    Trigger index rebuild for the item owner and all communities it is pooled in.
+    """
+    from app.models import Item, CommunityItem
+    item = session.get(Item, item_id)
+    if not item:
+        return
+
+    owners_to_update = {item.owner_id}
+    # Find all communities this item is pooled in
+    pooled_communities = session.exec(
+        select(CommunityItem.community_id).where(CommunityItem.item_id == item_id)
+    ).all()
+    owners_to_update.update(pooled_communities)
+
+    for owner_id in owners_to_update:
+        if background_tasks:
+            background_tasks.add_task(rebuild_collection_index_task, owner_id)
+        else:
+            rebuild_collection_index_task(owner_id)
 
 def rebuild_collection_index_task(owner_id: uuid.UUID):
     """

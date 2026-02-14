@@ -19,6 +19,7 @@ from app.api.utils import (
     sync_item_to_archive,
     update_collection_index,
     rebuild_collection_index_task,
+    invalidate_item_caches,
 )
 from app.core.config import settings
 from app.models import (
@@ -67,6 +68,37 @@ from app.ai import classify_book
 from app.storage import delete_image, upload_image, upload_image_from_url
 
 router = APIRouter(prefix="/items", tags=["items"])
+
+
+@router.post("/maintenance/rebuild-indexes", response_model=Message)
+def trigger_rebuild_all_indexes(
+    *, session: SessionDep, current_user: CurrentUser, background_tasks: BackgroundTasks
+) -> Any:
+    """
+    Trigger a background task to rebuild collection indexes for all users and communities.
+    Superuser only.
+    """
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    
+    def rebuild_task():
+        from app.core.db import engine
+        from sqlmodel import Session
+        with Session(engine) as bg_session:
+            # Rebuild Communities
+            communities = bg_session.exec(select(Community.id)).all()
+            for c_id in communities:
+                update_collection_index(bg_session, c_id)
+            
+            # Rebuild Users
+            users = bg_session.exec(select(User.id)).all()
+            for u_id in users:
+                update_collection_index(bg_session, u_id)
+            
+            bg_session.commit()
+
+    background_tasks.add_task(rebuild_task)
+    return Message(message="Background task to rebuild all collection indexes started.")
 
 
 @router.post("/maintenance/bulk-classify", response_model=Message)
@@ -344,12 +376,23 @@ def recommend_items(
     )
     rated_items = session.exec(rated_items_stmt).all()
 
+    # 2.3 Get User's Own Items (to understand their taste)
+    owned_items_stmt = (
+        select(Item.author, Item.title)
+        .where(Item.owner_id == current_user.id)
+        .limit(20)
+    )
+    owned_items = session.exec(owned_items_stmt).all()
+
     # Collect unique work identifiers
     work_keys = set()
     for author, title in loan_items:
         if author and title:
             work_keys.add((author, title))
     for author, title in rated_items:
+        if author and title:
+            work_keys.add((author, title))
+    for author, title in owned_items:
         if author and title:
             work_keys.add((author, title))
 
@@ -359,7 +402,7 @@ def recommend_items(
         from sqlalchemy import tuple_
         
         works_stmt = select(WorkMetadata).where(
-            tuple_(WorkMetadata.author, WorkMetadata.title).in_(work_keys)
+            tuple_(WorkMetadata.author, WorkMetadata.title).in_(list(work_keys))
         )
         works = session.exec(works_stmt).all()
         
@@ -379,7 +422,7 @@ def recommend_items(
     allowed_owners = list(friend_ids | community_ids)
     allowed_pools = list(community_ids)
     
-    filter_expression = ["item_type = 'book'"]
+    filter_expression = [f"item_type = 'book'", f"owner_id != '{current_user.id}'"]
     
     access_filters = []
     if allowed_owners:
@@ -1187,8 +1230,8 @@ async def create_item(
         session.refresh(db_item)
         sync_item_to_search(db_item)
 
-        # Update collection index for owner in background
-        background_tasks.add_task(rebuild_collection_index_task, db_item.owner_id)
+        # Update collection index for owner and pooled communities in background
+        invalidate_item_caches(session, db_item.id, background_tasks)
 
         owner_pub = None
         community_pub = None
@@ -1323,8 +1366,8 @@ async def update_item(
         session.refresh(db_item)
         sync_item_to_search(db_item)
 
-        # Update collection index for owner in background
-        background_tasks.add_task(rebuild_collection_index_task, db_item.owner_id)
+        # Update collection index for owner and pooled communities in background
+        invalidate_item_caches(session, db_item.id, background_tasks)
 
         # Refresh honor score
         from app.api.routes.loans import refresh_user_honor

@@ -90,18 +90,19 @@ export const getImageUrl = (
 }
 
 /**
- * Group items by title, author, and owner.
+ * Group items by title, author, and optionally owner.
  * @param items - The list of items to group
+ * @param byOwner - Whether to include owner_id in the grouping key
  * @returns An array of item groups, where each group is an array of items
  */
-export const groupItems = (items: any[]): any[][] => {
+export const groupItems = (items: any[], byOwner = true): any[][] => {
   const groups: { [key: string]: any[] } = {}
   for (const item of items) {
     const title = (item.title || "").toLowerCase().trim()
     const author = (item.author || item.extra_data?.author || "")
       .toLowerCase()
       .trim()
-    const owner = item.owner_id || ""
+    const owner = byOwner ? (item.owner_id || "") : ""
     const type = item.item_type || "general"
     const key = `${title}|${author}|${owner}|${type}`
     if (!groups[key]) {

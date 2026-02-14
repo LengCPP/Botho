@@ -19,6 +19,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogRoot,
+  DialogTrigger,
 } from "../ui/dialog"
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from "../ui/menu"
 import ConfirmationModal from "./ConfirmationModal"
@@ -325,11 +326,11 @@ export const ItemActionsMenu = ({
           placement="center"
           size="xs"
         >
-          <MenuTrigger asChild>
+          <DialogTrigger asChild>
             <IconButton variant="ghost" color="inherit">
               <BsThreeDotsVertical />
             </IconButton>
-          </MenuTrigger>
+          </DialogTrigger>
           <DialogContent>
             <DialogHeader>Item Actions</DialogHeader>
             <DialogBody pb={6}>

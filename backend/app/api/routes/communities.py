@@ -1,7 +1,7 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from sqlmodel import col, func, or_, select, text, cast, String
 
 from app import crud
@@ -11,7 +11,8 @@ from app.api.utils import (
     filter_loan_privacy,
     filter_owner_privacy,
     filter_user_privacy,
-    update_collection_index
+    update_collection_index,
+    invalidate_item_caches,
 )
 from app.models import (
     CommunitiesPublic,
@@ -854,7 +855,7 @@ def read_community_items(
 
 @router.post("/{id}/items/{item_id}", response_model=Message)
 def add_item_to_community(
-    *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, item_id: uuid.UUID
+    *, session: SessionDep, current_user: CurrentUser, background_tasks: BackgroundTasks, id: uuid.UUID, item_id: uuid.UUID
 ) -> Any:
     """
     Add an item to a community pool (Any member).
@@ -899,9 +900,8 @@ def add_item_to_community(
 
     session.commit()
     
-    # Update collection index for community
-    update_collection_index(session, id)
-    session.commit()
+    # Update collection index for owner and pooled communities in background
+    invalidate_item_caches(session, item_id, background_tasks)
 
     from app.search import sync_item_to_search
     session.refresh(item)
@@ -981,7 +981,7 @@ async def initiate_donation(
 
 @router.post("/{id}/items/{item_id}/ratify-donation", response_model=Message)
 async def ratify_donation(
-    *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, item_id: uuid.UUID
+    *, session: SessionDep, current_user: CurrentUser, background_tasks: BackgroundTasks, id: uuid.UUID, item_id: uuid.UUID
 ) -> Any:
     """
     Ratify a donation (Admin only).
@@ -1045,10 +1045,10 @@ async def ratify_donation(
     session.add(comm_item)
     session.commit()
     
-    # Update collection index for BOTH community and previous owner (user)
-    update_collection_index(session, id)
-    update_collection_index(session, donor_id)
-    session.commit()
+    # Update collection index for owner and pooled communities in background
+    invalidate_item_caches(session, item_id, background_tasks)
+    # Also update previous owner's index
+    background_tasks.add_task(rebuild_collection_index_task, donor_id)
 
     from app.search import sync_item_to_search
     session.refresh(item)
@@ -1069,7 +1069,7 @@ async def ratify_donation(
 
 @router.delete("/{id}/items/{item_id}", response_model=Message)
 def remove_item_from_community(
-    *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, item_id: uuid.UUID
+    *, session: SessionDep, current_user: CurrentUser, background_tasks: BackgroundTasks, id: uuid.UUID, item_id: uuid.UUID
 ) -> Any:
     """
     Remove an item from a community.
@@ -1111,21 +1111,19 @@ def remove_item_from_community(
         raise HTTPException(status_code=403, detail="Not enough permissions to remove this item")
 
     from app.search import delete_item_from_search, sync_item_to_search
+    
+    # Update collection index for owner and pooled communities in background BEFORE deletion
+    invalidate_item_caches(session, item_id, background_tasks)
+
     if is_owned:
         # If community owns it, delete the item itself (cascades to CommunityItem)
         item_id_to_del = item.id
         session.delete(item)
         session.commit()
-        # Update community index
-        update_collection_index(session, id)
-        session.commit()
         delete_item_from_search(item_id_to_del)
     else:
         # Just remove pooling metadata
         session.delete(comm_item)
-        session.commit()
-        # Update community index
-        update_collection_index(session, id)
         session.commit()
         session.refresh(item)
         sync_item_to_search(item)

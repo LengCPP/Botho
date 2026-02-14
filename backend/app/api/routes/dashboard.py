@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import CurrentUser, SessionDep
 from app.models import (
     Community,
+    CommunityItem,
     CommunityMember,
     CommunityMemberStatus,
     Friendship,
@@ -123,21 +124,26 @@ def get_recent_activity(
     community_ids = {cid for cid in session.exec(comm_stmt).all()}
     
     # 2. Query Items
-    # owner_id IN friends OR owner_id IN communities OR pooled_in communities (via CommunityItem... tough to join simply)
-    # Let's stick to owner_id for now as it covers most cases
+    # owner_id IN friends OR owner_id IN communities OR id IN (pooled items of my communities)
     
-    allowed_ids = list(friend_ids | community_ids)
-    
-    if not allowed_ids:
+    if not friend_ids and not community_ids:
         return ItemsPublic(data=[], count=0)
         
     # Exclude items with DEFAULTED loans
     defaulted_item_ids = select(Loan.item_id).where(Loan.status == LoanStatus.DEFAULTED)
 
+    # Subquery for pooled items in user's communities
+    pooled_item_ids_stmt = select(CommunityItem.item_id).where(CommunityItem.community_id.in_(list(community_ids)))
+
     statement = (
         select(Item)
         .options(selectinload(Item.user_owner), selectinload(Item.community_owner))
-        .where(Item.owner_id.in_(allowed_ids))
+        .where(
+            or_(
+                Item.owner_id.in_(list(friend_ids | community_ids)),
+                Item.id.in_(pooled_item_ids_stmt)
+            )
+        )
         .where(Item.id.not_in(defaulted_item_ids))
         .order_by(Item.created_at.desc())
         .limit(limit)

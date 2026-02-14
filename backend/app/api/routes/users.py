@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -564,12 +565,17 @@ def read_user_reputation_me(session: SessionDep, current_user: CurrentUser) -> A
     session.add(current_user)
     session.commit()
     
+    # Ensure ai_honor_summary is a string if it's stored as JSON
+    summary = current_user.ai_honor_summary
+    if isinstance(summary, dict):
+        summary = json.dumps(summary)
+
     return UserReputationSchema(
         honor_score=current_user.honor_score,
         reliability_rate=current_user.reliability_rate,
         is_delinquent=current_user.is_delinquent,
-        ai_honor_summary=current_user.ai_honor_summary,
-        # ai_improvement_tips=current_user.ai_improvement_tips,
+        ai_honor_summary=summary,
+        ai_improvement_tips=current_user.ai_improvement_tips or [],
         review_count=len(current_user.reviews_received)
     )
 
@@ -636,6 +642,12 @@ def read_user_report_card(
             )
         )
 
+    # Ensure ai_honor_summary is a string if it's stored as JSON
+    summary = user.ai_honor_summary
+    if isinstance(summary, dict):
+        import json
+        summary = json.dumps(summary)
+
     return UserReportCardPublic(
         user=filter_user_privacy(user, current_user.id, is_admin=current_user.is_superuser),
         reviews=reviews,
@@ -643,8 +655,8 @@ def read_user_report_card(
             honor_score=user.honor_score,
             reliability_rate=user.reliability_rate,
             is_delinquent=user.is_delinquent,
-            ai_honor_summary=user.ai_honor_summary,
-            # ai_improvement_tips=user.ai_improvement_tips,
+            ai_honor_summary=summary,
+            ai_improvement_tips=user.ai_improvement_tips or [],
             review_count=len(user.reviews_received)
         )
     )
