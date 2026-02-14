@@ -140,9 +140,9 @@ export const QuickSearch = ({
                             <Text fontWeight="medium">
                               {user.full_name || user.email}
                             </Text>
-                            {(user as any).alias && (
+                            {user.profile?.alias && (
                               <Text fontSize="xs" color="fg.muted">
-                                @{(user as any).alias}
+                                @{user.profile.alias}
                               </Text>
                             )}
                           </Box>

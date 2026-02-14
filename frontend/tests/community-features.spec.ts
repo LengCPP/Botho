@@ -111,4 +111,26 @@ test.describe("Community Features", () => {
       }
     }
   })
+
+  test("Community settings and member management", async ({ page }) => {
+    await page.goto("/communities")
+    await page.getByText(communityName).first().click()
+
+    // 1. Check Settings tab (Superuser/Owner only)
+    await page.getByRole("tab", { name: /Settings/i }).click()
+    await expect(page.getByRole("heading", { name: "Community Settings" })).toBeVisible()
+    
+    // 2. Change Description
+    const descField = page.getByPlaceholder("Description")
+    await descField.fill("Updated Test Description")
+    await page.getByRole("button", { name: "Save Changes" }).click()
+    await expect(page.getByText("Community updated successfully")).toBeVisible()
+    
+    // 3. Member management
+    await page.getByRole("tab", { name: /Members/i }).click()
+    
+    // Verify user can leave community
+    const leaveBtn = page.getByRole("button", { name: "Leave Community" })
+    await expect(leaveBtn).toBeVisible()
+  })
 })
