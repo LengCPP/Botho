@@ -1,6 +1,7 @@
 import uuid
 
 import meilisearch
+from sqlmodel import Session, select
 
 from app.core.config import settings
 from app.models import Community, Item, WorkMetadata
