@@ -206,6 +206,27 @@ export const ImportItems = ({
     refetchInterval: (query) => (query.state.data?.processing_count ?? 0) > 0 ? 1000 : 5000,
   })
 
+  // Listen for batch completion WebSocket events
+  useEffect(() => {
+    const handleMessage = (event: CustomEvent) => {
+      const message = event.detail
+      if (message.type === "IMPORT_BATCH_COMPLETED" || message.type === "BOOK_ARCHIVE_BATCH_COMPLETED") {
+        showSuccessToast("Bulk processing finished and search index updated.")
+        queryClient.invalidateQueries({ queryKey: ["stagedItems"] })
+        queryClient.invalidateQueries({ queryKey: ["items"] })
+        queryClient.invalidateQueries({ queryKey: ["book-archive-infinite"] })
+      }
+    }
+
+    window.addEventListener("websocket-message" as any, handleMessage as any)
+    return () => {
+      window.removeEventListener(
+        "websocket-message" as any,
+        handleMessage as any,
+      )
+    }
+  }, [queryClient, showSuccessToast])
+
   const items = stagedItems?.data || []
   const totalCount = stagedItems?.count || 0
   const totalPages = Math.ceil(totalCount / limit)

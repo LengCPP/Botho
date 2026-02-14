@@ -69,21 +69,30 @@ def clean_staged_items(*, session: SessionDep, current_user: CurrentUser, commun
     session.commit()
     return Message(message=f"Deleted {len(items)}")
 
+async def notify_import_finished(owner_id: uuid.UUID, type: str = "IMPORT_BATCH_COMPLETED"):
+    from app.search import reindex_all_data
+    with Session(engine) as session:
+        reindex_all_data(session)
+    await notification_manager.send_personal_message({"type": type, "status": "COMPLETED"}, owner_id)
+
 @router.post("/process")
 async def process_staged_items(*, session: SessionDep, current_user: CurrentUser, background_tasks: BackgroundTasks, ids: list[uuid.UUID], community_id: uuid.UUID | None = None) -> Any:
     for i in ids: background_tasks.add_task(enrich_and_import_item, i, current_user.id, community_id)
+    background_tasks.add_task(notify_import_finished, current_user.id)
     return {"message": "Queued"}
 
 @router.post("/process-all")
 async def process_all_staged_items(*, session: SessionDep, current_user: CurrentUser, background_tasks: BackgroundTasks, community_id: uuid.UUID | None = None) -> Any:
     items = session.exec(select(StagedItem).where(StagedItem.owner_id == current_user.id, StagedItem.status == StagedItemStatus.PENDING, StagedItem.community_id == community_id if community_id else StagedItem.community_id == None)).all()
     for i in items: background_tasks.add_task(enrich_and_import_item, i.id, current_user.id, community_id)
+    background_tasks.add_task(notify_import_finished, current_user.id)
     return {"message": f"Queued {len(items)}"}
 
 @router.post("/sync-archive")
 async def sync_archive_items(*, session: SessionDep, current_user: CurrentUser, background_tasks: BackgroundTasks, ids: list[uuid.UUID]) -> Any:
     if not current_user.is_superuser: raise HTTPException(403)
     for i in ids: background_tasks.add_task(enrich_and_import_to_archive, i, current_user.id)
+    background_tasks.add_task(notify_import_finished, current_user.id, "BOOK_ARCHIVE_BATCH_COMPLETED")
     return {"message": "Queued"}
 
 async def enrich_and_import_to_archive(staged_id: uuid.UUID, owner_id: uuid.UUID):
@@ -159,7 +168,7 @@ async def enrich_and_import_item(staged_id: uuid.UUID, owner_id: uuid.UUID, comm
                 if a and t: ensure_work_metadata(session, a, t, isbn=extra.get("isbn") or i, description=desc, category=extra.get("cat"), image_url=img)
                 s.status = StagedItemStatus.COMPLETED; session.add(s); session.commit()
                 session.refresh(item)
-                sync_item_to_search(item)
+                # sync_item_to_search(item) - REMOVED: Batch sync moved to notify_import_finished
                 await notification_manager.send_personal_message({"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "COMPLETED"}, owner_id)
             except Exception as e:
                 s.status, s.error_log = StagedItemStatus.FAILED, str(e); session.add(s); session.commit()
