@@ -18,7 +18,7 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react"
-import { useMutation } from "@tanstack/react-query"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { FiAlertCircle, FiShield } from "react-icons/fi"
 
@@ -39,6 +39,7 @@ export function LoanRequestModal({
   const [endDate, setEndDate] = useState("")
   const { user: currentUser } = useAuth()
   const { showSuccessToast, showErrorToast } = useCustomToast()
+  const queryClient = useQueryClient()
 
   const mutation = useMutation({
     mutationFn: (data: {
@@ -49,6 +50,9 @@ export function LoanRequestModal({
     }) => LoansService.createLoanRequest({ requestBody: data }),
     onSuccess: () => {
       showSuccessToast("Loan request sent!")
+      queryClient.invalidateQueries({ queryKey: ["loans"] })
+      queryClient.invalidateQueries({ queryKey: ["communityLoans"] })
+      queryClient.invalidateQueries({ queryKey: ["items"] })
       onClose()
     },
     onError: (err: any) => {
@@ -69,8 +73,16 @@ export function LoanRequestModal({
   const showPrivacyNotice = !isOwner && isUserOwned && !isPrivateContext
 
   return (
-    <DialogRoot open={isOpen} onOpenChange={(e) => !e.open && onClose()}>
-      <DialogContent>
+    <DialogRoot
+      open={isOpen}
+      onOpenChange={(e) => !e.open && onClose()}
+      placement="center"
+      size="md"
+    >
+      <DialogContent
+        backdropProps={{ backdropFilter: "blur(10px)" }}
+        borderRadius="xl"
+      >
         <DialogHeader>
           <DialogTitle>Request Loan: {item.title}</DialogTitle>
         </DialogHeader>
@@ -81,6 +93,7 @@ export function LoanRequestModal({
                 p={3}
                 bg="orange.50"
                 color="orange.800"
+                _dark={{ bg: "orange.950", color: "orange.200" }}
                 rounded="md"
                 border="1px solid"
                 borderColor="orange.200"
@@ -108,6 +121,7 @@ export function LoanRequestModal({
                 p={3}
                 bg="blue.50"
                 color="blue.800"
+                _dark={{ bg: "blue.950", color: "blue.200" }}
                 rounded="md"
                 border="1px solid"
                 borderColor="blue.200"

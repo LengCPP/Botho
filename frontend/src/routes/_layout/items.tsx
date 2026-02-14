@@ -18,17 +18,20 @@ import { FaChevronLeft, FaFileImport } from "react-icons/fa"
 import { FiSearch } from "react-icons/fi"
 import { z } from "zod"
 
-import { type ItemPublic, ItemsService, LoansService } from "@/client"
+import { type ItemPublic, type LoanPublic, ItemsService, LoansService } from "@/client"
 import { ImportItems } from "@/components/Common/ImportItems"
+import ReviewModal from "@/components/Common/ReviewModal"
 import AddItem from "@/components/Items/AddItem"
 import {
   CollectionGrid,
   type CollectionItem,
 } from "@/components/Items/CollectionGrid"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
+import { ExtensionRequestModal } from "@/components/Items/ExtensionRequestModal"
 import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
+import { LoanRequestModal } from "@/components/Items/LoanRequestModal"
 import PendingItems from "@/components/Pending/PendingItems"
 import useAuth from "@/hooks/useAuth"
 import { groupItems } from "@/utils"
@@ -85,6 +88,9 @@ function ItemsTable() {
   } = Route.useSearch()
   const { user } = useAuth()
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
+  const [selectedLoanForReview, setSelectedLoanForReview] = useState<LoanPublic | null>(null)
+  const [selectedItemForLoan, setSelectedItemForLoan] = useState<ItemPublic | null>(null)
+  const [selectedLoanForExtension, setSelectedLoanForExtension] = useState<LoanPublic | null>(null)
 
   useEffect(() => {
     localStorage.setItem("view_mode", view_mode)
@@ -322,12 +328,18 @@ function ItemsTable() {
             key={firstItem.id}
             item={group}
             onShowDetails={() => setSelectedItem(firstItem)}
+            onReview={(l) => setSelectedLoanForReview(l)}
+            onLoanRequest={(i) => setSelectedItemForLoan(i)}
+            onExtensionRequest={(l) => setSelectedLoanForExtension(l)}
           />
         ) : (
           <ItemCard
             key={firstItem.id}
             item={group}
             onShowDetails={() => setSelectedItem(firstItem)}
+            onReview={(l) => setSelectedLoanForReview(l)}
+            onLoanRequest={(i) => setSelectedItemForLoan(i)}
+            onExtensionRequest={(l) => setSelectedLoanForExtension(l)}
           />
         )
       })}
@@ -434,6 +446,32 @@ function ItemsTable() {
         isOpen={!!selectedItem}
         onClose={() => setSelectedItem(null)}
       />
+
+      {selectedLoanForReview && (
+        <ReviewModal
+          loan={selectedLoanForReview}
+          isOpen={!!selectedLoanForReview}
+          onClose={() => setSelectedLoanForReview(null)}
+        />
+      )}
+
+      {selectedItemForLoan && (
+        <LoanRequestModal
+          item={selectedItemForLoan}
+          isOpen={!!selectedItemForLoan}
+          onClose={() => setSelectedItemForLoan(null)}
+        />
+      )}
+
+      {selectedLoanForExtension && (
+        <ExtensionRequestModal
+          loanId={selectedLoanForExtension.id}
+          itemTitle={selectedLoanForExtension.item.title}
+          currentEndDate={selectedLoanForExtension.end_date}
+          isOpen={!!selectedLoanForExtension}
+          onClose={() => setSelectedLoanForExtension(null)}
+        />
+      )}
     </Box>
   )
 }

@@ -815,9 +815,6 @@ async def forgive_loan(
         session.add(new_item)
         session.flush() # Get ID
         
-        # If it was in a community pool, we might need CommunityItem entry
-        # But for now, simple owner_id assignment works for both types in Botho
-        
         # Update loan to reflect it's "returned" via replacement
         loan.status = LoanStatus.RETURNED
         loan.returned_at = datetime.now(timezone.utc)

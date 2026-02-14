@@ -4,11 +4,8 @@ import {
   type LoanPublic,
   LoansService,
 } from "@/client"
-import { Field } from "@/components/ui/field"
-import { RadioGroup as ChakraRadioGroup, Radio } from "@/components/ui/radio"
-import useCustomToast from "@/hooks/useCustomToast"
+import { Button } from "@/components/ui/button"
 import {
-  Button,
   DialogBody,
   DialogCloseTrigger,
   DialogContent,
@@ -16,12 +13,11 @@ import {
   DialogHeader,
   DialogRoot,
   DialogTitle,
-  HStack,
-  Input,
-  Text,
-  Textarea,
-  VStack,
-} from "@chakra-ui/react"
+} from "@/components/ui/dialog"
+import { Field } from "@/components/ui/field"
+import { Radio, RadioGroup } from "@/components/ui/radio"
+import useCustomToast from "@/hooks/useCustomToast"
+import { Text, VStack } from "@chakra-ui/react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 
@@ -36,11 +32,6 @@ const ForgiveModal = ({ loan, isOpen, onClose }: ForgiveModalProps) => {
   const { showSuccessToast } = useCustomToast()
   const [reason, setReason] = useState<ForgivenessReason>("OTHER")
 
-  // Specs for replacement item
-  const [title, setTitle] = useState(loan.item.title)
-  const [author, setAuthor] = useState(loan.item.author || "")
-  const [description, setDescription] = useState(loan.item.description || "")
-
   const forgiveMutation = useMutation({
     mutationFn: (data: ForgivenessRequest) =>
       LoansService.forgiveLoan({ id: loan.id, requestBody: data }),
@@ -53,121 +44,61 @@ const ForgiveModal = ({ loan, isOpen, onClose }: ForgiveModalProps) => {
   })
 
   const handleConfirm = () => {
-    const data: ForgivenessRequest = { reason }
-
-    if (reason === "REPLACED_ITEM") {
-      data.new_item_specs = {
-        title,
-        author,
-        description,
-        item_type: loan.item.item_type,
-        // Carry over image if same? Maybe not if it's a replacement
-      }
-    }
-
-    forgiveMutation.mutate(data)
+    forgiveMutation.mutate({ reason })
   }
 
   return (
     <DialogRoot
       open={isOpen}
-      onOpenChange={(e) => !e.open && onClose()}
-      size="md"
+      onOpenChange={({ open }) => !open && onClose()}
+      placement="center"
     >
-      <DialogContent bg="bg.panel">
+      <DialogContent
+        backdropProps={{ backdropFilter: "blur(10px)" }}
+        borderRadius="xl"
+      >
         <DialogHeader>
-          <DialogTitle>Forgive Default</DialogTitle>
+          <DialogTitle>Forgive Borrower</DialogTitle>
         </DialogHeader>
         <DialogBody>
           <VStack align="stretch" gap={4}>
             <Text fontSize="sm">
-              Select a reason for forgiving this default. This will remove the
-              delinquency status from the borrower's profile.
+              Forgive the default for '{loan.item.title}'? This will remove the delinquency penalty from the borrower.
             </Text>
 
             <Field label="Forgiveness Reason">
-              <ChakraRadioGroup
+              <RadioGroup
                 value={reason}
                 onValueChange={(details) =>
                   setReason(details.value as ForgivenessReason)
                 }
               >
-                <VStack align="start" gap={2}>
+                <VStack align="start" gap={2} mt={2}>
                   <Radio value="GOOD_REASON">
-                    Borrower has good reason for losing item
+                    Borrower has good reason
                   </Radio>
                   <Radio value="FOUND_AND_RETURNED">
-                    Found and returned item (Restores inventory)
-                  </Radio>
-                  <Radio value="REPLACED_ITEM">
-                    Borrower replaced item (Adds new item)
+                    Item found and returned
                   </Radio>
                   <Radio value="OTHER">
-                    My choice (Maintains historical penalty)
+                    Other / Manual choice
                   </Radio>
                 </VStack>
-              </ChakraRadioGroup>
+              </RadioGroup>
             </Field>
-
-            {reason === "REPLACED_ITEM" && (
-              <VStack
-                align="stretch"
-                gap={3}
-                p={3}
-                borderWidth="1px"
-                borderRadius="md"
-                bg="bg.muted"
-              >
-                <Text fontWeight="bold" fontSize="xs">
-                  REPLACEMENT ITEM SPECS
-                </Text>
-                <Field label="Title">
-                  <Input
-                    id="replacement_title"
-                    name="replacement_title"
-                    size="sm"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="New item title"
-                  />
-                </Field>
-                <Field label="Author (Optional)">
-                  <Input
-                    id="replacement_author"
-                    name="replacement_author"
-                    size="sm"
-                    value={author}
-                    onChange={(e) => setAuthor(e.target.value)}
-                    placeholder="Author"
-                  />
-                </Field>
-                <Field label="Description">
-                  <Textarea
-                    id="replacement_description"
-                    name="replacement_description"
-                    size="sm"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Physical condition, etc."
-                  />
-                </Field>
-              </VStack>
-            )}
           </VStack>
         </DialogBody>
         <DialogFooter>
-          <HStack gap={3}>
-            <Button variant="ghost" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button
-              colorPalette="green"
-              onClick={handleConfirm}
-              loading={forgiveMutation.isPending}
-            >
-              Confirm Forgiveness
-            </Button>
-          </HStack>
+          <Button variant="outline" onClick={onClose} disabled={forgiveMutation.isPending}>
+            Cancel
+          </Button>
+          <Button
+            colorPalette="green"
+            onClick={handleConfirm}
+            loading={forgiveMutation.isPending}
+          >
+            Confirm Forgiveness
+          </Button>
         </DialogFooter>
         <DialogCloseTrigger />
       </DialogContent>

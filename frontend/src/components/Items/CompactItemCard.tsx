@@ -28,9 +28,7 @@ import {
   FiCornerUpLeft,
   FiX,
 } from "react-icons/fi"
-import { ExtensionRequestModal } from "./ExtensionRequestModal"
 import { FriendItemActionsMenu } from "./FriendItemActionsMenu"
-import { LoanRequestModal } from "./LoanRequestModal"
 
 interface CompactItemCardProps {
   item: ItemPublic | ItemPublic[]
@@ -40,6 +38,8 @@ interface CompactItemCardProps {
   onShowDetails: () => void
   onRemoveFromCollection?: () => void
   onReview?: (loan: LoanPublic) => void
+  onLoanRequest?: (item: ItemPublic) => void
+  onExtensionRequest?: (loan: LoanPublic) => void
 }
 
 export const CompactItemCard = ({
@@ -50,10 +50,10 @@ export const CompactItemCard = ({
   onShowDetails,
   onRemoveFromCollection,
   onReview,
+  onLoanRequest,
+  onExtensionRequest,
 }: CompactItemCardProps) => {
   const [itemIndex, setItemIndex] = useState(0)
-  const [isLoanModalOpen, setIsLoanModalOpen] = useState(false)
-  const [isExtensionModalOpen, setIsExtensionModalOpen] = useState(false)
   const { user } = useAuth()
   const queryClient = useQueryClient()
 
@@ -64,7 +64,6 @@ export const CompactItemCard = ({
   })
 
   const items = Array.isArray(itemProp) ? itemProp : [itemProp]
-  const isGrouped = items.length > 1
   const item = items[itemIndex]
   const availableCount = items.filter((i) => i.is_available).length
 
@@ -141,7 +140,7 @@ export const CompactItemCard = ({
             colorPalette="main"
             onClick={(e) => {
               e.stopPropagation()
-              setIsExtensionModalOpen(true)
+              onExtensionRequest?.(currentLoan!)
             }}
           >
             <FiClock />
@@ -175,7 +174,7 @@ export const CompactItemCard = ({
         colorPalette="accent"
         onClick={(e) => {
           e.stopPropagation()
-          setIsLoanModalOpen(true)
+          onLoanRequest?.(item)
         }}
         disabled={!item.is_available}
       >
@@ -187,142 +186,123 @@ export const CompactItemCard = ({
   const category = item.work_metadata?.category || (item as any).category
 
   return (
-    <>
-      <Box
-        width="100%"
-        p={2}
-        bg={bgColor}
-        borderWidth="1px"
-        borderColor={borderColor}
-        borderRadius="md"
-        cursor="pointer"
-        onClick={onShowDetails}
-        _hover={{ shadow: "sm", borderColor: "ui.hover" }}
-        transition="all 0.2s"
-      >
-        <Flex align="center" gap={3}>
-          <Box
-            width="40px"
-            height="60px"
-            bg="gray.100"
-            borderRadius="sm"
-            overflow="hidden"
-            flexShrink={0}
-            position="relative"
-          >
-            {item.image_url ? (
-              <Image
-                src={getImageUrl(item.image_url)}
-                alt={item.title}
-                objectFit="cover"
-                width="100%"
-                height="100%"
-                loading="lazy"
-              />
-            ) : (
-              <Flex align="center" justify="center" h="100%" bg="gray.400">
-                <Text fontSize="2xs" color="white" fontWeight="bold">
-                  ?
-                </Text>
-              </Flex>
-            )}
-            {isGrouped && (
-              <Badge
-                position="absolute"
-                bottom={0}
-                right={0}
-                colorPalette="accent"
-                size="xs"
-                borderRadius="xs"
-              >
-                {items.length}
-              </Badge>
-            )}
-          </Box>
-
-          <VStack align="start" gap={0} flex={1} overflow="hidden">
-            <HStack width="full" justify="space-between" align="baseline">
-              <Text fontSize="sm" fontWeight="bold" lineClamp={1} flex={1}>
-                {item.title}
+    <Box
+      width="100%"
+      p={2}
+      bg={bgColor}
+      borderWidth="1px"
+      borderColor={borderColor}
+      borderRadius="md"
+      cursor="pointer"
+      onClick={onShowDetails}
+      _hover={{ shadow: "sm", borderColor: "ui.hover" }}
+      transition="all 0.2s"
+    >
+      <Flex align="center" gap={3}>
+        <Box
+          width="40px"
+          height="60px"
+          bg="gray.100"
+          borderRadius="sm"
+          overflow="hidden"
+          flexShrink={0}
+          position="relative"
+        >
+          {item.image_url ? (
+            <Image
+              src={getImageUrl(item.image_url)}
+              alt={item.title}
+              objectFit="cover"
+              width="100%"
+              height="100%"
+              loading="lazy"
+            />
+          ) : (
+            <Flex align="center" justify="center" h="100%" bg="gray.400">
+              <Text fontSize="2xs" color="white" fontWeight="bold">
+                ?
               </Text>
-              {category && (
-                <Badge size="xs" colorPalette="blue" variant="subtle">
-                  {category}
-                </Badge>
-              )}
-            </HStack>
-            {item.author && (
-              <Text fontSize="xs" color="gray.500" lineClamp={1}>
-                {item.author}
-              </Text>
-            )}
-            <HStack gap={2} mt={1}>
-              <Badge
-                colorPalette={availableCount > 0 ? "green" : "red"}
-                variant="subtle"
-                size="xs"
-              >
-                {availableCount > 0 ? "Available" : "On Loan"}
-              </Badge>
-              {isGrouped && (
-                <IconButton
-                  aria-label="Next Item"
-                  size="xs"
-                  variant="ghost"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setItemIndex((prev) => (prev + 1) % items.length)
-                  }}
-                  h="14px"
-                  minW="14px"
-                >
-                  <FiChevronRight size="10px" />
-                </IconButton>
-              )}
-            </HStack>
-          </VStack>
+            </Flex>
+          )}
+          {items.length > 1 && (
+            <Badge
+              position="absolute"
+              bottom={0}
+              right={0}
+              colorPalette="accent"
+              size="xs"
+              borderRadius="xs"
+            >
+              {items.length}
+            </Badge>
+          )}
+        </Box>
 
-          <HStack gap={2} onClick={(e) => e.stopPropagation()}>
-            {renderAction()}
-            {canManage ? (
-              <ItemActionsMenu
-                item={item}
-                communityId={communityId}
-                isAdmin={isAdmin}
-                onRemoveFromCollection={onRemoveFromCollection}
-                onShowDetails={onShowDetails}
-              />
-            ) : (
-              <FriendItemActionsMenu
-                item={item}
-                isBorrowing={isActive || isReturnPending}
-                loanId={currentLoan?.id}
-                communityId={communityId}
-                community={community}
-                isAdmin={isAdmin}
-                onShowDetails={onShowDetails}
-              />
+        <VStack align="start" gap={0} flex={1} overflow="hidden">
+          <HStack width="full" justify="space-between" align="baseline">
+            <Text fontSize="sm" fontWeight="bold" lineClamp={1} flex={1}>
+              {item.title}
+            </Text>
+            {category && (
+              <Badge size="xs" colorPalette="blue" variant="subtle">
+                {category}
+              </Badge>
             )}
           </HStack>
-        </Flex>
-      </Box>
+          {item.author && (
+            <Text fontSize="xs" color="gray.500" lineClamp={1}>
+              {item.author}
+            </Text>
+          )}
+          <HStack gap={2} mt={1}>
+            <Badge
+              colorPalette={availableCount > 0 ? "green" : "red"}
+              variant="subtle"
+              size="xs"
+            >
+              {availableCount > 0 ? "Available" : "On Loan"}
+            </Badge>
+            {items.length > 1 && (
+              <IconButton
+                aria-label="Next Item"
+                size="xs"
+                variant="ghost"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setItemIndex((prev) => (prev + 1) % items.length)
+                }}
+                h="14px"
+                minW="14px"
+              >
+                <FiChevronRight size="10px" />
+              </IconButton>
+            )}
+          </HStack>
+        </VStack>
 
-      <LoanRequestModal
-        item={item}
-        isOpen={isLoanModalOpen}
-        onClose={() => setIsLoanModalOpen(false)}
-        community={community}
-      />
-
-      {currentLoan && (
-        <ExtensionRequestModal
-          loanId={currentLoan.id}
-          itemTitle={item.title}
-          currentEndDate={currentLoan.end_date}
-          isOpen={isExtensionModalOpen}
-          onClose={() => setIsExtensionModalOpen(false)}
-        />
-      )}
-    </>
+        <HStack gap={2} onClick={(e) => e.stopPropagation()}>
+          {renderAction()}
+          {canManage ? (
+            <ItemActionsMenu
+              item={item}
+              communityId={communityId}
+              isAdmin={isAdmin}
+              onRemoveFromCollection={onRemoveFromCollection}
+              onShowDetails={onShowDetails}
+            />
+          ) : (
+            <FriendItemActionsMenu
+              item={item}
+              isBorrowing={isActive || isReturnPending}
+              loanId={currentLoan?.id}
+              communityId={communityId}
+              community={community}
+              isAdmin={isAdmin}
+              onShowDetails={onShowDetails}
+            />
+          )}
+        </HStack>
+      </Flex>
+    </Box>
   )
 }

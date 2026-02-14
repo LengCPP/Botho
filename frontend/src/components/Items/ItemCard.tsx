@@ -49,10 +49,8 @@ import {
   DialogRoot,
   DialogTitle,
 } from "../ui/dialog"
-import { ExtensionRequestModal } from "./ExtensionRequestModal"
 import { FriendItemActionsMenu } from "./FriendItemActionsMenu"
 import ItemExtendedInfo from "./ItemExtendedInfo"
-import { LoanRequestModal } from "./LoanRequestModal"
 
 interface ItemCardProps {
   item: ItemPublic | ItemPublic[]
@@ -63,6 +61,8 @@ interface ItemCardProps {
   onRemoveFromCollection?: () => void
   onShowDetails?: () => void
   onReview?: (loan: LoanPublic) => void
+  onLoanRequest?: (item: ItemPublic) => void
+  onExtensionRequest?: (loan: LoanPublic) => void
 }
 
 const ItemCard = ({
@@ -73,12 +73,12 @@ const ItemCard = ({
   onRemoveFromCollection,
   onShowDetails,
   onReview,
+  onLoanRequest,
+  onExtensionRequest,
 }: ItemCardProps) => {
   const [isFlipped, setIsFlipped] = useState(false)
   const [showAdditionalInfo, setShowAdditionalInfo] = useState(false)
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false)
-  const [isLoanModalOpen, setIsLoanModalOpen] = useState(false)
-  const [isExtensionModalOpen, setIsExtensionModalOpen] = useState(false)
   const [isReadingLogConfirmOpen, setIsReadingLogConfirmOpen] = useState(false)
   const [itemIndex, setItemIndex] = useState(0)
   const { user } = useAuth()
@@ -87,10 +87,8 @@ const ItemCard = ({
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
   const items = Array.isArray(itemProp) ? itemProp : [itemProp]
-  const isGrouped = items.length > 1
   const item = items[itemIndex]
 
-  // Fetch user's outgoing loans to check status
   const { data: outgoingLoans } = useQuery({
     queryKey: ["loans", "outgoing"],
     queryFn: () => LoansService.readOutgoingLoanRequests({}),
@@ -109,12 +107,10 @@ const ItemCard = ({
   const isActive = currentLoan?.status === "ACTIVE"
   const isReturnPending = currentLoan?.status === "RETURN_PENDING"
 
-  // Color Mode Values
   const bgColor = useColorModeValue("accent.50", "gray.800")
   const textColor = useColorModeValue("gray.800", "gray.100")
   const borderColor = useColorModeValue("accent.200", "gray.600")
 
-  // Mutations
   const cancelLoanMutation = useMutation({
     mutationFn: () => LoansService.cancelLoan({ id: currentLoan!.id }),
     onSuccess: () => {
@@ -141,7 +137,6 @@ const ItemCard = ({
     },
   })
 
-  // Reading Log Logic
   const { data: readingLogData } = useQuery({
     queryKey: ["reading-log-status", item.author, item.title],
     queryFn: () =>
@@ -226,7 +221,6 @@ const ItemCard = ({
     }
   }
 
-  // Ownership detection
   const isOwner = item.owner_id === user?.id
   const isCommunityOwned =
     !!item.community_owner || (item as any).is_community_owned
@@ -276,7 +270,7 @@ const ItemCard = ({
             variant="solid"
             onClick={(e) => {
               e.stopPropagation()
-              setIsExtensionModalOpen(true)
+              onExtensionRequest?.(currentLoan!)
             }}
           >
             <FiClock /> Extend
@@ -319,7 +313,7 @@ const ItemCard = ({
         colorPalette="accent"
         onClick={(e) => {
           e.stopPropagation()
-          setIsLoanModalOpen(true)
+          onLoanRequest?.(item)
         }}
         disabled={!item.is_available}
       >
@@ -385,7 +379,6 @@ const ItemCard = ({
         position="relative"
         data-testid="item-card"
       >
-        {/* Layered effect for groups */}
         {items.slice(1, 3).map((layerItem, idx) => (
           <Box
             key={layerItem.id}
@@ -422,7 +415,6 @@ const ItemCard = ({
           transformStyle="preserve-3d"
           transform={isFlipped ? "rotateY(180deg)" : "rotateY(0deg)"}
         >
-          {/* FRONT FACE */}
           <Card.Root
             position="absolute"
             width="100%"
@@ -475,7 +467,7 @@ const ItemCard = ({
               </Flex>
             )}
 
-            {isGrouped && (
+            {items.length > 1 && (
               <Badge
                 position="absolute"
                 bottom={2}
@@ -526,7 +518,6 @@ const ItemCard = ({
             )}
           </Card.Root>
 
-          {/* BACK FACE */}
           <Card.Root
             position="absolute"
             width="100%"
@@ -688,7 +679,7 @@ const ItemCard = ({
                       </Badge>
                     )}
                   </HStack>
-                  {isGrouped && (
+                  {items.length > 1 && (
                     <HStack gap={1}>
                       <Text fontSize="2xs" color="gray.500">
                         {itemIndex + 1}/{items.length}
@@ -746,7 +737,7 @@ const ItemCard = ({
                             communityId:
                               item.community_owner?.id ||
                               item.communities?.[0]?.id ||
-                              item.owner_id, // Fallback for minimal
+                              item.owner_id,
                           }}
                           search={{ tab: "items", q: item.title }}
                           onClick={(e) => e.stopPropagation()}
@@ -796,23 +787,6 @@ const ItemCard = ({
           </Card.Root>
         </Box>
       </Box>
-
-      <LoanRequestModal
-        item={item}
-        isOpen={isLoanModalOpen}
-        onClose={() => setIsLoanModalOpen(false)}
-        community={community}
-      />
-
-      {currentLoan && (
-        <ExtensionRequestModal
-          loanId={currentLoan.id}
-          itemTitle={item.title}
-          currentEndDate={currentLoan.end_date}
-          isOpen={isExtensionModalOpen}
-          onClose={() => setIsExtensionModalOpen(false)}
-        />
-      )}
 
       <ConfirmationModal
         isOpen={isReadingLogConfirmOpen}

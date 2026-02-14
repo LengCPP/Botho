@@ -51,8 +51,16 @@ export function ExtensionRequestModal({
   })
 
   return (
-    <DialogRoot open={isOpen} onOpenChange={(e) => !e.open && onClose()}>
-      <DialogContent>
+    <DialogRoot
+      open={isOpen}
+      onOpenChange={(e) => !e.open && onClose()}
+      placement="center"
+      size="md"
+    >
+      <DialogContent
+        backdropProps={{ backdropFilter: "blur(10px)" }}
+        borderRadius="xl"
+      >
         <DialogHeader>
           <DialogTitle>Request Extension: {itemTitle}</DialogTitle>
         </DialogHeader>

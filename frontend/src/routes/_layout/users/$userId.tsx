@@ -27,15 +27,19 @@ import { z } from "zod"
 import {
   FriendsService,
   type ItemPublic,
+  type LoanPublic,
   ItemsService,
   UsersService,
 } from "@/client"
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
+import ReviewModal from "@/components/Common/ReviewModal"
 import { CollectionGrid } from "@/components/Items/CollectionGrid"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
+import { ExtensionRequestModal } from "@/components/Items/ExtensionRequestModal"
 import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
+import { LoanRequestModal } from "@/components/Items/LoanRequestModal"
 import PendingItems from "@/components/Pending/PendingItems"
 import UserInformation from "@/components/UserSettings/UserInformation"
 import UserProfilePicture from "@/components/UserSettings/UserProfilePicture"
@@ -106,6 +110,10 @@ function UserProfilePage() {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const [isRemoveFriendModalOpen, setIsRemoveFriendModalOpen] = useState(false)
+  const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
+  const [selectedLoanForReview, setSelectedLoanForReview] = useState<LoanPublic | null>(null)
+  const [selectedItemForLoan, setSelectedItemForLoan] = useState<ItemPublic | null>(null)
+  const [selectedLoanForExtension, setSelectedLoanForExtension] = useState<LoanPublic | null>(null)
 
   useEffect(() => {
     localStorage.setItem("view_mode", view_mode)
@@ -139,7 +147,6 @@ function UserProfilePage() {
     updateSearch(params)
   }
 
-  const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
   const borderColor = useColorModeValue("accent.200", "gray.600")
 
   useEffect(() => {
@@ -474,6 +481,9 @@ function UserProfilePage() {
                           key={firstItem.id}
                           item={group}
                           onShowDetails={() => setSelectedItem(firstItem)}
+                          onReview={(l) => setSelectedLoanForReview(l)}
+                          onLoanRequest={(i) => setSelectedItemForLoan(i)}
+                          onExtensionRequest={(l) => setSelectedLoanForExtension(l)}
                         />
                       ) : (
                         <ItemCard
@@ -481,6 +491,9 @@ function UserProfilePage() {
                           item={group}
                           displayOwnerId={userId}
                           onShowDetails={() => setSelectedItem(firstItem)}
+                          onReview={(l) => setSelectedLoanForReview(l)}
+                          onLoanRequest={(i) => setSelectedItemForLoan(i)}
+                          onExtensionRequest={(l) => setSelectedLoanForExtension(l)}
                         />
                       )
                     })}
@@ -524,6 +537,32 @@ function UserProfilePage() {
         isOpen={!!selectedItem}
         onClose={() => setSelectedItem(null)}
       />
+
+      {selectedLoanForReview && (
+        <ReviewModal
+          loan={selectedLoanForReview}
+          isOpen={!!selectedLoanForReview}
+          onClose={() => setSelectedLoanForReview(null)}
+        />
+      )}
+
+      {selectedItemForLoan && (
+        <LoanRequestModal
+          item={selectedItemForLoan}
+          isOpen={!!selectedItemForLoan}
+          onClose={() => setSelectedItemForLoan(null)}
+        />
+      )}
+
+      {selectedLoanForExtension && (
+        <ExtensionRequestModal
+          loanId={selectedLoanForExtension.id}
+          itemTitle={selectedLoanForExtension.item.title}
+          currentEndDate={selectedLoanForExtension.end_date}
+          isOpen={!!selectedLoanForExtension}
+          onClose={() => setSelectedLoanForExtension(null)}
+        />
+      )}
 
       <ConfirmationModal
         isOpen={isRemoveFriendModalOpen}

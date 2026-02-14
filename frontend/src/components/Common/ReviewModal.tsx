@@ -91,8 +91,17 @@ const ReviewModal = ({ loan, isOpen, onClose }: ReviewModalProps) => {
   }
 
   return (
-    <DialogRoot open={isOpen} onOpenChange={(e) => !e.open && onClose()}>
-      <DialogContent>
+    <DialogRoot
+      open={isOpen}
+      onOpenChange={(e) => !e.open && onClose()}
+      scrollBehavior="inside"
+      size="md"
+      placement="center"
+    >
+      <DialogContent
+        backdropProps={{ backdropFilter: "blur(10px)" }}
+        borderRadius="xl"
+      >
         <DialogHeader>
           <DialogTitle>
             {isCommunityLoan && !isOwner

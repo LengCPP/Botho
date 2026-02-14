@@ -56,15 +56,18 @@ import { CommunitiesService, FriendsService, LoansService } from "@/client"
 
 // Components
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
+import ForgiveModal from "@/components/Common/ForgiveModal"
 import { ImportItems } from "@/components/Common/ImportItems"
 import ReviewModal from "@/components/Common/ReviewModal"
 import AddItem from "@/components/Items/AddItem"
 import { CollectionGrid } from "@/components/Items/CollectionGrid"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
+import { ExtensionRequestModal } from "@/components/Items/ExtensionRequestModal"
 import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
 import { LoanCard } from "@/components/Items/LoanCard"
+import { LoanRequestModal } from "@/components/Items/LoanRequestModal"
 import PendingItems from "@/components/Pending/PendingItems"
 import {
   DialogBody,
@@ -172,6 +175,16 @@ function CommunityBoard() {
   const [removeMember, setRemoveMember] = useState<any>(null)
   const [selectedItem, setSelectedItem] = useState<any>(null)
   const [selectedLoan, setSelectedLoan] = useState<any>(null)
+  const [selectedLoanForForgive, setSelectedLoanForForgive] = useState<any>(null)
+  const [selectedItemForLoan, setSelectedItemForLoan] = useState<any>(null)
+  const [selectedLoanForExtension, setSelectedLoanForExtension] = useState<any>(null)
+  
+  const [confirmConfig, setConfirmConfig] = useState<{
+    title: string
+    message: string
+    onConfirm: () => void
+    isLoading: boolean
+  } | null>(null)
 
   // Derived state
   const isFiltered = !!subject || !!author || !!category || !!genre
@@ -507,6 +520,29 @@ function CommunityBoard() {
     onError: () => showErrorToast("Failed"),
   })
 
+  const actionMutation = useMutation({
+    mutationFn: async ({ loan, action, params }: { loan: any; action: string; params?: any }) => {
+      switch (action) {
+        case "cancel": return LoansService.cancelLoan({ id: loan.id })
+        case "respond": return LoansService.respondToLoanRequest({ id: loan.id, accept: params.accept })
+        case "ratify": return LoansService.ratifyLoan({ id: loan.id })
+        case "return": return LoansService.returnLoan({ id: loan.id })
+        case "extension": return LoansService.respondToExtensionRequest({ id: loan.id, accept: params.accept })
+        case "remind": return LoansService.sendReturnReminder({ id: loan.id })
+        case "default": return LoansService.markLoanDefaulted({ id: loan.id })
+        default: throw new Error("Unknown action")
+      }
+    },
+    onSuccess: (_, variables) => {
+      showSuccessToast("Action completed successfully")
+      queryClient.invalidateQueries({ queryKey: ["communityLoans", cId] })
+      setConfirmConfig(null)
+      if (variables.action === "return") {
+          setSelectedLoan(variables.loan)
+      }
+    }
+  })
+
   // ========================================================================
   // DATA TRANSFORMATIONS
   // ========================================================================
@@ -547,6 +583,8 @@ function CommunityBoard() {
             isAdmin={isAdmin}
             onShowDetails={() => setSelectedItem(x[0])}
             onReview={setSelectedLoan}
+            onLoanRequest={(i) => setSelectedItemForLoan(i)}
+            onExtensionRequest={(l) => setSelectedLoanForExtension(l)}
           />
         ) : (
           <ItemCard
@@ -556,11 +594,38 @@ function CommunityBoard() {
             isAdmin={isAdmin}
             onShowDetails={() => setSelectedItem(x[0])}
             onReview={setSelectedLoan}
+            onLoanRequest={(i) => setSelectedItemForLoan(i)}
+            onExtensionRequest={(l) => setSelectedLoanForExtension(l)}
           />
         ),
       )}
     </SimpleGrid>
   )
+
+  const handleAction = (loan: any, action: any, params?: any) => {
+    if (action === "forgive") {
+        setSelectedLoanForForgive(loan)
+        return
+    }
+
+    const config = {
+        cancel: { title: "Cancel Request", message: `Cancel request for '${loan.item.title}'?` },
+        respond: { title: params?.accept ? "Accept Request" : "Reject Request", message: `${params?.accept ? "Accept" : "Reject"} request for '${loan.item.title}'?` },
+        ratify: { title: "Confirm Receipt", message: `Confirm you have received '${loan.item.title}'?` },
+        return: { title: "Confirm Return", message: loan.status === "RETURN_PENDING" ? `Confirm return of '${loan.item.title}'?` : `Mark '${loan.item.title}' as returned?` },
+        extension: { title: params?.accept ? "Accept Extension" : "Reject Extension", message: `${params?.accept ? "Accept" : "Reject"} extension for '${loan.item.title}'?` },
+        remind: { title: "Send Reminder", message: `Send return reminder for '${loan.item.title}'?` },
+        default: { title: "Mark Unrecoverable", message: `Mark '${loan.item.title}' as lost? This will penalize the borrower's honor score significantly.` }
+    }[action as keyof typeof config]
+
+    if (!config) return
+
+    setConfirmConfig({
+        ...config,
+        isLoading: actionMutation.isPending,
+        onConfirm: () => actionMutation.mutate({ loan, action, params })
+    })
+  }
 
   // ========================================================================
   // EARLY RETURNS
@@ -1156,6 +1221,7 @@ function CommunityBoard() {
                               loan={l}
                               type="incoming"
                               onReview={setSelectedLoan}
+                              onAction={handleAction}
                             />
                           ))}
                         </VStack>
@@ -1381,6 +1447,44 @@ function CommunityBoard() {
           loan={selectedLoan}
           isOpen={!!selectedLoan}
           onClose={() => setSelectedLoan(null)}
+        />
+      )}
+
+      {selectedLoanForForgive && (
+        <ForgiveModal
+          loan={selectedLoanForForgive}
+          isOpen={!!selectedLoanForForgive}
+          onClose={() => setSelectedLoanForForgive(null)}
+        />
+      )}
+
+      {selectedItemForLoan && (
+        <LoanRequestModal
+          item={selectedItemForLoan}
+          isOpen={!!selectedItemForLoan}
+          onClose={() => setSelectedItemForLoan(null)}
+          community={comm}
+        />
+      )}
+
+      {selectedLoanForExtension && (
+        <ExtensionRequestModal
+          loanId={selectedLoanForExtension.id}
+          itemTitle={selectedLoanForExtension.item.title}
+          currentEndDate={selectedLoanForExtension.end_date}
+          isOpen={!!selectedLoanForExtension}
+          onClose={() => setSelectedLoanForExtension(null)}
+        />
+      )}
+
+      {confirmConfig && (
+        <ConfirmationModal
+          isOpen={!!confirmConfig}
+          onClose={() => setConfirmConfig(null)}
+          onConfirm={confirmConfig.onConfirm}
+          title={confirmConfig.title}
+          message={confirmConfig.message}
+          isLoading={actionMutation.isPending}
         />
       )}
     </Container>

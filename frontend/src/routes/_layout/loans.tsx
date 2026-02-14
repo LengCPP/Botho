@@ -9,7 +9,7 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react"
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
 import { useMemo, useState } from "react"
 import {
@@ -24,13 +24,18 @@ import {
 } from "react-icons/fi"
 
 import { type ItemPublic, type LoanPublic, LoansService } from "@/client"
+import ConfirmationModal from "@/components/Common/ConfirmationModal"
+import ForgiveModal from "@/components/Common/ForgiveModal"
 import ReviewModal from "@/components/Common/ReviewModal"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
+import { ExtensionRequestModal } from "@/components/Items/ExtensionRequestModal"
 import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
 import { LoanCard } from "@/components/Items/LoanCard"
+import { LoanRequestModal } from "@/components/Items/LoanRequestModal"
 import useAuth from "@/hooks/useAuth"
+import useCustomToast from "@/hooks/useCustomToast"
 
 export const Route = createFileRoute("/_layout/loans")({
   component: LoansPage,
@@ -38,12 +43,25 @@ export const Route = createFileRoute("/_layout/loans")({
 
 function LoansPage() {
   const { user } = useAuth()
+  const queryClient = useQueryClient()
+  const { showSuccessToast } = useCustomToast()
   const [viewMode, setViewMode] = useState<"card" | "list">("card")
   const [sortBy, setSortBy] = useState("created_at")
   const [sortOrder, setSortOrder] = useState("desc")
+  
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
-  const [selectedLoanForReview, setSelectedLoanForReview] =
-    useState<LoanPublic | null>(null)
+  const [selectedLoanForReview, setSelectedLoanForReview] = useState<LoanPublic | null>(null)
+  const [selectedLoanForForgive, setSelectedLoanForForgive] = useState<LoanPublic | null>(null)
+  const [selectedItemForLoan, setSelectedItemForLoan] = useState<ItemPublic | null>(null)
+  const [selectedLoanForExtension, setSelectedLoanForExtension] = useState<LoanPublic | null>(null)
+  
+  // Generic Confirmation State
+  const [confirmConfig, setConfirmConfig] = useState<{
+    title: string
+    message: string
+    onConfirm: () => void
+    isLoading: boolean
+  } | null>(null)
 
   const { data: incoming, isLoading: isLoadingIn } = useQuery({
     queryKey: ["loans", "incoming"],
@@ -144,7 +162,7 @@ function LoansPage() {
         valB = (b.item.author || "").toLowerCase()
       } else {
         valA = new Date(a.created_at).getTime()
-        valB = new Date(b.created_at).getTime()
+        valB = b.item.created_at ? new Date(b.created_at).getTime() : 0
       }
 
       if (valA < valB) return sortOrder === "asc" ? -1 : 1
@@ -152,6 +170,55 @@ function LoansPage() {
       return 0
     })
   }, [borrowedItems, sortBy, sortOrder])
+
+  // Mutations
+  const actionMutation = useMutation({
+    mutationFn: async ({ loan, action, params }: { loan: LoanPublic; action: string; params?: any }) => {
+      switch (action) {
+        case "cancel": return LoansService.cancelLoan({ id: loan.id })
+        case "respond": return LoansService.respondToLoanRequest({ id: loan.id, accept: params.accept })
+        case "ratify": return LoansService.ratifyLoan({ id: loan.id })
+        case "return": return LoansService.returnLoan({ id: loan.id })
+        case "extension": return LoansService.respondToExtensionRequest({ id: loan.id, accept: params.accept })
+        case "remind": return LoansService.sendReturnReminder({ id: loan.id })
+        case "default": return LoansService.markLoanDefaulted({ id: loan.id })
+        default: throw new Error("Unknown action")
+      }
+    },
+    onSuccess: (_, variables) => {
+      showSuccessToast("Action completed successfully")
+      queryClient.invalidateQueries({ queryKey: ["loans"] })
+      setConfirmConfig(null)
+      if (variables.action === "return") {
+          setSelectedLoanForReview(variables.loan)
+      }
+    }
+  })
+
+  const handleAction = (loan: LoanPublic, action: any, params?: any) => {
+    if (action === "forgive") {
+        setSelectedLoanForForgive(loan)
+        return
+    }
+
+    const config = {
+        cancel: { title: "Cancel Request", message: `Cancel request for '${loan.item.title}'?` },
+        respond: { title: params?.accept ? "Accept Request" : "Reject Request", message: `${params?.accept ? "Accept" : "Reject"} request for '${loan.item.title}'?` },
+        ratify: { title: "Confirm Receipt", message: `Confirm you have received '${loan.item.title}'?` },
+        return: { title: "Confirm Return", message: loan.status === "RETURN_PENDING" ? `Confirm return of '${loan.item.title}'?` : `Mark '${loan.item.title}' as returned?` },
+        extension: { title: params?.accept ? "Accept Extension" : "Reject Extension", message: `${params?.accept ? "Accept" : "Reject"} extension for '${loan.item.title}'?` },
+        remind: { title: "Send Reminder", message: `Send return reminder for '${loan.item.title}'?` },
+        default: { title: "Mark Unrecoverable", message: `Mark '${loan.item.title}' as lost? This will penalize the borrower's honor score significantly.` }
+    }[action as keyof typeof config]
+
+    if (!config) return
+
+    setConfirmConfig({
+        ...config,
+        isLoading: actionMutation.isPending,
+        onConfirm: () => actionMutation.mutate({ loan, action, params })
+    })
+  }
 
   if (isLoading) {
     return (
@@ -237,6 +304,8 @@ function LoansPage() {
                           loan={loan}
                           onShowDetails={() => setSelectedItem(loan.item)}
                           onReview={(l) => setSelectedLoanForReview(l)}
+                          onLoanRequest={(i) => setSelectedItemForLoan(i)}
+                          onExtensionRequest={(l) => setSelectedLoanForExtension(l)}
                         />
                       ) : (
                         <VStack key={loan.id} align="stretch" gap={2}>
@@ -245,6 +314,8 @@ function LoansPage() {
                             loan={loan}
                             onShowDetails={() => setSelectedItem(loan.item)}
                             onReview={(l) => setSelectedLoanForReview(l)}
+                            onLoanRequest={(i) => setSelectedItemForLoan(i)}
+                            onExtensionRequest={(l) => setSelectedLoanForExtension(l)}
                           />
                           {loan.status === "RETURN_PENDING" && (
                             <Badge
@@ -285,6 +356,7 @@ function LoansPage() {
                         loan={loan}
                         type="incoming"
                         onReview={(l) => setSelectedLoanForReview(l)}
+                        onAction={handleAction}
                       />
                     ))}
                   </SimpleGrid>
@@ -315,6 +387,7 @@ function LoansPage() {
                             : "incoming"
                         }
                         onReview={(l) => setSelectedLoanForReview(l)}
+                        onAction={handleAction}
                       />
                     ))}
                   </SimpleGrid>
@@ -341,6 +414,7 @@ function LoansPage() {
                         loan={loan}
                         type="incoming"
                         onReview={(l) => setSelectedLoanForReview(l)}
+                        onAction={handleAction}
                       />
                     ))}
                   </SimpleGrid>
@@ -373,6 +447,7 @@ function LoansPage() {
                           loan={loan}
                           type="incoming"
                           onReview={(l) => setSelectedLoanForReview(l)}
+                          onAction={handleAction}
                         />
                       ))}
                     </VStack>
@@ -401,6 +476,7 @@ function LoansPage() {
                           loan={loan}
                           type="outgoing"
                           onReview={(l) => setSelectedLoanForReview(l)}
+                          onAction={handleAction}
                         />
                       ))}
                     </VStack>
@@ -435,6 +511,7 @@ function LoansPage() {
                         loan.requester_id === user?.id ? "outgoing" : "incoming"
                       }
                       onReview={(l) => setSelectedLoanForReview(l)}
+                      onAction={handleAction}
                     />
                   ))}
                 </VStack>
@@ -457,6 +534,45 @@ function LoansPage() {
           onClose={() => setSelectedLoanForReview(null)}
         />
       )}
+
+      {selectedLoanForForgive && (
+        <ForgiveModal
+          loan={selectedLoanForForgive}
+          isOpen={!!selectedLoanForForgive}
+          onClose={() => setSelectedLoanForForgive(null)}
+        />
+      )}
+
+      {selectedItemForLoan && (
+        <LoanRequestModal
+          item={selectedItemForLoan}
+          isOpen={!!selectedItemForLoan}
+          onClose={() => setSelectedItemForLoan(null)}
+        />
+      )}
+
+      {selectedLoanForExtension && (
+        <ExtensionRequestModal
+          loanId={selectedLoanForExtension.id}
+          itemTitle={selectedLoanForExtension.item.title}
+          currentEndDate={selectedLoanForExtension.end_date}
+          isOpen={!!selectedLoanForExtension}
+          onClose={() => setSelectedLoanForExtension(null)}
+        />
+      )}
+
+      {confirmConfig && (
+        <ConfirmationModal
+          isOpen={!!confirmConfig}
+          onClose={() => setConfirmConfig(null)}
+          onConfirm={confirmConfig.onConfirm}
+          title={confirmConfig.title}
+          message={confirmConfig.message}
+          isLoading={actionMutation.isPending}
+        />
+      )}
     </Container>
   )
 }
+
+export default LoansPage
