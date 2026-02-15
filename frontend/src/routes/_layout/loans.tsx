@@ -11,6 +11,7 @@ import {
 } from "@chakra-ui/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
+import { isPast, isToday } from "date-fns"
 import { useMemo, useState } from "react"
 import {
   FiAlertCircle,
@@ -90,6 +91,20 @@ function LoansPage() {
     [outgoing],
   )
 
+  const { overdueBorrowed, dueTodayBorrowed, restBorrowed } = useMemo(() => {
+    return {
+      overdueBorrowed: borrowedItems.filter(
+        (l) => isPast(new Date(l.end_date)) && !isToday(new Date(l.end_date)),
+      ),
+      dueTodayBorrowed: borrowedItems.filter((l) =>
+        isToday(new Date(l.end_date)),
+      ),
+      restBorrowed: borrowedItems.filter(
+        (l) => !isPast(new Date(l.end_date)) && !isToday(new Date(l.end_date)),
+      ),
+    }
+  }, [borrowedItems])
+
   const pendingOutgoing = useMemo(
     () =>
       outgoing?.data.filter(
@@ -151,6 +166,20 @@ function LoansPage() {
       ) || [],
     [incoming],
   )
+
+  const { overdueLending, dueTodayLending, restLending } = useMemo(() => {
+    return {
+      overdueLending: activeLending.filter(
+        (l) => isPast(new Date(l.end_date)) && !isToday(new Date(l.end_date)),
+      ),
+      dueTodayLending: activeLending.filter((l) =>
+        isToday(new Date(l.end_date)),
+      ),
+      restLending: activeLending.filter(
+        (l) => !isPast(new Date(l.end_date)) && !isToday(new Date(l.end_date)),
+      ),
+    }
+  }, [activeLending])
 
   // Client-side sorting for borrowed items
   const sortedBorrowedItems = useMemo(() => {
@@ -278,6 +307,43 @@ function LoansPage() {
     )
   }
 
+  const renderLoanSection = (
+    title: string,
+    color: string,
+    loans: LoanPublic[],
+    type: "incoming" | "outgoing",
+  ) => {
+    if (loans.length === 0) return null
+    return (
+      <Box mb={8}>
+        <Heading
+          size="sm"
+          mb={4}
+          color={`${color}`}
+          display="flex"
+          alignItems="center"
+          gap={2}
+        >
+          {title} ({loans.length})
+        </Heading>
+        <SimpleGrid
+          columns={viewMode === "list" ? 1 : { base: 2, sm: 3, md: 4, lg: 5 }}
+          gap={4}
+        >
+          {loans.map((loan) => (
+            <LoanCard
+              key={loan.id}
+              loan={loan}
+              type={type}
+              onReview={(l) => setSelectedLoanForReview(l)}
+              onAction={handleAction}
+            />
+          ))}
+        </SimpleGrid>
+      </Box>
+    )
+  }
+
   return (
     <Container maxW="full" pb={20}>
       <VStack align="stretch" gap={8} pt={12}>
@@ -338,53 +404,26 @@ function LoansPage() {
                     </Text>
                   </Box>
                 ) : (
-                  <SimpleGrid
-                    columns={
-                      viewMode === "list"
-                        ? 1
-                        : { base: 3, sm: 3, md: 4, lg: 5, xl: 6 }
-                    }
-                    gap={viewMode === "list" ? 2 : { base: 2, md: 6 }}
-                  >
-                    {sortedBorrowedItems.map((loan) =>
-                      viewMode === "list" ? (
-                        <CompactItemCard
-                          key={loan.id}
-                          item={loan.item}
-                          loan={loan}
-                          onShowDetails={() => setSelectedItem(loan.item)}
-                          onReview={(l) => setSelectedLoanForReview(l)}
-                          onLoanRequest={(i) => setSelectedItemForLoan(i)}
-                          onExtensionRequest={(l) =>
-                            setSelectedLoanForExtension(l)
-                          }
-                        />
-                      ) : (
-                        <VStack key={loan.id} align="stretch" gap={2}>
-                          <ItemCard
-                            item={loan.item}
-                            loan={loan}
-                            onShowDetails={() => setSelectedItem(loan.item)}
-                            onReview={(l) => setSelectedLoanForReview(l)}
-                            onLoanRequest={(i) => setSelectedItemForLoan(i)}
-                            onExtensionRequest={(l) =>
-                              setSelectedLoanForExtension(l)
-                            }
-                          />
-                          {loan.status === "RETURN_PENDING" && (
-                            <Badge
-                              colorPalette="main"
-                              variant="subtle"
-                              width="full"
-                              justifyContent="center"
-                            >
-                              Waiting for owner
-                            </Badge>
-                          )}
-                        </VStack>
-                      ),
+                  <VStack align="stretch" gap={2}>
+                    {renderLoanSection(
+                      "Overdue",
+                      "red.500",
+                      overdueBorrowed,
+                      "outgoing",
                     )}
-                  </SimpleGrid>
+                    {renderLoanSection(
+                      "Due Today",
+                      "orange.500",
+                      dueTodayBorrowed,
+                      "outgoing",
+                    )}
+                    {renderLoanSection(
+                      "Active",
+                      "blue.500",
+                      restBorrowed,
+                      "outgoing",
+                    )}
+                  </VStack>
                 )}
               </Box>
 
@@ -418,37 +457,6 @@ function LoansPage() {
                 </Box>
               )}
 
-              {/* Overdue Section */}
-              {overdueLoans.length > 0 && (
-                <Box>
-                  <Heading
-                    size="md"
-                    mb={6}
-                    display="flex"
-                    alignItems="center"
-                    gap={2}
-                  >
-                    <FiAlertCircle color="red.500" /> Overdue Items
-                  </Heading>
-                  <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={4}>
-                    {overdueLoans.map((loan) => (
-                      <LoanCard
-                        key={loan.id}
-                        loan={loan}
-                        type={
-                          loan.requester_id === user?.id
-                            ? "outgoing"
-                            : "incoming"
-                        }
-                        onReview={(l) => setSelectedLoanForReview(l)}
-                        onAction={handleAction}
-                      />
-                    ))}
-                  </SimpleGrid>
-                  <Separator mt={12} />
-                </Box>
-              )}
-
               {/* Active Lending Section */}
               {activeLending.length > 0 && (
                 <Box>
@@ -461,17 +469,26 @@ function LoansPage() {
                   >
                     <FiShare2 color="blue.500" /> Items I'm Lending
                   </Heading>
-                  <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={4}>
-                    {activeLending.map((loan) => (
-                      <LoanCard
-                        key={loan.id}
-                        loan={loan}
-                        type="incoming"
-                        onReview={(l) => setSelectedLoanForReview(l)}
-                        onAction={handleAction}
-                      />
-                    ))}
-                  </SimpleGrid>
+                  <VStack align="stretch" gap={2}>
+                    {renderLoanSection(
+                      "Overdue",
+                      "red.500",
+                      overdueLending,
+                      "incoming",
+                    )}
+                    {renderLoanSection(
+                      "Due Today",
+                      "orange.500",
+                      dueTodayLending,
+                      "incoming",
+                    )}
+                    {renderLoanSection(
+                      "Active",
+                      "blue.500",
+                      restLending,
+                      "incoming",
+                    )}
+                  </VStack>
                   <Separator mt={12} />
                 </Box>
               )}

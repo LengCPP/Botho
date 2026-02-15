@@ -11,9 +11,9 @@ const DISMISS_INTERVAL = 2 * 60 * 60 * 1000 // 2 hours
 export const LoanReminderBanner = () => {
   const navigate = useNavigate()
   const [isDismissed, setIsDismissed] = useState(true)
-  const [reminderType, setReminderType] = useState<"due_today" | "overdue" | null>(
-    null,
-  )
+  const [reminderType, setReminderType] = useState<
+    "due_today" | "overdue" | null
+  >(null)
 
   const { data: outgoingLoans } = useQuery({
     queryKey: ["loans", "outgoing", "reminder"],
@@ -40,7 +40,7 @@ export const LoanReminderBanner = () => {
         type = "overdue"
         break // Overdue takes priority
       }
-      
+
       // Check if due today
       if (
         dueDate.getDate() === now.getDate() &&
@@ -62,7 +62,7 @@ export const LoanReminderBanner = () => {
         return
       }
 
-      const lastDismissed = parseInt(dismissedAt, 10)
+      const lastDismissed = Number.parseInt(dismissedAt, 10)
       if (Date.now() - lastDismissed > DISMISS_INTERVAL) {
         setIsDismissed(false)
       } else {

@@ -27,6 +27,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query"
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
+import { isPast, isToday } from "date-fns"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { FaChevronLeft, FaFileImport } from "react-icons/fa"
 import {
@@ -176,10 +177,12 @@ function CommunityBoard() {
   const [removeMember, setRemoveMember] = useState<any>(null)
   const [selectedItem, setSelectedItem] = useState<any>(null)
   const [selectedLoan, setSelectedLoan] = useState<any>(null)
-  const [selectedLoanForForgive, setSelectedLoanForForgive] = useState<any>(null)
+  const [selectedLoanForForgive, setSelectedLoanForForgive] =
+    useState<any>(null)
   const [selectedItemForLoan, setSelectedItemForLoan] = useState<any>(null)
-  const [selectedLoanForExtension, setSelectedLoanForExtension] = useState<any>(null)
-  
+  const [selectedLoanForExtension, setSelectedLoanForExtension] =
+    useState<any>(null)
+
   const [confirmConfig, setConfirmConfig] = useState<{
     title: string
     message: string
@@ -408,15 +411,31 @@ function CommunityBoard() {
   // ========================================================================
 
   // Loan categorization
-  const activeLoan = useMemo(
-    () =>
-      commL?.data.filter((l: any) =>
-        ["ACCEPTED", "ACTIVE", "RETURN_PENDING", "EXTENSION_PENDING"].includes(
-          l.status,
+  const { overdueLoans, dueTodayLoans, restActiveLoans, activeLoan } =
+    useMemo(() => {
+      const loans =
+        commL?.data.filter((l: any) =>
+          [
+            "ACCEPTED",
+            "ACTIVE",
+            "RETURN_PENDING",
+            "EXTENSION_PENDING",
+          ].includes(l.status),
+        ) || []
+
+      return {
+        overdueLoans: loans.filter(
+          (l: any) =>
+            isPast(new Date(l.end_date)) && !isToday(new Date(l.end_date)),
         ),
-      ) || [],
-    [commL],
-  )
+        dueTodayLoans: loans.filter((l: any) => isToday(new Date(l.end_date))),
+        restActiveLoans: loans.filter(
+          (l: any) =>
+            !isPast(new Date(l.end_date)) && !isToday(new Date(l.end_date)),
+        ),
+        activeLoan: loans,
+      }
+    }, [commL])
 
   const pendingLoan = useMemo(
     () =>
@@ -544,16 +563,34 @@ function CommunityBoard() {
   })
 
   const actionMutation = useMutation({
-    mutationFn: async ({ loan, action, params }: { loan: any; action: string; params?: any }) => {
+    mutationFn: async ({
+      loan,
+      action,
+      params,
+    }: { loan: any; action: string; params?: any }) => {
       switch (action) {
-        case "cancel": return LoansService.cancelLoan({ id: loan.id })
-        case "respond": return LoansService.respondToLoanRequest({ id: loan.id, accept: params.accept })
-        case "ratify": return LoansService.ratifyLoan({ id: loan.id })
-        case "return": return LoansService.returnLoan({ id: loan.id })
-        case "extension": return LoansService.respondToExtensionRequest({ id: loan.id, accept: params.accept })
-        case "remind": return LoansService.sendReturnReminder({ id: loan.id })
-        case "default": return LoansService.markLoanDefaulted({ id: loan.id })
-        default: throw new Error("Unknown action")
+        case "cancel":
+          return LoansService.cancelLoan({ id: loan.id })
+        case "respond":
+          return LoansService.respondToLoanRequest({
+            id: loan.id,
+            accept: params.accept,
+          })
+        case "ratify":
+          return LoansService.ratifyLoan({ id: loan.id })
+        case "return":
+          return LoansService.returnLoan({ id: loan.id })
+        case "extension":
+          return LoansService.respondToExtensionRequest({
+            id: loan.id,
+            accept: params.accept,
+          })
+        case "remind":
+          return LoansService.sendReturnReminder({ id: loan.id })
+        case "default":
+          return LoansService.markLoanDefaulted({ id: loan.id })
+        default:
+          throw new Error("Unknown action")
       }
     },
     onSuccess: (_, variables) => {
@@ -561,9 +598,9 @@ function CommunityBoard() {
       queryClient.invalidateQueries({ queryKey: ["communityLoans", cId] })
       setConfirmConfig(null)
       if (variables.action === "return") {
-          setSelectedLoan(variables.loan)
+        setSelectedLoan(variables.loan)
       }
-    }
+    },
   })
 
   // ========================================================================
@@ -627,26 +664,54 @@ function CommunityBoard() {
 
   const handleAction = (loan: any, action: any, params?: any) => {
     if (action === "forgive") {
-        setSelectedLoanForForgive(loan)
-        return
+      setSelectedLoanForForgive(loan)
+      return
     }
 
     const config = {
-        cancel: { title: "Cancel Request", message: `Cancel request for '${loan.item.title}'?` },
-        respond: { title: params?.accept ? "Accept Request" : "Reject Request", message: `${params?.accept ? "Accept" : "Reject"} request for '${loan.item.title}'?` },
-        ratify: { title: "Confirm Receipt", message: `Confirm you have received '${loan.item.title}'?` },
-        return: { title: "Confirm Return", message: loan.status === "RETURN_PENDING" ? `Confirm return of '${loan.item.title}'?` : `Mark '${loan.item.title}' as returned?` },
-        extension: { title: params?.accept ? "Accept Extension" : "Reject Extension", message: `${params?.accept ? "Accept" : "Reject"} extension for '${loan.item.title}'?` },
-        remind: { title: "Send Reminder", message: `Send return reminder for '${loan.item.title}'?` },
-        default: { title: "Mark Unrecoverable", message: `Mark '${loan.item.title}' as lost? This will penalize the borrower's honor score significantly.` }
+      cancel: {
+        title: "Cancel Request",
+        message: `Cancel request for '${loan.item.title}'?`,
+      },
+      respond: {
+        title: params?.accept ? "Accept Request" : "Reject Request",
+        message: `${params?.accept ? "Accept" : "Reject"} request for '${
+          loan.item.title
+        }'?`,
+      },
+      ratify: {
+        title: "Confirm Receipt",
+        message: `Confirm you have received '${loan.item.title}'?`,
+      },
+      return: {
+        title: "Confirm Return",
+        message:
+          loan.status === "RETURN_PENDING"
+            ? `Confirm return of '${loan.item.title}'?`
+            : `Mark '${loan.item.title}' as returned?`,
+      },
+      extension: {
+        title: params?.accept ? "Accept Extension" : "Reject Extension",
+        message: `${params?.accept ? "Accept" : "Reject"} extension for '${
+          loan.item.title
+        }'?`,
+      },
+      remind: {
+        title: "Send Reminder",
+        message: `Send return reminder for '${loan.item.title}'?`,
+      },
+      default: {
+        title: "Mark Unrecoverable",
+        message: `Mark '${loan.item.title}' as lost? This will penalize the borrower's honor score significantly.`,
+      },
     }[action as keyof typeof config]
 
     if (!config) return
 
     setConfirmConfig({
-        ...config,
-        isLoading: actionMutation.isPending,
-        onConfirm: () => actionMutation.mutate({ loan, action, params })
+      ...config,
+      isLoading: actionMutation.isPending,
+      onConfirm: () => actionMutation.mutate({ loan, action, params }),
     })
   }
 
@@ -948,9 +1013,14 @@ function CommunityBoard() {
                 )}
 
                 {/* Controls */}
-                <Flex justify="space-between" align="center" wrap="wrap" gap={4}>
+                <Flex
+                  justify="space-between"
+                  align="center"
+                  wrap="wrap"
+                  gap={4}
+                >
                   <HStack gap={4} align="baseline">
-                   <AddItem communityId={cId} isAdmin={isAdmin} />
+                    <AddItem communityId={cId} isAdmin={isAdmin} />
                   </HStack>
 
                   <ItemsViewOptions
@@ -1139,9 +1209,11 @@ function CommunityBoard() {
                   <Text>...</Text>
                 ) : (
                   members?.data
-                    .filter((m: any) => 
-                      m.community_status === "ACCEPTED" || 
-                      (isStaff && ["PENDING", "INVITED"].includes(m.community_status))
+                    .filter(
+                      (m: any) =>
+                        m.community_status === "ACCEPTED" ||
+                        (isStaff &&
+                          ["PENDING", "INVITED"].includes(m.community_status)),
                     )
                     .map((m: any) => (
                       <Box
@@ -1161,7 +1233,11 @@ function CommunityBoard() {
                                 {m.full_name || m.email}
                               </Text>
                               {m.community_status !== "ACCEPTED" && (
-                                <Badge size="xs" colorPalette="orange" variant="outline">
+                                <Badge
+                                  size="xs"
+                                  colorPalette="orange"
+                                  variant="outline"
+                                >
                                   {m.community_status}
                                 </Badge>
                               )}
@@ -1286,6 +1362,84 @@ function CommunityBoard() {
                           >
                             <Text fontStyle="italic">Empty.</Text>
                           </Box>
+                        ) : t.v === "active" ? (
+                          <VStack align="stretch" gap={8}>
+                            {overdueLoans.length > 0 && (
+                              <Box>
+                                <Heading
+                                  size="sm"
+                                  mb={4}
+                                  color="red.500"
+                                  display="flex"
+                                  alignItems="center"
+                                  gap={2}
+                                >
+                                  Overdue ({overdueLoans.length})
+                                </Heading>
+                                <VStack align="stretch" gap={4}>
+                                  {overdueLoans.map((l: any) => (
+                                    <LoanCard
+                                      key={l.id}
+                                      loan={l}
+                                      type="incoming"
+                                      onReview={setSelectedLoan}
+                                      onAction={handleAction}
+                                    />
+                                  ))}
+                                </VStack>
+                              </Box>
+                            )}
+                            {dueTodayLoans.length > 0 && (
+                              <Box>
+                                <Heading
+                                  size="sm"
+                                  mb={4}
+                                  color="orange.500"
+                                  display="flex"
+                                  alignItems="center"
+                                  gap={2}
+                                >
+                                  Due Today ({dueTodayLoans.length})
+                                </Heading>
+                                <VStack align="stretch" gap={4}>
+                                  {dueTodayLoans.map((l: any) => (
+                                    <LoanCard
+                                      key={l.id}
+                                      loan={l}
+                                      type="incoming"
+                                      onReview={setSelectedLoan}
+                                      onAction={handleAction}
+                                    />
+                                  ))}
+                                </VStack>
+                              </Box>
+                            )}
+                            {restActiveLoans.length > 0 && (
+                              <Box>
+                                <Heading
+                                  size="sm"
+                                  mb={4}
+                                  color="blue.500"
+                                  display="flex"
+                                  alignItems="center"
+                                  gap={2}
+                                >
+                                  Other Active ({restActiveLoans.length})
+                                </Heading>
+                                <VStack align="stretch" gap={4}>
+                                  {restActiveLoans.map((l: any) => (
+                                    <LoanCard
+                                      key={l.id}
+                                      loan={l}
+                                      type="incoming"
+                                      onReview={setSelectedLoan}
+                                      onAction={handleAction}
+                                    />
+                                  ))}
+                                </VStack>
+                              </Box>
+                            )}
+                          </VStack>
                         ) : (
                           <VStack align="stretch" gap={4}>
                             {t.d.map((l: any) => (
@@ -1388,7 +1542,8 @@ function CommunityBoard() {
                           .map((m: any) => {
                             const isCreator = m.id === comm.created_by
                             const role =
-                              m.community_role || (isCreator ? "ADMIN" : "MEMBER")
+                              m.community_role ||
+                              (isCreator ? "ADMIN" : "MEMBER")
                             const isStaffMember =
                               role === "ADMIN" || role === "MODERATOR"
 
@@ -1433,23 +1588,25 @@ function CommunityBoard() {
                                           </MenuTrigger>
 
                                           <MenuContent>
-                                            {["ADMIN", "MODERATOR", "MEMBER"].map(
-                                              (roleValue) => (
-                                                <MenuItem
-                                                  key={roleValue}
-                                                  value={roleValue}
-                                                  onClick={() =>
-                                                    updateMemberMutation.mutate({
-                                                      userId: m.id,
-                                                      role: roleValue,
-                                                    })
-                                                  }
-                                                  disabled={role === roleValue}
-                                                >
-                                                  {roleValue}
-                                                </MenuItem>
-                                              ),
-                                            )}
+                                            {[
+                                              "ADMIN",
+                                              "MODERATOR",
+                                              "MEMBER",
+                                            ].map((roleValue) => (
+                                              <MenuItem
+                                                key={roleValue}
+                                                value={roleValue}
+                                                onClick={() =>
+                                                  updateMemberMutation.mutate({
+                                                    userId: m.id,
+                                                    role: roleValue,
+                                                  })
+                                                }
+                                                disabled={role === roleValue}
+                                              >
+                                                {roleValue}
+                                              </MenuItem>
+                                            ))}
                                           </MenuContent>
                                         </MenuRoot>
                                       )}
