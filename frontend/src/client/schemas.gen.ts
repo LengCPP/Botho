@@ -125,6 +125,16 @@ export const ItemPublicSchema = {
       format: "uuid",
       title: "Owner Id",
     },
+    is_lost: {
+      type: "boolean",
+      title: "Is Lost",
+      default: false,
+    },
+    is_private: {
+      type: "boolean",
+      title: "Is Private",
+      default: false,
+    },
   },
   type: "object",
   required: ["title", "id", "owner_id"],
@@ -157,6 +167,28 @@ export const ItemUpdateSchema = {
         },
       ],
       title: "Description",
+    },
+    is_lost: {
+      anyOf: [
+        {
+          type: "boolean",
+        },
+        {
+          type: "null",
+        },
+      ],
+      title: "Is Lost",
+    },
+    is_private: {
+      anyOf: [
+        {
+          type: "boolean",
+        },
+        {
+          type: "null",
+        },
+      ],
+      title: "Is Private",
     },
   },
   type: "object",

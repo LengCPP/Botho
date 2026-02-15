@@ -725,8 +725,12 @@ def filter_loan_privacy(loan: Loan, current_user_id: Any = None, is_admin: bool 
 
 def check_item_availability(session: Session, item_id: uuid.UUID) -> bool:
     """
-    Check if an item is available (not currently loaned out).
+    Check if an item is available (not currently loaned out and not lost).
     """
+    item = session.get(Item, item_id)
+    if not item or item.is_lost:
+        return False
+
     active_loan = session.exec(
         select(Loan).where(
             Loan.item_id == item_id,

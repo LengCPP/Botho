@@ -29,7 +29,7 @@ import {
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
 import { isPast, isToday } from "date-fns"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { FaChevronLeft, FaFileImport } from "react-icons/fa"
+import { FaChevronLeft } from "react-icons/fa"
 import {
   FiBell,
   FiBellOff,
@@ -58,7 +58,6 @@ import { CommunitiesService, FriendsService, LoansService } from "@/client"
 // Components
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import ForgiveModal from "@/components/Common/ForgiveModal"
-import { ImportItems } from "@/components/Common/ImportItems"
 import ReviewModal from "@/components/Common/ReviewModal"
 import InviteFriend from "@/components/Communities/InviteFriend"
 import AddItem from "@/components/Items/AddItem"
@@ -70,6 +69,7 @@ import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
 import { LoanCard } from "@/components/Items/LoanCard"
 import { LoanRequestModal } from "@/components/Items/LoanRequestModal"
+import { ManageItems } from "@/components/Items/ManageItems"
 import PendingItems from "@/components/Pending/PendingItems"
 import {
   DialogBody,
@@ -105,7 +105,7 @@ const COLLECTIONS_LIMIT = 12
 // Search schema
 const searchSchema = z.object({
   tab: z
-    .enum(["board", "items", "members", "loans", "manage", "import"])
+    .enum(["board", "items", "members", "loans", "settings", "manage-items"])
     .catch("board"),
   q: z.string().optional(),
   page: z.number().catch(1),
@@ -330,7 +330,9 @@ function CommunityBoard() {
         genre,
         author,
         q: qP,
-      }),
+        excludeLost: true,
+        excludePrivate: true,
+      } as any),
     getNextPageParam: (last, all) => {
       const loaded = all.length * limit
       return loaded < last.count ? loaded : undefined
@@ -893,14 +895,14 @@ function CommunityBoard() {
               )}
 
               {isStaff && (
-                <Tabs.Trigger value="manage" justifyContent="center">
-                  <FiShield /> Manage
+                <Tabs.Trigger value="settings" justifyContent="center">
+                  <FiShield /> Settings
                 </Tabs.Trigger>
               )}
 
               {isAdmin && (
-                <Tabs.Trigger value="import" justifyContent="center">
-                  <FaFileImport /> Import
+                <Tabs.Trigger value="manage-items" justifyContent="center">
+                  <FiSettings /> Manage Items
                 </Tabs.Trigger>
               )}
             </Tabs.List>
@@ -1026,6 +1028,15 @@ function CommunityBoard() {
                 >
                   <HStack gap={4} align="baseline">
                     <AddItem communityId={cId} isAdmin={isAdmin} />
+                    {isAdmin && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => updateSearch({ tab: "manage-items" })}
+                      >
+                        <FiSettings /> Manage Items
+                      </Button>
+                    )}
                   </HStack>
 
                   <ItemsViewOptions
@@ -1465,9 +1476,9 @@ function CommunityBoard() {
               </Tabs.Content>
             )}
 
-            {/* Manage Tab (Staff) */}
+            {/* Settings Tab (Staff) */}
             {isStaff && (
-              <Tabs.Content value="manage" pt={6}>
+              <Tabs.Content value="settings" pt={6}>
                 <VStack align="stretch" gap={8}>
                   {/* Pending Applicants */}
                   {!isLoadingApplicants && (apps?.data?.length ?? 0) > 0 ? (
@@ -1646,10 +1657,10 @@ function CommunityBoard() {
               </Tabs.Content>
             )}
 
-            {/* Import Tab (Admin) */}
+            {/* Manage Items Tab (Admin) */}
             {isAdmin && (
-              <Tabs.Content value="import" pt={6}>
-                <ImportItems communityId={cId} />
+              <Tabs.Content value="manage-items" pt={6}>
+                <ManageItems ownerId={cId} communityId={cId} />
               </Tabs.Content>
             )}
           </Tabs.Root>
@@ -2002,85 +2013,63 @@ function DonationManagement({
   communityId,
   otherAdminsExist,
   currentUserId,
-}: any) {
+}: {
+  items: any[]
+  communityId: string
+  otherAdminsExist: boolean
+  currentUserId?: string
+}) {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
   const pendingDonations = items.filter((i: any) => i.is_donation_pending)
 
-  const ratifyMutation = useMutation({
+  const ratifyDonationMutation = useMutation({
     mutationFn: (itemId: string) =>
       CommunitiesService.ratifyDonation({
         id: communityId,
         itemId,
       }),
     onSuccess: () => {
-      showSuccessToast("Accepted!")
-      queryClient.invalidateQueries({
-        queryKey: ["communityItems", communityId],
-      })
-      queryClient.invalidateQueries({
-        queryKey: ["items"],
-      })
+      showSuccessToast("Donation ratified!")
+      queryClient.invalidateQueries({ queryKey: ["communityItems", communityId] })
+      queryClient.invalidateQueries({ queryKey: ["community", communityId] })
     },
-    onError: () => showErrorToast("Failed"),
+    onError: () => showErrorToast("Failed to ratify donation"),
   })
 
   if (!pendingDonations.length) return null
 
   return (
-    <Box
-      mb={8}
-      p={4}
-      borderWidth="1px"
-      rounded="lg"
-      bg="bg.panel"
-      borderColor="orange.500"
-    >
-      <Heading size="md" mb={4} color="orange.500">
-        Donations
+    <Box p={4} borderWidth="1px" borderColor="ui.hover" rounded="md" bg="bg.panel">
+      <Heading size="md" mb={4}>
+        Pending Donations
       </Heading>
-
       <VStack align="stretch" gap={3}>
         {pendingDonations.map((item: any) => {
-          const isOwner = item.added_by_id === currentUserId
-          const canRatify = !isOwner || otherAdminsExist
+          const isDonor = item.added_by_id === currentUserId
+          const canRatify = !isDonor || !otherAdminsExist
 
           return (
-            <Flex
-              key={item.id}
-              justify="space-between"
-              align="center"
-              p={3}
-              bg="bg.muted"
-              rounded="md"
-              opacity={canRatify ? 1 : 0.6}
-            >
-              <VStack align="start" gap={0}>
-                <Text fontWeight="bold">
-                  {item.title} {isOwner && "(Yours)"}
-                </Text>
-
-                <Text fontSize="xs" color="fg.muted">
-                  {isOwner
-                    ? otherAdminsExist
-                      ? "Wait for other admin"
-                      : "Verified"
-                    : "Member donation"}
-                </Text>
-              </VStack>
-
+            <Flex key={item.id} justify="space-between" align="center">
+              <HStack gap={3}>
+                {item.image_url && <Image src={item.image_url} h="40px" />}
+                <VStack align="start" gap={0}>
+                  <Text fontWeight="bold">{item.title}</Text>
+                  <Text fontSize="xs" color="fg.muted">
+                    {isDonor ? "Your donation" : "Member donation"}
+                  </Text>
+                </VStack>
+              </HStack>
               <Button
-                size="sm"
+                size="xs"
                 colorPalette="green"
-                onClick={() => ratifyMutation.mutate(item.id)}
+                onClick={() => ratifyDonationMutation.mutate(item.id)}
+                loading={ratifyDonationMutation.isPending}
                 disabled={!canRatify}
-                loading={
-                  ratifyMutation.isPending &&
-                  ratifyMutation.variables === item.id
-                }
+                title={!canRatify ? "Another admin must ratify your donation" : ""}
               >
-                Accept
+                Ratify
               </Button>
             </Flex>
           )
@@ -2089,9 +2078,5 @@ function DonationManagement({
     </Box>
   )
 }
-
-// ============================================================================
-// EXPORTS
-// ============================================================================
 
 export default CommunityBoard

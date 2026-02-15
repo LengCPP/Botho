@@ -757,6 +757,10 @@ def read_items(
     enable_feed: bool = False,
     q: str | None = None,
     minimal: Annotated[bool, Query()] = False,
+    exclude_lost: bool = False,
+    exclude_private: bool = False,
+    lost_only: bool = False,
+    private_only: bool = False,
 ) -> Any:
     """
     Retrieve items. Filters by current user's owner_id by default, unless enable_feed is True.

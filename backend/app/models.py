@@ -566,6 +566,8 @@ class ItemBase(SQLModel):
     image_url: str | None = Field(default=None, max_length=512)
     extra_data: dict[str, Any] | None = Field(default={}, sa_column=Column(JSON))
     info: dict[str, Any] | None = Field(default={}, sa_column=Column(JSON)) # physical_description, grade (1-10)
+    is_lost: bool = Field(default=False)
+    is_private: bool = Field(default=False)
 
 
 class Item(ItemBase, table=True):
@@ -764,6 +766,16 @@ class WorksMetadataPublic(SQLModel):
     count: int
 
 
+class ItemBatchAction(SQLModel):
+    item_ids: list[uuid.UUID]
+
+
+class ItemBatchEnrich(SQLModel):
+    item_ids: list[uuid.UUID]
+    fields_to_update: list[str] = ["description", "isbn", "image_url", "category", "genre", "tags"]
+    overwrite: bool = False
+
+
 class ItemPublic(ItemBase):
     id: uuid.UUID
     owner_id: uuid.UUID
@@ -793,6 +805,8 @@ class ItemMinimal(SQLModel):
     had_possession: bool = False
     is_community_owned: bool = False
     is_donation_pending: bool = False
+    is_lost: bool = False
+    is_private: bool = False
     owner_name: str | None = None
     # Minimal metadata for classification in grid
     category: str | None = None

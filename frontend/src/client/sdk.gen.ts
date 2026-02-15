@@ -99,6 +99,14 @@ import type {
   ItemsDeleteWorkMetadataResponse,
   ItemsDuplicateItemData,
   ItemsDuplicateItemResponse,
+  ItemsBatchDeleteItemsData,
+  ItemsBatchDeleteItemsResponse,
+  ItemsBatchMarkLostData,
+  ItemsBatchMarkLostResponse,
+  ItemsBatchTogglePrivacyData,
+  ItemsBatchTogglePrivacyResponse,
+  ItemsBatchEnrichItemsData,
+  ItemsBatchEnrichItemsResponse,
   ItemsListBookRegistryData,
   ItemsListBookRegistryResponse,
   ItemsLookupBookRegistryData,
@@ -1602,6 +1610,10 @@ export class ItemsService {
         enable_feed: data.enableFeed,
         q: data.q,
         minimal: data.minimal,
+        exclude_lost: data.excludeLost,
+        exclude_private: data.excludePrivate,
+        lost_only: data.lostOnly,
+        private_only: data.privateOnly,
       },
       errors: {
         422: "Validation Error",
@@ -1720,6 +1732,94 @@ export class ItemsService {
       path: {
         id: data.id,
       },
+      errors: {
+        422: "Validation Error",
+      },
+    })
+  }
+
+  /**
+   * Batch Delete Items
+   * Batch delete items.
+   * @param data The data for the request.
+   * @param data.requestBody
+   * @returns Message Successful Response
+   * @throws ApiError
+   */
+  public static batchDeleteItems(
+    data: ItemsBatchDeleteItemsData,
+  ): CancelablePromise<ItemsBatchDeleteItemsResponse> {
+    return __request(OpenAPI, {
+      method: "POST",
+      url: "/api/v1/items/batch/delete",
+      body: data.requestBody,
+      mediaType: "application/json",
+      errors: {
+        422: "Validation Error",
+      },
+    })
+  }
+
+  /**
+   * Batch Mark Lost
+   * Batch mark items as lost.
+   * @param data The data for the request.
+   * @param data.requestBody
+   * @returns Message Successful Response
+   * @throws ApiError
+   */
+  public static batchMarkLost(
+    data: ItemsBatchMarkLostData,
+  ): CancelablePromise<ItemsBatchMarkLostResponse> {
+    return __request(OpenAPI, {
+      method: "POST",
+      url: "/api/v1/items/batch/mark-lost",
+      body: data.requestBody,
+      mediaType: "application/json",
+      errors: {
+        422: "Validation Error",
+      },
+    })
+  }
+
+  /**
+   * Batch Toggle Privacy
+   * Batch toggle privacy status of items.
+   * @param data The data for the request.
+   * @param data.requestBody
+   * @returns Message Successful Response
+   * @throws ApiError
+   */
+  public static batchTogglePrivacy(
+    data: ItemsBatchTogglePrivacyData,
+  ): CancelablePromise<ItemsBatchTogglePrivacyResponse> {
+    return __request(OpenAPI, {
+      method: "POST",
+      url: "/api/v1/items/batch/toggle-privacy",
+      body: data.requestBody,
+      mediaType: "application/json",
+      errors: {
+        422: "Validation Error",
+      },
+    })
+  }
+
+  /**
+   * Batch Enrich Items
+   * Batch enrich items with archive data.
+   * @param data The data for the request.
+   * @param data.requestBody
+   * @returns Message Successful Response
+   * @throws ApiError
+   */
+  public static batchEnrichItems(
+    data: ItemsBatchEnrichItemsData,
+  ): CancelablePromise<ItemsBatchEnrichItemsResponse> {
+    return __request(OpenAPI, {
+      method: "POST",
+      url: "/api/v1/items/batch/enrich",
+      body: data.requestBody,
+      mediaType: "application/json",
       errors: {
         422: "Validation Error",
       },

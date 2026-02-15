@@ -14,8 +14,8 @@ import {
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { FaChevronLeft, FaFileImport } from "react-icons/fa"
-import { FiSearch } from "react-icons/fi"
+import { FaChevronLeft } from "react-icons/fa"
+import { FiSearch, FiSettings } from "react-icons/fi"
 import { z } from "zod"
 
 import {
@@ -24,7 +24,6 @@ import {
   type LoanPublic,
   LoansService,
 } from "@/client"
-import { ImportItems } from "@/components/Common/ImportItems"
 import ReviewModal from "@/components/Common/ReviewModal"
 import AddItem from "@/components/Items/AddItem"
 import {
@@ -37,6 +36,7 @@ import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
 import { LoanRequestModal } from "@/components/Items/LoanRequestModal"
+import { ManageItems } from "@/components/Items/ManageItems"
 import PendingItems from "@/components/Pending/PendingItems"
 import useAuth from "@/hooks/useAuth"
 import { groupItems } from "@/utils"
@@ -66,7 +66,7 @@ const itemsSearchSchema = z.object({
     .enum(["subject", "genre", "category", "author"])
     .catch(() => (localStorage.getItem("organize_by") as any) || "subject"),
   q: z.string().optional(),
-  tab: z.enum(["items", "import"]).catch("items"),
+  tab: z.enum(["items", "manage"]).catch("items"),
 })
 
 const COLLECTIONS_LIMIT = 12
@@ -90,6 +90,7 @@ function ItemsTable() {
     author,
     organize_by,
     q,
+    tab,
   } = Route.useSearch()
   const { user } = useAuth()
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
@@ -143,6 +144,8 @@ function ItemsTable() {
         author: author,
         q: q,
         minimal: true,
+        excludeLost: true,
+        excludePrivate: true,
       }),
     getNextPageParam: (lastPage, allPages) => {
       const loadedCount = allPages.length * limit
@@ -151,6 +154,7 @@ function ItemsTable() {
     initialPageParam: 0,
     enabled:
       !!user &&
+      tab === "items" &&
       (display_type === "items" ||
         !!subject ||
         !!author ||
@@ -181,6 +185,7 @@ function ItemsTable() {
     initialPageParam: 0,
     enabled:
       !!user &&
+      tab === "items" &&
       display_type === "collections" &&
       !subject &&
       !author &&
@@ -268,6 +273,24 @@ function ItemsTable() {
   )
   const totalItemCount = (infiniteData?.pages[0] as any)?.count || 0
 
+  if (tab === "manage") {
+    return (
+      <VStack align="stretch" gap={6} width="full" pt={12}>
+        <HStack justify="space-between">
+          <Heading size="lg">Manage Items</Heading>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => updateSearch({ tab: "items" })}
+          >
+            <FaChevronLeft /> Back to Items
+          </Button>
+        </HStack>
+        <ManageItems ownerId={user?.id!} />
+      </VStack>
+    )
+  }
+
   if (isLoadingInfinite || isLoadingFacets) {
     return <PendingItems />
   }
@@ -354,99 +377,148 @@ function ItemsTable() {
     </SimpleGrid>
   )
 
-  // Collection View Rendering
-  if (display_type === "collections" && !isDrillDown) {
-    return (
-      <Box mt={8}>
-        <CollectionGrid
-          items={allFacets}
-          type={organize_by}
-          onOpen={handleOpenCollection}
-        />
-
-        {hasNextFacets && (
-          <Flex justify="center" mt={10} mb={10}>
-            <Button
-              variant="ghost"
-              colorPalette="accent"
-              onClick={() => fetchNextFacets()}
-              loading={isFetchingNextFacets}
-            >
-              Load More Collections (Showing {allFacets.length} of{" "}
-              {totalFacetCount})
-            </Button>
-          </Flex>
-        )}
-      </Box>
-    )
-  }
-
-  // Drilled-down Group View OR Item View
-  const activeGroups = groupItems(allItems as any)
-  const currentFilterValue = subject || author || genre || category || "Unknown"
-
   return (
-    <Box mt={8}>
-      {isDrillDown && (
-        <VStack align="start" mb={6} gap={2}>
+    <VStack align="stretch" gap={6} width="full" pt={12}>
+      <HStack align="baseline" gap={4}>
+        <Heading size="lg">My Items</Heading>
+        <Badge variant="subtle" colorPalette="blue" size="md">
+          {totalCount} items
+        </Badge>
+      </HStack>
+
+      <Flex
+        justify="space-between"
+        align="center"
+        width="full"
+        wrap="wrap"
+        gap={4}
+      >
+        <HStack gap={4}>
+          <AddItem />
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            onClick={() =>
-              updateSearch({
-                subject: undefined,
-                author: undefined,
-                genre: undefined,
-                category: undefined,
-              })
-            }
+            onClick={() => updateSearch({ tab: "manage" })}
           >
-            <FaChevronLeft style={{ marginRight: "8px" }} /> Collections
+            <FiSettings /> Manage Items
           </Button>
-          <Heading
-            size="lg"
-            color="ui.hover"
-            textTransform="uppercase"
-            letterSpacing="wider"
-          >
-            {(activeGroups[0]?.[0] as any)?.item_type === "book"
-              ? "Books"
-              : "Items"}{" "}
-            {currentFilterValue?.toLowerCase() === "others"
-              ? `with unspecified ${organize_by}`
-              : `${
-                  organize_by === "author"
-                    ? "by"
-                    : organize_by === "genre"
-                      ? "in"
-                      : organize_by === "category"
-                        ? "in category"
-                        : "on"
-                } ${currentFilterValue}`}{" "}
-            {activeGroups.length > 1 && `(${activeGroups.length})`}
-          </Heading>
-        </VStack>
-      )}
+        </HStack>
 
-      {renderGroup(activeGroups as any)}
+        <ItemsViewOptions
+          q={q}
+          onChangeQ={(val) => updateSearch({ q: val })}
+          viewMode={view_mode}
+          onChangeViewMode={(mode) => updateSearch({ view_mode: mode })}
+          displayType={display_type}
+          onChangeDisplayType={(type) =>
+            updateSearch({
+              display_type: type,
+              subject: undefined,
+              author: undefined,
+              genre: undefined,
+              category: undefined,
+            })
+          }
+          sortBy={sort_by}
+          onChangeSortBy={(val) => updateSearch({ sort_by: val })}
+          sortOrder={sort_order}
+          onChangeSortOrder={(val) => updateSearch({ sort_order: val })}
+          limit={limit}
+          onChangeLimit={(val) => updateSearch({ limit: val })}
+          category={category}
+          onChangeCategory={(val) =>
+            updateSearch({
+              category: val,
+              genre: undefined,
+              subject: undefined,
+              author: undefined,
+            })
+          }
+          genre={genre}
+          onChangeGenre={(val) => updateSearch({ genre: val })}
+          organizeBy={organize_by}
+          onChangeOrganizeBy={(val) =>
+            updateSearch({
+              organize_by: val,
+              subject: undefined,
+              author: undefined,
+              genre: undefined,
+              category: undefined,
+            })
+          }
+          showDisplayToggle={true}
+          showViewToggle={true}
+          showFilter={true}
+          showSort={true}
+          showLimit={true}
+        />
+      </Flex>
 
-      {hasNextPage && (
-        <Flex justify="center" mt={10} mb={10}>
-          <Button
-            variant="ghost"
-            colorPalette="accent"
-            onClick={() => fetchNextPage()}
-            loading={isFetchingNextPage}
-          >
-            Load More Items (Showing {allItems.length} of {totalItemCount})
-          </Button>
-        </Flex>
-      )}
+      {display_type === "collections" && !isDrillDown ? (
+        <Box>
+          <CollectionGrid
+            items={allFacets}
+            type={organize_by}
+            onOpen={handleOpenCollection}
+          />
+          {hasNextFacets && (
+            <Flex justify="center" mt={10} mb={10}>
+              <Button
+                variant="ghost"
+                colorPalette="accent"
+                onClick={() => fetchNextFacets()}
+                loading={isFetchingNextFacets}
+              >
+                Load More Collections (Showing {allFacets.length} of{" "}
+                {totalFacetCount})
+              </Button>
+            </Flex>
+          )}
+        </Box>
+      ) : (
+        <Box>
+          {isDrillDown && (
+            <VStack align="start" mb={6} gap={2}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  updateSearch({
+                    subject: undefined,
+                    author: undefined,
+                    genre: undefined,
+                    category: undefined,
+                  })
+                }
+              >
+                <FaChevronLeft style={{ marginRight: "8px" }} /> Collections
+              </Button>
+              <Heading
+                size="lg"
+                color="ui.hover"
+                textTransform="uppercase"
+                letterSpacing="wider"
+              >
+                Items {organize_by} {subject || author || genre || category}
+              </Heading>
+            </VStack>
+          )}
 
-      {!hasNextPage && allItems.length > 0 && (
-        <Text textAlign="center" color="gray.500" mt={10} mb={10} fontSize="sm">
-          You've reached the end of the list.
-        </Text>
+          {renderGroup(groupItems(allItems as any))}
+
+          {hasNextPage && (
+            <Flex justify="center" mt={10} mb={10}>
+              <Button
+                variant="ghost"
+                colorPalette="accent"
+                onClick={() => fetchNextPage()}
+                loading={isFetchingNextPage}
+              >
+                Load More Items (Showing {allItems.length} of {totalItemCount})
+              </Button>
+            </Flex>
+          )}
+        </Box>
       )}
 
       <ItemDetailModal
@@ -480,131 +552,19 @@ function ItemsTable() {
           onClose={() => setSelectedLoanForExtension(null)}
         />
       )}
-    </Box>
+    </VStack>
   )
 }
 
 function Items() {
-  const navigate = useNavigate({ from: Route.fullPath })
   const { user } = useAuth()
-  const {
-    sort_by,
-    sort_order,
-    limit,
-    category,
-    genre,
-    view_mode,
-    display_type,
-    organize_by,
-    subject: _subject,
-    author: _author,
-    q,
-    tab,
-  } = Route.useSearch()
-
-  const updateSearch = useCallback(
-    (newParams: any) => {
-      navigate({
-        search: (prev: any) => ({ ...prev, ...newParams, page: 1 }),
-      })
-    },
-    [navigate],
-  )
-
   const collectionIndex = user?.collection_index as any
   const totalCount = collectionIndex?.total ?? 0
-  const itemTypeCounts = collectionIndex?.item_type || {}
-  const bookCount = itemTypeCounts?.book?.count || 0
-
-  // If all items are books, show "Total Books", otherwise show "Total Items"
-  const label =
-    totalCount > 0 && bookCount === totalCount ? "Total Books" : "Total Items"
 
   return (
     <Container maxW="full">
-      <VStack pt={12} align="start" gap={6} width="full">
-        <HStack align="baseline" gap={4}>
-          <Heading size="lg">My Items</Heading>
-          <Badge variant="subtle" colorPalette="blue" size="md">
-            {totalCount} {label}
-          </Badge>
-        </HStack>
-
-        <Flex
-          justify="space-between"
-          align="center"
-          width="full"
-          wrap="wrap"
-          gap={4}
-        >
-          <HStack gap={4}>
-            <AddItem />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                updateSearch({ tab: tab === "import" ? "items" : "import" })
-              }
-            >
-              <FaFileImport />{" "}
-              {tab === "import" ? "Back to Items" : "Bulk Import"}
-            </Button>
-          </HStack>
-
-          {tab !== "import" && (
-            <ItemsViewOptions
-              q={q}
-              onChangeQ={(val) => updateSearch({ q: val })}
-              viewMode={view_mode}
-              onChangeViewMode={(mode) => updateSearch({ view_mode: mode })}
-              displayType={display_type}
-              onChangeDisplayType={(type) =>
-                updateSearch({
-                  display_type: type,
-                  subject: undefined,
-                  author: undefined,
-                  genre: undefined,
-                  category: undefined,
-                })
-              }
-              sortBy={sort_by}
-              onChangeSortBy={(val) => updateSearch({ sort_by: val })}
-              sortOrder={sort_order}
-              onChangeSortOrder={(val) => updateSearch({ sort_order: val })}
-              limit={limit}
-              onChangeLimit={(val) => updateSearch({ limit: val })}
-              category={category}
-              onChangeCategory={(val) =>
-                updateSearch({
-                  category: val,
-                  genre: undefined,
-                  subject: undefined,
-                  author: undefined,
-                })
-              }
-              genre={genre}
-              onChangeGenre={(val) => updateSearch({ genre: val })}
-              organizeBy={organize_by}
-              onChangeOrganizeBy={(val) =>
-                updateSearch({
-                  organize_by: val,
-                  subject: undefined,
-                  author: undefined,
-                  genre: undefined,
-                  category: undefined,
-                })
-              }
-              showDisplayToggle={true}
-              showViewToggle={true}
-              showFilter={true}
-              showSort={true}
-              showLimit={true}
-            />
-          )}
-        </Flex>
-      </VStack>
-
-      {tab === "import" ? <ImportItems /> : <ItemsTable />}
+      <ItemsTable />
+      <PendingItems />
     </Container>
   )
 }

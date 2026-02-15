@@ -19,7 +19,9 @@ def configure_search():
         "author",
         "subject",
         "item_type", 
-        "is_available"
+        "is_available",
+        "is_lost",
+        "is_private"
     ])
     items_index.update_sortable_attributes([
         "title", 
@@ -70,7 +72,9 @@ def sync_item_to_search(item: Item):
         "genre": genre,
         "subject": tags,
         "created_at": int(item.created_at.timestamp()) if item.created_at else None,
-        "is_available": True
+        "is_available": True,
+        "is_lost": item.is_lost,
+        "is_private": item.is_private
     }
     index.add_documents([document])
 

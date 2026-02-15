@@ -199,6 +199,8 @@ export type ItemMinimal = {
   owner_name?: string | null
   category?: string | null
   genre?: string | null
+  is_lost?: boolean
+  is_private?: boolean
 }
 
 export type ItemOwnerPublic = {
@@ -233,6 +235,8 @@ export type ItemPublic = {
   is_donation_pending?: boolean
   work_metadata?: WorkMetadataPublic | null
   had_possession?: boolean
+  is_lost?: boolean
+  is_private?: boolean
 }
 
 export type ItemReviewCreate = {
@@ -1001,6 +1005,40 @@ export type ItemsDuplicateItemData = {
 }
 
 export type ItemsDuplicateItemResponse = ItemPublic
+
+export type ItemBatchAction = {
+  item_ids: Array<string>
+}
+
+export type ItemBatchEnrich = {
+  item_ids: Array<string>
+  fields_to_update?: Array<string>
+  overwrite?: boolean
+}
+
+export type ItemsBatchDeleteItemsData = {
+  requestBody: ItemBatchAction
+}
+
+export type ItemsBatchDeleteItemsResponse = Message
+
+export type ItemsBatchMarkLostData = {
+  requestBody: ItemBatchAction
+}
+
+export type ItemsBatchMarkLostResponse = Message
+
+export type ItemsBatchTogglePrivacyData = {
+  requestBody: ItemBatchAction
+}
+
+export type ItemsBatchTogglePrivacyResponse = Message
+
+export type ItemsBatchEnrichItemsData = {
+  requestBody: ItemBatchEnrich
+}
+
+export type ItemsBatchEnrichItemsResponse = Message
 
 export type ItemsReadWorkMetadataData = {
   author: string
