@@ -10,6 +10,7 @@ import { FaBars } from "react-icons/fa"
 import { FiSettings } from "react-icons/fi"
 
 import Navbar from "@/components/Common/Navbar"
+import { LoanReminderBanner } from "@/components/Common/LoanReminderBanner"
 import NotFound from "@/components/Common/NotFound"
 import Sidebar from "@/components/Common/Sidebar"
 import SidebarItems from "@/components/Common/SidebarItems"
@@ -63,6 +64,7 @@ function Layout() {
   return (
     <Flex direction="column" minH="100dvh">
       <Navbar />
+      <LoanReminderBanner />
 
       {/* Mobile Burger Menu Trigger */}
       <Box
