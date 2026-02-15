@@ -26,11 +26,11 @@ test.describe("Loan Lifecycle", () => {
       data: { email, password, full_name: fullName },
     })
     borrower = await userRes.json()
-    
+
     // Verify Borrower via Admin
     await request.patch(`/api/v1/users/${borrower.id}`, {
       headers: adminHeaders,
-      data: { is_verified: true }
+      data: { is_verified: true },
     })
 
     // 2. Login as Borrower to get token
@@ -39,7 +39,7 @@ test.describe("Loan Lifecycle", () => {
     })
     const loginData = await loginRes.json()
     if (!loginRes.ok()) {
-        console.error("Borrower Login Failed:", loginData)
+      console.error("Borrower Login Failed:", loginData)
     }
     borrowerHeaders = { Authorization: `Bearer ${loginData.access_token}` }
 
@@ -54,20 +54,24 @@ test.describe("Loan Lifecycle", () => {
     })
     itemToLoan = await itemRes.json()
     expect(itemRes.ok()).toBeTruthy()
-    
+
     // 4. Make them friends
     await request.post(`/api/v1/friends/request/${borrower.id}`, {
       headers: adminHeaders,
     })
-    
+
     // Accept as borrower
-    await request.post("/api/v1/friends/accept", {
-      headers: borrowerHeaders,
-      data: { friend_id: adminLoginData.id || "" }, // This might still be tricky if ID not returned
-    }).catch(() => {})
+    await request
+      .post("/api/v1/friends/accept", {
+        headers: borrowerHeaders,
+        data: { friend_id: adminLoginData.id || "" }, // This might still be tricky if ID not returned
+      })
+      .catch(() => {})
 
     // Fallback: search and accept
-    const incomingRes = await request.get("/api/v1/friends/requests", { headers: borrowerHeaders })
+    const incomingRes = await request.get("/api/v1/friends/requests", {
+      headers: borrowerHeaders,
+    })
     const incoming = await incomingRes.json()
     if (incoming.data && incoming.data.length > 0) {
       await request.post(`/api/v1/friends/accept/${incoming.data[0].id}`, {
@@ -76,7 +80,10 @@ test.describe("Loan Lifecycle", () => {
     }
   })
 
-  test("Borrower can request a loan and Owner can accept", async ({ page, request }) => {
+  test("Borrower can request a loan and Owner can accept", async ({
+    page,
+    request,
+  }) => {
     const startDate = new Date()
     const endDate = new Date()
     endDate.setDate(endDate.getDate() + 7)
@@ -94,13 +101,19 @@ test.describe("Loan Lifecycle", () => {
 
     // --- Phase 2: Owner (Admin) views and accepts loan in UI ---
     await page.goto("/loans")
-    await expect(page.getByRole("heading", { name: "Loans & Possession" })).toBeVisible()
-    
+    await expect(
+      page.getByRole("heading", { name: "Loans & Possession" }),
+    ).toBeVisible()
+
     // Find the loan request in Actionable Requests section
-    const loanCard = page.locator("div").filter({ hasText: itemToLoan.title }).filter({ hasText: /PENDING|ACCEPTED|ACTIVE|RETURN/ }).last()
+    const loanCard = page
+      .locator("div")
+      .filter({ hasText: itemToLoan.title })
+      .filter({ hasText: /PENDING|ACCEPTED|ACTIVE|RETURN/ })
+      .last()
     await expect(loanCard).toBeVisible({ timeout: 15000 })
     await expect(loanCard).toContainText("PENDING")
-    
+
     // Accept Loan
     const acceptBtn = loanCard.getByRole("button", { name: "Accept" })
     await acceptBtn.click()
@@ -108,7 +121,7 @@ test.describe("Loan Lifecycle", () => {
 
     // --- Phase 3: Borrower ratifies loan (via API for speed) ---
     const ratifyRes = await request.patch(`/api/v1/loans/${loan.id}/ratify`, {
-      headers: borrowerHeaders
+      headers: borrowerHeaders,
     })
     expect(ratifyRes.ok()).toBeTruthy()
 
@@ -116,17 +129,17 @@ test.describe("Loan Lifecycle", () => {
     await page.reload()
     await page.getByRole("tab", { name: /Incoming/i }).click()
     await expect(loanCard).toContainText("ACTIVE")
-    
+
     // --- Phase 5: Borrower signals return (via API) ---
     await request.patch(`/api/v1/loans/${loan.id}/return-signal`, {
-      headers: borrowerHeaders
+      headers: borrowerHeaders,
     })
-    
+
     // --- Phase 6: Owner confirms return in UI ---
     await page.reload()
     await page.getByRole("tab", { name: /Incoming/i }).click()
     await expect(loanCard).toContainText("RETURN_PENDING")
-    
+
     await loanCard.getByRole("button", { name: "Confirm Return" }).click()
     await expect(loanCard).toContainText("RETURNED")
   })

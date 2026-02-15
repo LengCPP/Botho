@@ -85,7 +85,7 @@ def test_loan_lifecycle(
     # 2. Owner creates an item
     item = create_random_item(db, owner_id=superuser.id)
 
-    # NEW: Establish friendship so they can borrow from each other
+    # Establish friendship so they can borrow from each other
     from app.models import Friendship, FriendshipStatus
     friendship = Friendship(
         user_id=requester.id,
@@ -241,6 +241,9 @@ def test_loan_forgiveness_flow(
     client.patch(f"{settings.API_V1_STR}/loans/{loan_id}/respond?accept=true", headers=superuser_headers)
     client.patch(f"{settings.API_V1_STR}/loans/{loan_id}/ratify", headers=requester_headers)
 
+    # Mark as defaulted first
+    client.post(f"{settings.API_V1_STR}/loans/{loan_id}/default", headers=superuser_headers)
+
     # 2. Forgive with GOOD_REASON (should mark as DEFAULTED but is_forgiven=True)
     forgive_data = {"reason": "GOOD_REASON"}
     response = client.post(f"{settings.API_V1_STR}/loans/{loan_id}/forgive", headers=superuser_headers, json=forgive_data)
@@ -259,6 +262,9 @@ def test_loan_forgiveness_flow(
     loan_id2 = response.json()["id"]
     client.patch(f"{settings.API_V1_STR}/loans/{loan_id2}/respond?accept=true", headers=superuser_headers)
     client.patch(f"{settings.API_V1_STR}/loans/{loan_id2}/ratify", headers=requester_headers)
+
+    # Mark as defaulted first
+    client.post(f"{settings.API_V1_STR}/loans/{loan_id2}/default", headers=superuser_headers)
 
     forgive_data_replace = {
         "reason": "REPLACED_ITEM",

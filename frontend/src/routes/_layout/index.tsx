@@ -6,16 +6,23 @@ import {
   Grid,
   GridItem,
   Heading,
+  Icon,
   SimpleGrid,
   Stat,
   Text,
   VStack,
-  Icon,
 } from "@chakra-ui/react"
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
 import { useState } from "react"
-import { FiActivity, FiAward, FiCheckCircle, FiClock, FiHeart, FiZap } from "react-icons/fi"
+import {
+  FiActivity,
+  FiAward,
+  FiCheckCircle,
+  FiClock,
+  FiHeart,
+  FiZap,
+} from "react-icons/fi"
 
 import { DashboardService, ItemsService } from "@/client"
 import { LoanCalendar } from "@/components/Dashboard/LoanCalendar"
@@ -68,7 +75,9 @@ function Dashboard() {
     <Container maxW="full">
       <VStack align="stretch" gap={8} pt={8}>
         <Box>
-          <Heading size="lg">Welcome back, {user?.full_name || user?.email}!</Heading>
+          <Heading size="lg">
+            Welcome back, {user?.full_name || user?.email}!
+          </Heading>
           <Text color="fg.muted">Here's what's happening in your network.</Text>
         </Box>
 
@@ -120,9 +129,18 @@ function Dashboard() {
                 {activityLoading ? (
                   <Text>Loading arrivals...</Text>
                 ) : groupedArrivals.length === 0 ? (
-                  <Box p={10} textAlign="center" bg="bg.muted" borderRadius="lg">
-                    <Text color="fg.muted">No new arrivals from your network.</Text>
-                    <Text fontSize="sm">Try joining more communities or adding friends!</Text>
+                  <Box
+                    p={10}
+                    textAlign="center"
+                    bg="bg.muted"
+                    borderRadius="lg"
+                  >
+                    <Text color="fg.muted">
+                      No new arrivals from your network.
+                    </Text>
+                    <Text fontSize="sm">
+                      Try joining more communities or adding friends!
+                    </Text>
                   </Box>
                 ) : (
                   <VStack align="stretch" gap={3}>
@@ -152,9 +170,18 @@ function Dashboard() {
                 {recsLoading ? (
                   <Text>Finding matches...</Text>
                 ) : groupedRecs.length === 0 ? (
-                  <Box p={10} textAlign="center" bg="bg.muted" borderRadius="lg" border="1px dashed" borderColor="border.subtle">
+                  <Box
+                    p={10}
+                    textAlign="center"
+                    bg="bg.muted"
+                    borderRadius="lg"
+                    border="1px dashed"
+                    borderColor="border.subtle"
+                  >
                     <Text color="fg.muted">No recommendations yet.</Text>
-                    <Text fontSize="sm">Try adding interests to your profile!</Text>
+                    <Text fontSize="sm">
+                      Try adding interests to your profile!
+                    </Text>
                   </Box>
                 ) : (
                   <VStack align="stretch" gap={3}>

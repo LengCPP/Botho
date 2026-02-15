@@ -58,7 +58,7 @@ function SignupSuccess() {
         </Text>
         <Text color="gray.500">
           Please click the link in the email to verify your account. The link
-          will expire in 60 seconds.
+          will expire in 3 minutes.
         </Text>
 
         <Button
@@ -76,3 +76,5 @@ function SignupSuccess() {
     </Container>
   )
 }
+
+export default SignupSuccess

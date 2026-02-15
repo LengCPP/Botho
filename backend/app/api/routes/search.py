@@ -1,3 +1,4 @@
+import uuid
 from typing import Any
 
 from fastapi import APIRouter
@@ -181,6 +182,13 @@ def search(
     communities_raw = []
     use_comm_sql_fallback = True
 
+    # User's memberships
+    comm_membership_stmt = select(CommunityMember.community_id).where(
+        CommunityMember.user_id == current_user.id,
+        CommunityMember.status == CommunityMemberStatus.ACCEPTED
+    )
+    user_comm_ids = session.exec(comm_membership_stmt).all()
+
     if meili_client:
         try:
             comm_index = meili_client.index("communities")
@@ -191,7 +199,13 @@ def search(
             comm_ids = [hit["id"] for hit in search_res["hits"]]
             if comm_ids:
                 communities_raw = session.exec(
-                    select(Community).where(col(Community.id).in_(comm_ids))
+                    select(Community).where(
+                        col(Community.id).in_(comm_ids),
+                        or_(
+                            Community.is_private == False,
+                            Community.id.in_(user_comm_ids)
+                        )
+                    )
                 ).all()
                 if communities_raw:
                     use_comm_sql_fallback = False
@@ -203,7 +217,13 @@ def search(
     if use_comm_sql_fallback:
         community_statement = (
             select(Community)
-            .where(col(Community.name).ilike(f"%{q}%")) # Reverted to name only
+            .where(
+                col(Community.name).ilike(f"%{q}%"),
+                or_(
+                    Community.is_private == False,
+                    Community.id.in_(user_comm_ids)
+                )
+            ) # Reverted to name only
             .limit(limit)
         )
         communities_raw = session.exec(community_statement).all()

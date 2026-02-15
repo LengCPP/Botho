@@ -16,7 +16,9 @@ from app.models import (
     WorkMetadata,
     Interest,
     UserInterest,
-    ItemType
+    ItemType,
+    Friendship,
+    FriendshipStatus
 )
 from datetime import datetime, timedelta
 
@@ -45,7 +47,23 @@ def test_recommendations_query_construction(
             is_superuser=True,
         )
         user = crud.create_user(session=db, user_create=user_in)
+    
+    if not user.is_verified:
+        user.is_verified = True
+        db.add(user)
+        db.commit()
+        db.refresh(user)
         
+    # Add a friend so recommendations don't return early due to empty social graph
+    friend_in = UserCreate(
+        email="friend@example.com",
+        password="password",
+    )
+    friend = crud.create_user(session=db, user_create=friend_in)
+    friendship = Friendship(user_id=user.id, friend_id=friend.id, status=FriendshipStatus.ACCEPTED)
+    db.add(friendship)
+    db.commit()
+
     # Add Interest "History"
     interest = Interest(name="History")
     db.add(interest)

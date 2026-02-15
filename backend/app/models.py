@@ -24,6 +24,7 @@ class CommunityMemberStatus(str, Enum):
     REJECTED = "REJECTED"
     BANNED = "BANNED"
     SUSPENDED = "SUSPENDED"
+    INVITED = "INVITED"
 
 
 class FriendshipStatus(str, Enum):
@@ -104,6 +105,9 @@ class CommunityMember(SQLModel, table=True):
     role: CommunityMemberRole = Field(default=CommunityMemberRole.MEMBER)
     status: CommunityMemberStatus = Field(default=CommunityMemberStatus.ACCEPTED)
     notifications_enabled: bool = Field(default=True)
+    invited_by: uuid.UUID | None = Field(
+        default=None, foreign_key="user.id", ondelete="SET NULL"
+    )
 
 
 class Friendship(SQLModel, table=True):
@@ -322,6 +326,8 @@ class UserUpdate(SQLModel):
     is_delinquent: bool | None = None
     ai_honor_summary: str | None = None
     ai_improvement_tips: list[str] | None = None
+
+    @field_validator("email", mode="before")
     @classmethod
     def validate_email(cls, v: EmailStr | None) -> str | None:
         if isinstance(v, str):
@@ -378,7 +384,12 @@ class User(UserBase, table=True):
         }
     )
     communities: list["Community"] = Relationship(
-        back_populates="members", link_model=CommunityMember
+        back_populates="members",
+        link_model=CommunityMember,
+        sa_relationship_kwargs={
+            "primaryjoin": "User.id==CommunityMember.user_id",
+            "secondaryjoin": "Community.id==CommunityMember.community_id",
+        }
     )
     settings: dict[str, Any] | None = Field(default={}, sa_column=Column(JSON))
     profile: UserProfile | None = Relationship(
@@ -427,7 +438,12 @@ class Community(CommunityBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     created_by: uuid.UUID = Field(foreign_key="user.id", nullable=False, ondelete="CASCADE")
     members: list["User"] = Relationship(
-        back_populates="communities", link_model=CommunityMember
+        back_populates="communities",
+        link_model=CommunityMember,
+        sa_relationship_kwargs={
+            "primaryjoin": "Community.id==CommunityMember.community_id",
+            "secondaryjoin": "User.id==CommunityMember.user_id",
+        }
     )
     interests: list["Interest"] = Relationship(back_populates="communities", link_model=CommunityInterest)
     announcements: list["CommunityAnnouncement"] = Relationship(
@@ -675,6 +691,10 @@ class CommunityMemberUpdate(SQLModel):
     role: CommunityMemberRole | None = Field(default=None)
     status: CommunityMemberStatus | None = Field(default=None)
     notifications_enabled: bool | None = Field(default=None)
+
+
+class CommunityInvitationCreate(SQLModel):
+    friend_id: uuid.UUID
 
 
 class FriendshipPublic(SQLModel):

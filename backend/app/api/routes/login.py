@@ -46,7 +46,7 @@ def login_access_token(
         raise HTTPException(status_code=400, detail="Inactive user")
     elif not user.is_verified:
         # Generate new verification token
-        verification_token = generate_password_reset_token(email=user.email, expires_delta=timedelta(minutes=1))
+        verification_token = generate_password_reset_token(email=user.email, expires_delta=timedelta(minutes=3))
         email_data = generate_verification_email(
             email_to=user.email, email=user.email, token=verification_token
         )
@@ -162,7 +162,7 @@ def resend_verification_email(email: str, session: SessionDep) -> Message:
     if user.is_verified:
          return Message(message="Email already verified")
 
-    verification_token = generate_password_reset_token(email=email, expires_delta=timedelta(minutes=1))
+    verification_token = generate_password_reset_token(email=email, expires_delta=timedelta(minutes=3))
     email_data = generate_verification_email(
         email_to=user.email, email=email, token=verification_token
     )

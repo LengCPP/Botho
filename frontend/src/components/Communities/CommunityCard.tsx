@@ -25,7 +25,11 @@ interface CommunityCardProps {
   onDisbandRequest?: (community: CommunityPublicExtended) => void
 }
 
-const CommunityCard = ({ community, onJoinRequest, onDisbandRequest }: CommunityCardProps) => {
+const CommunityCard = ({
+  community,
+  onJoinRequest,
+  onDisbandRequest,
+}: CommunityCardProps) => {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const { user: currentUser } = useAuth()

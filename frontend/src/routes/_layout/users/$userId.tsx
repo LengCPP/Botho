@@ -27,8 +27,8 @@ import { z } from "zod"
 import {
   FriendsService,
   type ItemPublic,
-  type LoanPublic,
   ItemsService,
+  type LoanPublic,
   UsersService,
 } from "@/client"
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
@@ -111,9 +111,12 @@ function UserProfilePage() {
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const [isRemoveFriendModalOpen, setIsRemoveFriendModalOpen] = useState(false)
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
-  const [selectedLoanForReview, setSelectedLoanForReview] = useState<LoanPublic | null>(null)
-  const [selectedItemForLoan, setSelectedItemForLoan] = useState<ItemPublic | null>(null)
-  const [selectedLoanForExtension, setSelectedLoanForExtension] = useState<LoanPublic | null>(null)
+  const [selectedLoanForReview, setSelectedLoanForReview] =
+    useState<LoanPublic | null>(null)
+  const [selectedItemForLoan, setSelectedItemForLoan] =
+    useState<ItemPublic | null>(null)
+  const [selectedLoanForExtension, setSelectedLoanForExtension] =
+    useState<LoanPublic | null>(null)
 
   useEffect(() => {
     localStorage.setItem("view_mode", view_mode)
@@ -483,7 +486,9 @@ function UserProfilePage() {
                           onShowDetails={() => setSelectedItem(firstItem)}
                           onReview={(l) => setSelectedLoanForReview(l)}
                           onLoanRequest={(i) => setSelectedItemForLoan(i)}
-                          onExtensionRequest={(l) => setSelectedLoanForExtension(l)}
+                          onExtensionRequest={(l) =>
+                            setSelectedLoanForExtension(l)
+                          }
                         />
                       ) : (
                         <ItemCard
@@ -493,7 +498,9 @@ function UserProfilePage() {
                           onShowDetails={() => setSelectedItem(firstItem)}
                           onReview={(l) => setSelectedLoanForReview(l)}
                           onLoanRequest={(i) => setSelectedItemForLoan(i)}
-                          onExtensionRequest={(l) => setSelectedLoanForExtension(l)}
+                          onExtensionRequest={(l) =>
+                            setSelectedLoanForExtension(l)
+                          }
                         />
                       )
                     })}

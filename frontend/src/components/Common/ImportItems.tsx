@@ -30,14 +30,14 @@ import Papa from "papaparse"
 import { useEffect, useRef, useState } from "react"
 import {
   FaCheckCircle,
+  FaChevronLeft,
+  FaChevronRight,
+  FaCopy,
   FaEdit,
   FaExclamationTriangle,
   FaFileImport,
   FaSpinner,
   FaTrash,
-  FaCopy,
-  FaChevronLeft,
-  FaChevronRight,
 } from "react-icons/fa"
 import * as XLSX from "xlsx"
 
@@ -101,8 +101,12 @@ const EditableCell = ({
       e.stopPropagation()
     }
     // Prevent arrow navigation while typing in a multiline textarea
-    if (isEditing && isMultiline && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
-        e.stopPropagation()
+    if (
+      isEditing &&
+      isMultiline &&
+      ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)
+    ) {
+      e.stopPropagation()
     }
   }
 
@@ -134,7 +138,10 @@ const EditableCell = ({
     <Box
       ref={inputRef as any}
       tabIndex={0}
-      onClick={() => { onFocus(); setIsEditing(true); }}
+      onClick={() => {
+        onFocus()
+        setIsEditing(true)
+      }}
       onFocus={onFocus}
       onKeyDown={handleKeyDown}
       cursor="text"
@@ -190,27 +197,45 @@ export const ImportItems = ({
   const [isMappingOpen, setIsMappingOpen] = useState(false)
   const [parsedData, setParsedData] = useState<any[]>([])
   const [headers, setHeaders] = useState<string[]>([])
-  const [mapping, setMapping] = useState<Record<string, string>>({ title: "", author: "", isbn: "", description: "", image_url: "" })
+  const [mapping, setMapping] = useState<Record<string, string>>({
+    title: "",
+    author: "",
+    isbn: "",
+    description: "",
+    image_url: "",
+  })
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [pendingEdits, setPendingEdits] = useState<Record<string, any>>({})
   const [page, setPage] = useState(0)
-  const [focusedCell, setFocusedCell] = useState<{ row: number; col: number } | null>(null)
-  
+  const [focusedCell, setFocusedCell] = useState<{
+    row: number
+    col: number
+  } | null>(null)
+
   const limit = 100
   const { showSuccessToast, showErrorToast, showInfoToast } = useCustomToast()
   const queryClient = useQueryClient()
 
   const { data: stagedItems, isLoading: isStagedLoading } = useQuery({
     queryKey: ["stagedItems", communityId, isArchiveImport, page],
-    queryFn: () => ImportsService.readStagedItems({ communityId, skip: page * limit, limit }),
-    refetchInterval: (query) => (query.state.data?.processing_count ?? 0) > 0 ? 1000 : 5000,
+    queryFn: () =>
+      ImportsService.readStagedItems({
+        communityId,
+        skip: page * limit,
+        limit,
+      }),
+    refetchInterval: (query) =>
+      (query.state.data?.processing_count ?? 0) > 0 ? 1000 : 5000,
   })
 
   // Listen for batch completion WebSocket events
   useEffect(() => {
     const handleMessage = (event: CustomEvent) => {
       const message = event.detail
-      if (message.type === "IMPORT_BATCH_COMPLETED" || message.type === "BOOK_ARCHIVE_BATCH_COMPLETED") {
+      if (
+        message.type === "IMPORT_BATCH_COMPLETED" ||
+        message.type === "BOOK_ARCHIVE_BATCH_COMPLETED"
+      ) {
         showSuccessToast("Bulk processing finished and search index updated.")
         queryClient.invalidateQueries({ queryKey: ["stagedItems"] })
         queryClient.invalidateQueries({ queryKey: ["items"] })
@@ -239,17 +264,26 @@ export const ImportItems = ({
   }
 
   const handleTableKeyDown = (e: React.KeyboardEvent) => {
-    if (!focusedCell || (e.target as HTMLElement).tagName === "INPUT" || (e.target as HTMLElement).tagName === "TEXTAREA") return
+    if (
+      !focusedCell ||
+      (e.target as HTMLElement).tagName === "INPUT" ||
+      (e.target as HTMLElement).tagName === "TEXTAREA"
+    )
+      return
 
     const { row, col } = focusedCell
     if (e.key === "ArrowUp" && row > 0) setFocusedCell({ row: row - 1, col })
-    else if (e.key === "ArrowDown" && row < items.length - 1) setFocusedCell({ row: row + 1, col })
-    else if (e.key === "ArrowLeft" && col > 0) setFocusedCell({ row, col: col - 1 })
-    else if (e.key === "ArrowRight" && col < columns.length - 1) setFocusedCell({ row, col: col + 1 })
+    else if (e.key === "ArrowDown" && row < items.length - 1)
+      setFocusedCell({ row: row + 1, col })
+    else if (e.key === "ArrowLeft" && col > 0)
+      setFocusedCell({ row, col: col - 1 })
+    else if (e.key === "ArrowRight" && col < columns.length - 1)
+      setFocusedCell({ row, col: col + 1 })
   }
 
   const bulkUpdateMutation = useMutation({
-    mutationFn: (data: Record<string, any>) => (ImportsService as any).bulkUpdateStagedItems({ requestBody: data }),
+    mutationFn: (data: Record<string, any>) =>
+      (ImportsService as any).bulkUpdateStagedItems({ requestBody: data }),
     onSuccess: () => {
       showSuccessToast("Changes saved.")
       setPendingEdits({})
@@ -258,7 +292,10 @@ export const ImportItems = ({
   })
 
   const processMutation = useMutation({
-    mutationFn: (ids: string[]) => isArchiveImport ? ImportsService.syncArchiveItems({ requestBody: ids }) : ImportsService.processStagedItems({ requestBody: ids, communityId }),
+    mutationFn: (ids: string[]) =>
+      isArchiveImport
+        ? ImportsService.syncArchiveItems({ requestBody: ids })
+        : ImportsService.processStagedItems({ requestBody: ids, communityId }),
     onSuccess: () => {
       showSuccessToast("Processing started.")
       setSelectedIds([])
@@ -268,57 +305,65 @@ export const ImportItems = ({
 
   const deleteSelectedMutation = useMutation({
     mutationFn: async () => {
-        await Promise.all(selectedIds.map(id => ImportsService.deleteStagedItem({ id })))
+      await Promise.all(
+        selectedIds.map((id) => ImportsService.deleteStagedItem({ id })),
+      )
     },
     onSuccess: () => {
-        showSuccessToast(`Deleted ${selectedIds.length} items.`)
-        setSelectedIds([])
-        queryClient.invalidateQueries({ queryKey: ["stagedItems"] })
-    }
+      showSuccessToast(`Deleted ${selectedIds.length} items.`)
+      setSelectedIds([])
+      queryClient.invalidateQueries({ queryKey: ["stagedItems"] })
+    },
   })
 
   const dropDuplicates = () => {
     const seen = new Set()
     const toDelete: string[] = []
-    items.forEach(item => {
-        const raw = pendingEdits[item.id] || item.raw_data
-        const key = `${raw.title}-${raw.author}-${raw.isbn}`.toLowerCase().trim()
-        if (seen.has(key)) toDelete.push(item.id)
-        else seen.add(key)
+    items.forEach((item) => {
+      const raw = pendingEdits[item.id] || item.raw_data
+      const key = `${raw.title}-${raw.author}-${raw.isbn}`.toLowerCase().trim()
+      if (seen.has(key)) toDelete.push(item.id)
+      else seen.add(key)
     })
     if (toDelete.length > 0) {
-        setSelectedIds(toDelete)
-        showInfoToast(`Identified ${toDelete.length} duplicates. Click 'Delete Selected' to remove.`)
+      setSelectedIds(toDelete)
+      showInfoToast(
+        `Identified ${toDelete.length} duplicates. Click 'Delete Selected' to remove.`,
+      )
     } else {
-        showInfoToast("No duplicates found on this page.")
+      showInfoToast("No duplicates found on this page.")
     }
   }
 
   const handleEdit = (id: string, field: string, newValue: string) => {
     const item = items.find((i) => i.id === id)
     if (!item) return
-    setPendingEdits(prev => ({ ...prev, [id]: { ...(prev[id] || item.raw_data), [field]: newValue } }))
+    setPendingEdits((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] || item.raw_data), [field]: newValue },
+    }))
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     const complete = (results: any) => {
-        if (results.data.length > 0) {
-            setHeaders(Object.keys(results.data[0]))
-            setParsedData(results.data)
-            setIsMappingOpen(true)
-        }
+      if (results.data.length > 0) {
+        setHeaders(Object.keys(results.data[0]))
+        setParsedData(results.data)
+        setIsMappingOpen(true)
+      }
     }
-    if (file.name.endsWith(".csv")) Papa.parse(file, { header: true, skipEmptyLines: true, complete })
+    if (file.name.endsWith(".csv"))
+      Papa.parse(file, { header: true, skipEmptyLines: true, complete })
     else {
-        const reader = new FileReader()
-        reader.onload = (evt) => {
-            const wb = XLSX.read(evt.target?.result, { type: "binary" })
-            const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]])
-            complete({ data })
-        }
-        reader.readAsBinaryString(file)
+      const reader = new FileReader()
+      reader.onload = (evt) => {
+        const wb = XLSX.read(evt.target?.result, { type: "binary" })
+        const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]])
+        complete({ data })
+      }
+      reader.readAsBinaryString(file)
     }
   }
 
@@ -329,43 +374,97 @@ export const ImportItems = ({
       <VStack align="start" gap={6} width="full">
         <HStack justify="space-between" width="full">
           <VStack align="start" gap={1}>
-            <Heading size="md">{isArchiveImport ? "Global Archive Import" : "Bulk Import"}</Heading>
-            <Text fontSize="sm" color="gray.500">Spreadsheet-style staging area. Use arrows to navigate.</Text>
+            <Heading size="md">
+              {isArchiveImport ? "Global Archive Import" : "Bulk Import"}
+            </Heading>
+            <Text fontSize="sm" color="gray.500">
+              Spreadsheet-style staging area. Use arrows to navigate.
+            </Text>
           </VStack>
           <HStack>
             {hasPendingEdits && (
-              <Button bg="green.600" size="sm" onClick={() => bulkUpdateMutation.mutate(pendingEdits)} loading={bulkUpdateMutation.isPending}>
+              <Button
+                bg="green.600"
+                size="sm"
+                onClick={() => bulkUpdateMutation.mutate(pendingEdits)}
+                loading={bulkUpdateMutation.isPending}
+              >
                 Save Changes
               </Button>
             )}
-            <Button as="label" variant="solid" bg="ui.hover" size="sm" cursor="pointer">
+            <Button
+              as="label"
+              variant="solid"
+              bg="ui.hover"
+              size="sm"
+              cursor="pointer"
+            >
               <Icon as={FaFileImport} mr={2} /> Upload File
-              <input type="file" hidden accept=".csv, .xlsx, .xls" onChange={handleFileChange} />
+              <input
+                type="file"
+                hidden
+                accept=".csv, .xlsx, .xls"
+                onChange={handleFileChange}
+              />
             </Button>
           </HStack>
         </HStack>
 
-        <DialogRoot open={isMappingOpen} onOpenChange={(e) => setIsMappingOpen(e.open)}>
+        <DialogRoot
+          open={isMappingOpen}
+          onOpenChange={(e) => setIsMappingOpen(e.open)}
+        >
           <DialogContent>
-            <DialogHeader><DialogTitle>Map Columns</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>Map Columns</DialogTitle>
+            </DialogHeader>
             <DialogBody>
               <Stack gap={4}>
                 {Object.keys(mapping).map((key) => (
                   <HStack key={key} justify="space-between">
-                    <Text fontWeight="bold" textTransform="capitalize">{key}</Text>
-                    <select value={mapping[key]} onChange={(e) => setMapping({ ...mapping, [key]: e.target.value })} style={{ width: "60%", padding: "8px", borderRadius: "4px", border: "1px solid #ccc" }}>
+                    <Text fontWeight="bold" textTransform="capitalize">
+                      {key}
+                    </Text>
+                    <select
+                      value={mapping[key]}
+                      onChange={(e) =>
+                        setMapping({ ...mapping, [key]: e.target.value })
+                      }
+                      style={{
+                        width: "60%",
+                        padding: "8px",
+                        borderRadius: "4px",
+                        border: "1px solid #ccc",
+                      }}
+                    >
                       <option value="">-- Select --</option>
-                      {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                      {headers.map((h) => (
+                        <option key={h} value={h}>
+                          {h}
+                        </option>
+                      ))}
                     </select>
                   </HStack>
                 ))}
               </Stack>
             </DialogBody>
             <DialogFooter>
-              <Button onClick={() => { 
-                ImportsService.stageItems({ requestBody: parsedData, mapping: JSON.stringify(mapping), communityId })
-                .then(() => { showSuccessToast("Staged."); setIsMappingOpen(false); queryClient.invalidateQueries({ queryKey: ["stagedItems"] }); })
-              }} bg="ui.hover">Start Staging</Button>
+              <Button
+                onClick={() => {
+                  ImportsService.stageItems({
+                    requestBody: parsedData,
+                    mapping: JSON.stringify(mapping),
+                    communityId,
+                  }).then(() => {
+                    showSuccessToast("Staged.")
+                    setIsMappingOpen(false)
+                    queryClient.invalidateQueries({ queryKey: ["stagedItems"] })
+                  })
+                }}
+                bg="ui.hover"
+              >
+                Start Staging
+              </Button>
             </DialogFooter>
           </DialogContent>
         </DialogRoot>
@@ -376,23 +475,59 @@ export const ImportItems = ({
               <HStack gap={4}>
                 <Text fontWeight="bold">{totalCount} Items</Text>
                 <HStack gap={2}>
-                    <Button size="xs" variant="outline" onClick={dropDuplicates}><Icon as={FaCopy} mr={1}/> Find Dups</Button>
-                    <Button size="xs" variant="outline" color="red.500" disabled={selectedIds.length === 0} onClick={() => deleteSelectedMutation.mutate()}><Icon as={FaTrash} mr={1}/> Delete Selected</Button>
+                  <Button size="xs" variant="outline" onClick={dropDuplicates}>
+                    <Icon as={FaCopy} mr={1} /> Find Dups
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    color="red.500"
+                    disabled={selectedIds.length === 0}
+                    onClick={() => deleteSelectedMutation.mutate()}
+                  >
+                    <Icon as={FaTrash} mr={1} /> Delete Selected
+                  </Button>
                 </HStack>
               </HStack>
-              <Button bg="ui.hover" size="sm" disabled={selectedIds.length === 0 || hasPendingEdits} onClick={() => processMutation.mutate(selectedIds)}>
+              <Button
+                bg="ui.hover"
+                size="sm"
+                disabled={selectedIds.length === 0 || hasPendingEdits}
+                onClick={() => processMutation.mutate(selectedIds)}
+              >
                 Add {selectedIds.length} to Collection
               </Button>
             </HStack>
 
-            <Box overflowX="auto" width="full" border="1px solid" borderColor="border.subtle" borderRadius="md">
+            <Box
+              overflowX="auto"
+              width="full"
+              border="1px solid"
+              borderColor="border.subtle"
+              borderRadius="md"
+            >
               <Table.Root size="sm" variant="line">
                 <Table.Header>
                   <Table.Row bg="bg.muted">
                     <Table.ColumnHeader width="40px">
-                      <Checkbox checked={selectedIds.length === items.length} onCheckedChange={(d) => setSelectedIds(d.checked ? items.map(i => i.id) : [])} />
+                      <Checkbox
+                        checked={selectedIds.length === items.length}
+                        onCheckedChange={(d) =>
+                          setSelectedIds(
+                            d.checked ? items.map((i) => i.id) : [],
+                          )
+                        }
+                      />
                     </Table.ColumnHeader>
-                    {columns.map(c => <Table.ColumnHeader key={c} textTransform="capitalize" minW={c === "description" ? "250px" : "150px"}>{c}</Table.ColumnHeader>)}
+                    {columns.map((c) => (
+                      <Table.ColumnHeader
+                        key={c}
+                        textTransform="capitalize"
+                        minW={c === "description" ? "250px" : "150px"}
+                      >
+                        {c}
+                      </Table.ColumnHeader>
+                    ))}
                     <Table.ColumnHeader>Issues</Table.ColumnHeader>
                     <Table.ColumnHeader>Status</Table.ColumnHeader>
                   </Table.Row>
@@ -402,28 +537,75 @@ export const ImportItems = ({
                     const raw = pendingEdits[item.id] || item.raw_data
                     const errors = validateItem(item, pendingEdits[item.id])
                     return (
-                      <Table.Row key={item.id} bg={!!pendingEdits[item.id] ? "blue.50/5" : undefined}>
+                      <Table.Row
+                        key={item.id}
+                        bg={pendingEdits[item.id] ? "blue.50/5" : undefined}
+                      >
                         <Table.Cell>
-                          <Checkbox checked={selectedIds.includes(item.id)} onCheckedChange={(d) => setSelectedIds(prev => d.checked ? [...prev, item.id] : prev.filter(id => id !== item.id))} />
+                          <Checkbox
+                            checked={selectedIds.includes(item.id)}
+                            onCheckedChange={(d) =>
+                              setSelectedIds((prev) =>
+                                d.checked
+                                  ? [...prev, item.id]
+                                  : prev.filter((id) => id !== item.id),
+                              )
+                            }
+                          />
                         </Table.Cell>
                         {columns.map((col, cIdx) => (
-                          <Table.Cell key={col} borderLeft="1px solid" borderColor="border.subtle" p={0}>
+                          <Table.Cell
+                            key={col}
+                            borderLeft="1px solid"
+                            borderColor="border.subtle"
+                            p={0}
+                          >
                             <EditableCell
                               item={item}
                               field={col}
                               value={raw[col]}
                               onEdit={handleEdit}
                               isMultiline={col === "description"}
-                              isFocused={focusedCell?.row === rIdx && focusedCell?.col === cIdx}
-                              onFocus={() => setFocusedCell({ row: rIdx, col: cIdx })}
+                              isFocused={
+                                focusedCell?.row === rIdx &&
+                                focusedCell?.col === cIdx
+                              }
+                              onFocus={() =>
+                                setFocusedCell({ row: rIdx, col: cIdx })
+                              }
                             />
                           </Table.Cell>
                         ))}
-                        <Table.Cell borderLeft="1px solid" borderColor="border.subtle">
-                          {errors.length > 0 && <Tooltip content={errors.join(", ")}><Icon as={FaExclamationTriangle} color="orange.500"/></Tooltip>}
+                        <Table.Cell
+                          borderLeft="1px solid"
+                          borderColor="border.subtle"
+                        >
+                          {errors.length > 0 && (
+                            <Tooltip content={errors.join(", ")}>
+                              <Icon
+                                as={FaExclamationTriangle}
+                                color="orange.500"
+                              />
+                            </Tooltip>
+                          )}
                         </Table.Cell>
-                        <Table.Cell borderLeft="1px solid" borderColor="border.subtle">
-                          {item.status === "PROCESSING" ? <Icon as={FaSpinner} animation="spin" color="ui.hover"/> : item.status === "COMPLETED" ? <Icon as={FaCheckCircle} color="green.500"/> : item.status === "FAILED" ? <Icon as={FaExclamationTriangle} color="red.500"/> : <Icon as={FaFileImport} color="gray.400"/>}
+                        <Table.Cell
+                          borderLeft="1px solid"
+                          borderColor="border.subtle"
+                        >
+                          {item.status === "PROCESSING" ? (
+                            <Icon
+                              as={FaSpinner}
+                              animation="spin"
+                              color="ui.hover"
+                            />
+                          ) : item.status === "COMPLETED" ? (
+                            <Icon as={FaCheckCircle} color="green.500" />
+                          ) : item.status === "FAILED" ? (
+                            <Icon as={FaExclamationTriangle} color="red.500" />
+                          ) : (
+                            <Icon as={FaFileImport} color="gray.400" />
+                          )}
                         </Table.Cell>
                       </Table.Row>
                     )
@@ -433,9 +615,25 @@ export const ImportItems = ({
             </Box>
 
             <HStack justify="center" width="full" mt={2} gap={4}>
-                <Button size="sm" variant="ghost" onClick={() => handlePageChange(Math.max(0, page - 1))} disabled={page === 0}><FaChevronLeft/></Button>
-                <Text fontSize="sm">Page {page + 1} of {totalPages || 1}</Text>
-                <Button size="sm" variant="ghost" onClick={() => handlePageChange(page + 1)} disabled={page >= totalPages - 1}><FaChevronRight/></Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handlePageChange(Math.max(0, page - 1))}
+                disabled={page === 0}
+              >
+                <FaChevronLeft />
+              </Button>
+              <Text fontSize="sm">
+                Page {page + 1} of {totalPages || 1}
+              </Text>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handlePageChange(page + 1)}
+                disabled={page >= totalPages - 1}
+              >
+                <FaChevronRight />
+              </Button>
             </HStack>
           </VStack>
         )}

@@ -64,121 +64,114 @@ export const Route = createFileRoute("/_layout/book-archive")({
   validateSearch: (search) => archiveSearchSchema.parse(search),
 })
 
-const BookRow = React.memo(({ 
-  book, 
-  isSelected, 
-  onSelect, 
-  onDelete, 
-  isDeleting 
-}: { 
-  book: any
-  isSelected: boolean
-  onSelect: (checked: boolean) => void
-  onDelete: (author: string, title: string) => void
-  isDeleting: boolean
-}) => {
-  return (
-    <Table.Row
-      bg={isSelected ? "bg.subtle" : undefined}
-      verticalAlign="top"
-    >
-      <Table.Cell>
-        <Checkbox
-          checked={isSelected}
-          onCheckedChange={(e) => onSelect(!!e.checked)}
-        />
-      </Table.Cell>
-      <Table.Cell>
-        {book.image_url?.startsWith("/") ? (
-          <Image
-            src={book.image_url}
-            alt={book.title}
-            h="80px"
-            objectFit="contain"
+const BookRow = React.memo(
+  ({
+    book,
+    isSelected,
+    onSelect,
+    onDelete,
+    isDeleting,
+  }: {
+    book: any
+    isSelected: boolean
+    onSelect: (checked: boolean) => void
+    onDelete: (author: string, title: string) => void
+    isDeleting: boolean
+  }) => {
+    return (
+      <Table.Row bg={isSelected ? "bg.subtle" : undefined} verticalAlign="top">
+        <Table.Cell>
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={(e) => onSelect(!!e.checked)}
           />
-        ) : (
-          <Box
-            h="80px"
-            w="50px"
-            bg="bg.muted"
-            display="flex"
-            alignItems="center"
-            justifyContent="center"
-          >
-            <Text fontSize="xs" color="fg.muted">
-              No Img
+        </Table.Cell>
+        <Table.Cell>
+          {book.image_url?.startsWith("/") ? (
+            <Image
+              src={book.image_url}
+              alt={book.title}
+              h="80px"
+              objectFit="contain"
+            />
+          ) : (
+            <Box
+              h="80px"
+              w="50px"
+              bg="bg.muted"
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+            >
+              <Text fontSize="xs" color="fg.muted">
+                No Img
+              </Text>
+            </Box>
+          )}
+        </Table.Cell>
+        <Table.Cell whiteSpace="normal">
+          <VStack align="start" gap={1}>
+            <Text fontWeight="bold">{book.title}</Text>
+            <Text fontSize="sm" color="fg.muted">
+              {book.author}
             </Text>
-          </Box>
-        )}
-      </Table.Cell>
-      <Table.Cell whiteSpace="normal">
-        <VStack align="start" gap={1}>
-          <Text fontWeight="bold">{book.title}</Text>
-          <Text fontSize="sm" color="fg.muted">
-            {book.author}
+          </VStack>
+        </Table.Cell>
+        <Table.Cell whiteSpace="normal">
+          <Text fontSize="xs" lineClamp={4} title={book.description || ""}>
+            {book.description || "No description"}
           </Text>
-        </VStack>
-      </Table.Cell>
-      <Table.Cell whiteSpace="normal">
-        <Text
-          fontSize="xs"
-          lineClamp={4}
-          title={book.description || ""}
-        >
-          {book.description || "No description"}
-        </Text>
-      </Table.Cell>
-      <Table.Cell whiteSpace="normal">
-        <VStack align="start" gap={1}>
-          {book.category && (
-            <Badge variant="solid" colorPalette="blue" size="sm">
-              {book.category}
-            </Badge>
-          )}
-          {book.genre && (
-            <Badge variant="outline" colorPalette="teal" size="xs">
-              {book.genre}
-            </Badge>
-          )}
-          {book.tags && book.tags.length > 0 && (
-            <Flex wrap="wrap" gap={1}>
-              {book.tags.slice(0, 5).map((tag: string) => (
-                <Badge
-                  key={tag}
-                  variant="subtle"
-                  colorPalette="gray"
-                  size="xs"
-                >
-                  {tag}
-                </Badge>
-              ))}
-              {book.tags.length > 5 && (
-                <Text fontSize="xs" color="fg.muted">
-                  +{book.tags.length - 5}
-                </Text>
-              )}
-            </Flex>
-          )}
-        </VStack>
-      </Table.Cell>
-      <Table.Cell whiteSpace="nowrap">
-        {book.isbn || "N/A"}
-      </Table.Cell>
-      <Table.Cell textAlign="right">
-        <IconButton
-          aria-label="Delete book"
-          variant="ghost"
-          colorPalette="red"
-          size="sm"
-          onClick={() => onDelete(book.author, book.title)}
-          loading={isDeleting}
-        >
-          <FiTrash2 />
-        </IconButton>
-      </Table.Cell>
-    </Table.Row>
-  )
-})
+        </Table.Cell>
+        <Table.Cell whiteSpace="normal">
+          <VStack align="start" gap={1}>
+            {book.category && (
+              <Badge variant="solid" colorPalette="blue" size="sm">
+                {book.category}
+              </Badge>
+            )}
+            {book.genre && (
+              <Badge variant="outline" colorPalette="teal" size="xs">
+                {book.genre}
+              </Badge>
+            )}
+            {book.tags && book.tags.length > 0 && (
+              <Flex wrap="wrap" gap={1}>
+                {book.tags.slice(0, 5).map((tag: string) => (
+                  <Badge
+                    key={tag}
+                    variant="subtle"
+                    colorPalette="gray"
+                    size="xs"
+                  >
+                    {tag}
+                  </Badge>
+                ))}
+                {book.tags.length > 5 && (
+                  <Text fontSize="xs" color="fg.muted">
+                    +{book.tags.length - 5}
+                  </Text>
+                )}
+              </Flex>
+            )}
+          </VStack>
+        </Table.Cell>
+        <Table.Cell whiteSpace="nowrap">{book.isbn || "N/A"}</Table.Cell>
+        <Table.Cell textAlign="right">
+          <IconButton
+            aria-label="Delete book"
+            variant="ghost"
+            colorPalette="red"
+            size="sm"
+            onClick={() => onDelete(book.author, book.title)}
+            loading={isDeleting}
+          >
+            <FiTrash2 />
+          </IconButton>
+        </Table.Cell>
+      </Table.Row>
+    )
+  },
+)
 
 function BooksTable({
   selectedKeys,
@@ -191,26 +184,21 @@ function BooksTable({
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const { filter_missing } = Route.useSearch()
 
-  const {
-    data,
-    isLoading,
-    isFetchingNextPage,
-    hasNextPage,
-    fetchNextPage,
-  } = useInfiniteQuery({
-    queryKey: ["book-archive-infinite", { filter_missing }],
-    queryFn: ({ pageParam = 0 }) =>
-      ItemsService.listBookRegistry({
-        skip: pageParam as number,
-        limit: PER_PAGE,
-        filterMissing: filter_missing === "all" ? undefined : filter_missing,
-      }),
-    getNextPageParam: (lastPage, allPages) => {
-      const loadedCount = allPages.length * PER_PAGE
-      return loadedCount < lastPage.count ? loadedCount : undefined
-    },
-    initialPageParam: 0,
-  })
+  const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } =
+    useInfiniteQuery({
+      queryKey: ["book-archive-infinite", { filter_missing }],
+      queryFn: ({ pageParam = 0 }) =>
+        ItemsService.listBookRegistry({
+          skip: pageParam as number,
+          limit: PER_PAGE,
+          filterMissing: filter_missing === "all" ? undefined : filter_missing,
+        }),
+      getNextPageParam: (lastPage, allPages) => {
+        const loadedCount = allPages.length * PER_PAGE
+        return loadedCount < lastPage.count ? loadedCount : undefined
+      },
+      initialPageParam: 0,
+    })
 
   // Listen for WebSocket updates
   useEffect(() => {
@@ -232,7 +220,10 @@ function BooksTable({
     }
   }, [queryClient, showSuccessToast])
 
-  const allBooks = useMemo(() => data?.pages.flatMap((p) => p.data) || [], [data])
+  const allBooks = useMemo(
+    () => data?.pages.flatMap((p) => p.data) || [],
+    [data],
+  )
   const totalCount = data?.pages[0]?.count || 0
 
   const deleteMutation = useMutation({
@@ -247,13 +238,18 @@ function BooksTable({
     },
   })
 
-  const handleDelete = useCallback((author: string, title: string) => {
-    if (
-      window.confirm(`Are you sure you want to delete "${title}" by ${author}?`)
-    ) {
-      deleteMutation.mutate({ author, title })
-    }
-  }, [deleteMutation])
+  const handleDelete = useCallback(
+    (author: string, title: string) => {
+      if (
+        window.confirm(
+          `Are you sure you want to delete "${title}" by ${author}?`,
+        )
+      ) {
+        deleteMutation.mutate({ author, title })
+      }
+    },
+    [deleteMutation],
+  )
 
   const handleSelectAll = (checked: boolean) => {
     if (checked && allBooks) {
@@ -267,25 +263,28 @@ function BooksTable({
     }
   }
 
-  const handleSelectRow = useCallback((key: string, checked: boolean) => {
-    onSelectionChange(prev => {
-      const next = new Set(prev)
-      if (checked) {
-        next.add(key)
-      } else {
-        next.delete(key)
-      }
-      return next
-    })
-  }, [onSelectionChange])
+  const handleSelectRow = useCallback(
+    (key: string, checked: boolean) => {
+      onSelectionChange((prev) => {
+        const next = new Set(prev)
+        if (checked) {
+          next.add(key)
+        } else {
+          next.delete(key)
+        }
+        return next
+      })
+    },
+    [onSelectionChange],
+  )
 
   if (isLoading) {
     return <Text p={8}>Loading archive...</Text>
   }
 
-  const allSelected = allBooks.length > 0 && allBooks.every((book) =>
-    selectedKeys.has(`${book.author}|${book.title}`)
-  )
+  const allSelected =
+    allBooks.length > 0 &&
+    allBooks.every((book) => selectedKeys.has(`${book.author}|${book.title}`))
 
   return (
     <VStack align="stretch" gap={4}>
@@ -316,7 +315,11 @@ function BooksTable({
                 isSelected={selectedKeys.has(key)}
                 onSelect={(checked) => handleSelectRow(key, checked)}
                 onDelete={handleDelete}
-                isDeleting={deleteMutation.isPending && deleteMutation.variables?.author === book.author && deleteMutation.variables?.title === book.title}
+                isDeleting={
+                  deleteMutation.isPending &&
+                  deleteMutation.variables?.author === book.author &&
+                  deleteMutation.variables?.title === book.title
+                }
               />
             )
           })}
@@ -377,7 +380,7 @@ function BookArchive() {
   const [isEnrichDialogOpen, setIsEnrichDialogOpen] = useState(false)
 
   const { showSuccessToast, showErrorToast } = useCustomToast()
-  
+
   const enrichMutation = useMutation({
     mutationFn: (data: {
       books: { author: string; title: string }[]
@@ -452,7 +455,7 @@ function BookArchive() {
   }
 
   const handleStartEnrichment = () => {
-    const books = Array.from(selectedKeys).map(key => {
+    const books = Array.from(selectedKeys).map((key) => {
       const [author, title] = key.split("|")
       return { author, title }
     })
@@ -554,7 +557,9 @@ function BookArchive() {
                             Overwrite existing data if found
                           </Checkbox>
                           <Text fontSize="xs" color="fg.muted">
-                            If checked, fetched data will replace current values. If unchecked, we only fill missing (null/empty) fields.
+                            If checked, fetched data will replace current
+                            values. If unchecked, we only fill missing
+                            (null/empty) fields.
                           </Text>
                         </VStack>
                       </Stack>

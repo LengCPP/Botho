@@ -13,6 +13,7 @@ from app.api.utils import (
     filter_user_privacy,
     update_collection_index,
     invalidate_item_caches,
+    rebuild_collection_index_task,
 )
 from app.models import (
     CommunitiesPublic,
@@ -22,6 +23,7 @@ from app.models import (
     CommunityAnnouncementPublic,
     CommunityAnnouncementsPublic,
     CommunityCreate,
+    CommunityInvitationCreate,
     CommunityItem,
     CommunityMember,
     CommunityMemberRole,
@@ -79,17 +81,23 @@ def read_communities(
     """
     Retrieve communities.
     """
-    # Get communities where user is a member
-    user_memberships = session.exec(
-        select(CommunityMember.community_id).where(
-            CommunityMember.user_id == current_user.id
-        )
-    ).all()
-
     if member_only:
+        # Status: ACCEPTED only for "My Communities"
+        user_memberships = session.exec(
+            select(CommunityMember.community_id).where(
+                CommunityMember.user_id == current_user.id,
+                CommunityMember.status == CommunityMemberStatus.ACCEPTED
+            )
+        ).all()
         statement = select(Community).where(Community.id.in_(user_memberships))
     else:
-        # Filter: Public OR (Private AND Member)
+        # All memberships (including INVITED/PENDING) to allow discovery of private/joined ones
+        user_memberships = session.exec(
+            select(CommunityMember.community_id).where(
+                CommunityMember.user_id == current_user.id
+            )
+        ).all()
+        # Filter: Public OR (Private AND (Member OR Invited OR Applicant))
         statement = select(Community).where(
             or_(
                 Community.is_private == False,
@@ -158,14 +166,20 @@ def read_community(session: SessionDep, current_user: CurrentUser, id: uuid.UUID
     if not community:
         raise HTTPException(status_code=404, detail="Community not found")
 
-    comm_pub = CommunityPublic.model_validate(community)
-
     # Get membership info for current user
     statement = select(CommunityMember).where(
         CommunityMember.community_id == id,
         CommunityMember.user_id == current_user.id
     )
     membership = session.exec(statement).first()
+
+    # Privacy check: Private communities only for members or invited
+    if community.is_private and not current_user.is_superuser:
+        if not membership:
+            raise HTTPException(status_code=403, detail="This is a private community")
+
+    comm_pub = CommunityPublic.model_validate(community)
+
     if membership:
         comm_pub.current_user_role = membership.role
         comm_pub.current_user_status = membership.status
@@ -240,7 +254,7 @@ async def join_community(
     session: SessionDep, current_user: CurrentUser, id: uuid.UUID
 ) -> Any:
     """
-    Join a community.
+    Join a community. Handles accepting invitations.
     """
     community = session.get(Community, id)
     if not community:
@@ -264,6 +278,47 @@ async def join_community(
             raise HTTPException(status_code=403, detail="You are banned from this community")
         if membership.status == CommunityMemberStatus.SUSPENDED:
             raise HTTPException(status_code=403, detail="Your account is suspended in this community")
+        
+        if membership.status == CommunityMemberStatus.INVITED:
+            # Check who invited them
+            # Check inviter's role
+            inviter_membership = session.exec(
+                select(CommunityMember).where(
+                    CommunityMember.community_id == id,
+                    CommunityMember.user_id == membership.invited_by
+                )
+            ).first()
+            
+            if inviter_membership and inviter_membership.role in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]:
+                # Staff invite -> Auto join
+                membership.status = CommunityMemberStatus.ACCEPTED
+                membership.role = CommunityMemberRole.MEMBER
+                session.add(membership)
+                session.commit()
+                return Message(message="Joined successfully via invitation")
+            else:
+                # Regular member invite -> Application
+                membership.status = CommunityMemberStatus.PENDING
+                membership.role = CommunityMemberRole.APPLICANT
+                session.add(membership)
+                session.commit()
+                # Notify staff
+                admin_statement = select(CommunityMember).where(
+                    CommunityMember.community_id == id,
+                    CommunityMember.role.in_([CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]),
+                    CommunityMember.status == CommunityMemberStatus.ACCEPTED
+                )
+                staff = session.exec(admin_statement).all()
+                for staff_member in staff:
+                    await notify_user(
+                        session=session,
+                        recipient_id=staff_member.user_id,
+                        title="New Join Request",
+                        message=f"{current_user.full_name or current_user.email} applied to join {community.name} (Referral).",
+                        type=NotificationType.INFO,
+                        link=f"/communities/{id}?tab=manage"
+                    )
+                return Message(message="Application sent via referral")
 
     crud.join_community(session=session, community_id=id, user_id=current_user.id)
 
@@ -286,6 +341,90 @@ async def join_community(
             )
 
     return Message(message="Application sent" if community.requires_approval else "Joined successfully")
+
+
+@router.post("/{id}/invite", response_model=Message)
+async def invite_friend(
+    *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, invite_in: CommunityInvitationCreate
+) -> Any:
+    """
+    Invite a friend to join a community.
+    """
+    community = session.get(Community, id)
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    # Check if current user is member
+    my_membership = session.exec(
+        select(CommunityMember).where(
+            CommunityMember.community_id == id,
+            CommunityMember.user_id == current_user.id,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED
+        )
+    ).first()
+    if not my_membership:
+        raise HTTPException(status_code=403, detail="Only members can invite others")
+
+    # Check if friend exists
+    friend = session.get(User, invite_in.friend_id)
+    if not friend:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Check friendship
+    is_friend = session.exec(
+        select(Friendship).where(
+            Friendship.user_id == current_user.id,
+            Friendship.friend_id == invite_in.friend_id,
+            Friendship.status == FriendshipStatus.ACCEPTED
+        )
+    ).first()
+    if not is_friend and not current_user.is_superuser:
+        raise HTTPException(status_code=400, detail="You can only invite friends")
+
+    # Check existing membership
+    existing = session.exec(
+        select(CommunityMember).where(
+            CommunityMember.community_id == id,
+            CommunityMember.user_id == invite_in.friend_id
+        )
+    ).first()
+    if existing:
+        if existing.status == CommunityMemberStatus.ACCEPTED:
+            raise HTTPException(status_code=400, detail="User is already a member")
+        if existing.status == CommunityMemberStatus.INVITED:
+            return Message(message="User is already invited")
+        if existing.status == CommunityMemberStatus.PENDING:
+            raise HTTPException(status_code=400, detail="User has a pending application")
+        
+        # Update existing record (e.g. if REJECTED, BANNED or SUSPENDED we allow re-inviting to reset status)
+        existing.status = CommunityMemberStatus.INVITED
+        existing.invited_by = current_user.id
+        existing.role = CommunityMemberRole.MEMBER
+        session.add(existing)
+    else:
+        # Create invitation (represented as a CommunityMember with status INVITED)
+        membership = CommunityMember(
+            community_id=id,
+            user_id=invite_in.friend_id,
+            status=CommunityMemberStatus.INVITED,
+            role=CommunityMemberRole.MEMBER, # Default
+            invited_by=current_user.id
+        )
+        session.add(membership)
+    
+    session.commit()
+
+    # Notify friend
+    await notify_user(
+        session=session,
+        recipient_id=invite_in.friend_id,
+        title="Community Invitation",
+        message=f"{current_user.full_name or current_user.email} invited you to join {community.name}.",
+        type=NotificationType.INFO,
+        link=f"/communities/{id}"
+    )
+
+    return Message(message="Invitation sent")
 
 
 @router.post("/{id}/leave", response_model=Message)
@@ -342,10 +481,13 @@ def read_community_members(
         CommunityMember.user_id == current_user.id
     )
     my_membership = session.exec(my_membership_stmt).first()
-    is_staff = my_membership and my_membership.role in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]
+    is_staff = (
+        (my_membership and my_membership.role in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]) or
+        community.created_by == current_user.id
+    )
 
     # Privacy check for closed communities
-    if community.requires_approval and not current_user.is_superuser:
+    if community.requires_approval and not current_user.is_superuser and not is_staff:
         if not my_membership or my_membership.status != CommunityMemberStatus.ACCEPTED:
             raise HTTPException(
                 status_code=403,
@@ -355,13 +497,16 @@ def read_community_members(
     # Base statement
     base_stmt = select(User, CommunityMember).join(CommunityMember, User.id == CommunityMember.user_id).where(CommunityMember.community_id == id)
 
-    # Filter by status if provided, otherwise default to ACCEPTED for non-admins
+    # Filter by status if provided, otherwise default to ACCEPTED/INVITED for non-admins
     if status:
         if status != CommunityMemberStatus.ACCEPTED and not is_staff and not current_user.is_superuser:
             raise HTTPException(status_code=403, detail="Only staff can filter by non-accepted status")
         base_stmt = base_stmt.where(CommunityMember.status == status)
     elif not is_staff and not current_user.is_superuser:
-        base_stmt = base_stmt.where(CommunityMember.status == CommunityMemberStatus.ACCEPTED)
+        # Non-staff see both accepted and invited to avoid double-invites
+        base_stmt = base_stmt.where(
+            CommunityMember.status.in_([CommunityMemberStatus.ACCEPTED, CommunityMemberStatus.INVITED])
+        )
 
     count = session.exec(select(func.count()).select_from(base_stmt.subquery())).one()
     results = session.exec(base_stmt.offset(skip).limit(limit)).all()
@@ -1268,7 +1413,7 @@ async def create_community_announcement(
         CommunityMember.community_id == id,
         CommunityMember.user_id == current_user.id,
         CommunityMember.role.in_([CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]),
-        CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+        CommunityMemberStatus.ACCEPTED,
     )
     membership = session.exec(statement).first()
     if not membership and not current_user.is_superuser:

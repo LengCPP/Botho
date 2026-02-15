@@ -13,7 +13,7 @@ import { Link as RouterLink } from "@tanstack/react-router"
 import { format } from "date-fns"
 import { FiCheckCircle, FiStar, FiXCircle } from "react-icons/fi"
 
-import { type LoanPublic } from "@/client"
+import type { LoanPublic } from "@/client"
 import useAuth from "@/hooks/useAuth"
 
 interface LoanCardProps {
@@ -22,8 +22,16 @@ interface LoanCardProps {
   onReview?: (loan: LoanPublic) => void
   onAction?: (
     loan: LoanPublic,
-    action: "cancel" | "respond" | "ratify" | "return" | "extension" | "remind" | "default" | "forgive",
-    params?: any
+    action:
+      | "cancel"
+      | "respond"
+      | "ratify"
+      | "return"
+      | "extension"
+      | "remind"
+      | "default"
+      | "forgive",
+    params?: any,
   ) => void
 }
 
@@ -210,7 +218,9 @@ export function LoanCard({ loan, type, onReview, onAction }: LoanCardProps) {
                   size="xs"
                   colorPalette="green"
                   flex={1}
-                  onClick={() => onAction?.(loan, "extension", { accept: true })}
+                  onClick={() =>
+                    onAction?.(loan, "extension", { accept: true })
+                  }
                   disabled={restrictionApplies}
                 >
                   <FiCheckCircle /> Accept
@@ -220,7 +230,9 @@ export function LoanCard({ loan, type, onReview, onAction }: LoanCardProps) {
                   colorPalette="red"
                   variant="outline"
                   flex={1}
-                  onClick={() => onAction?.(loan, "extension", { accept: false })}
+                  onClick={() =>
+                    onAction?.(loan, "extension", { accept: false })
+                  }
                   disabled={restrictionApplies}
                 >
                   <FiXCircle /> Reject

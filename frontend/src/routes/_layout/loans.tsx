@@ -48,13 +48,17 @@ function LoansPage() {
   const [viewMode, setViewMode] = useState<"card" | "list">("card")
   const [sortBy, setSortBy] = useState("created_at")
   const [sortOrder, setSortOrder] = useState("desc")
-  
+
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
-  const [selectedLoanForReview, setSelectedLoanForReview] = useState<LoanPublic | null>(null)
-  const [selectedLoanForForgive, setSelectedLoanForForgive] = useState<LoanPublic | null>(null)
-  const [selectedItemForLoan, setSelectedItemForLoan] = useState<ItemPublic | null>(null)
-  const [selectedLoanForExtension, setSelectedLoanForExtension] = useState<LoanPublic | null>(null)
-  
+  const [selectedLoanForReview, setSelectedLoanForReview] =
+    useState<LoanPublic | null>(null)
+  const [selectedLoanForForgive, setSelectedLoanForForgive] =
+    useState<LoanPublic | null>(null)
+  const [selectedItemForLoan, setSelectedItemForLoan] =
+    useState<ItemPublic | null>(null)
+  const [selectedLoanForExtension, setSelectedLoanForExtension] =
+    useState<LoanPublic | null>(null)
+
   // Generic Confirmation State
   const [confirmConfig, setConfirmConfig] = useState<{
     title: string
@@ -173,16 +177,34 @@ function LoansPage() {
 
   // Mutations
   const actionMutation = useMutation({
-    mutationFn: async ({ loan, action, params }: { loan: LoanPublic; action: string; params?: any }) => {
+    mutationFn: async ({
+      loan,
+      action,
+      params,
+    }: { loan: LoanPublic; action: string; params?: any }) => {
       switch (action) {
-        case "cancel": return LoansService.cancelLoan({ id: loan.id })
-        case "respond": return LoansService.respondToLoanRequest({ id: loan.id, accept: params.accept })
-        case "ratify": return LoansService.ratifyLoan({ id: loan.id })
-        case "return": return LoansService.returnLoan({ id: loan.id })
-        case "extension": return LoansService.respondToExtensionRequest({ id: loan.id, accept: params.accept })
-        case "remind": return LoansService.sendReturnReminder({ id: loan.id })
-        case "default": return LoansService.markLoanDefaulted({ id: loan.id })
-        default: throw new Error("Unknown action")
+        case "cancel":
+          return LoansService.cancelLoan({ id: loan.id })
+        case "respond":
+          return LoansService.respondToLoanRequest({
+            id: loan.id,
+            accept: params.accept,
+          })
+        case "ratify":
+          return LoansService.ratifyLoan({ id: loan.id })
+        case "return":
+          return LoansService.returnLoan({ id: loan.id })
+        case "extension":
+          return LoansService.respondToExtensionRequest({
+            id: loan.id,
+            accept: params.accept,
+          })
+        case "remind":
+          return LoansService.sendReturnReminder({ id: loan.id })
+        case "default":
+          return LoansService.markLoanDefaulted({ id: loan.id })
+        default:
+          throw new Error("Unknown action")
       }
     },
     onSuccess: (_, variables) => {
@@ -190,33 +212,61 @@ function LoansPage() {
       queryClient.invalidateQueries({ queryKey: ["loans"] })
       setConfirmConfig(null)
       if (variables.action === "return") {
-          setSelectedLoanForReview(variables.loan)
+        setSelectedLoanForReview(variables.loan)
       }
-    }
+    },
   })
 
   const handleAction = (loan: LoanPublic, action: any, params?: any) => {
     if (action === "forgive") {
-        setSelectedLoanForForgive(loan)
-        return
+      setSelectedLoanForForgive(loan)
+      return
     }
 
     const config = {
-        cancel: { title: "Cancel Request", message: `Cancel request for '${loan.item.title}'?` },
-        respond: { title: params?.accept ? "Accept Request" : "Reject Request", message: `${params?.accept ? "Accept" : "Reject"} request for '${loan.item.title}'?` },
-        ratify: { title: "Confirm Receipt", message: `Confirm you have received '${loan.item.title}'?` },
-        return: { title: "Confirm Return", message: loan.status === "RETURN_PENDING" ? `Confirm return of '${loan.item.title}'?` : `Mark '${loan.item.title}' as returned?` },
-        extension: { title: params?.accept ? "Accept Extension" : "Reject Extension", message: `${params?.accept ? "Accept" : "Reject"} extension for '${loan.item.title}'?` },
-        remind: { title: "Send Reminder", message: `Send return reminder for '${loan.item.title}'?` },
-        default: { title: "Mark Unrecoverable", message: `Mark '${loan.item.title}' as lost? This will penalize the borrower's honor score significantly.` }
+      cancel: {
+        title: "Cancel Request",
+        message: `Cancel request for '${loan.item.title}'?`,
+      },
+      respond: {
+        title: params?.accept ? "Accept Request" : "Reject Request",
+        message: `${params?.accept ? "Accept" : "Reject"} request for '${
+          loan.item.title
+        }'?`,
+      },
+      ratify: {
+        title: "Confirm Receipt",
+        message: `Confirm you have received '${loan.item.title}'?`,
+      },
+      return: {
+        title: "Confirm Return",
+        message:
+          loan.status === "RETURN_PENDING"
+            ? `Confirm return of '${loan.item.title}'?`
+            : `Mark '${loan.item.title}' as returned?`,
+      },
+      extension: {
+        title: params?.accept ? "Accept Extension" : "Reject Extension",
+        message: `${params?.accept ? "Accept" : "Reject"} extension for '${
+          loan.item.title
+        }'?`,
+      },
+      remind: {
+        title: "Send Reminder",
+        message: `Send return reminder for '${loan.item.title}'?`,
+      },
+      default: {
+        title: "Mark Unrecoverable",
+        message: `Mark '${loan.item.title}' as lost? This will penalize the borrower's honor score significantly.`,
+      },
     }[action as keyof typeof config]
 
     if (!config) return
 
     setConfirmConfig({
-        ...config,
-        isLoading: actionMutation.isPending,
-        onConfirm: () => actionMutation.mutate({ loan, action, params })
+      ...config,
+      isLoading: actionMutation.isPending,
+      onConfirm: () => actionMutation.mutate({ loan, action, params }),
     })
   }
 
@@ -305,7 +355,9 @@ function LoansPage() {
                           onShowDetails={() => setSelectedItem(loan.item)}
                           onReview={(l) => setSelectedLoanForReview(l)}
                           onLoanRequest={(i) => setSelectedItemForLoan(i)}
-                          onExtensionRequest={(l) => setSelectedLoanForExtension(l)}
+                          onExtensionRequest={(l) =>
+                            setSelectedLoanForExtension(l)
+                          }
                         />
                       ) : (
                         <VStack key={loan.id} align="stretch" gap={2}>
@@ -315,7 +367,9 @@ function LoansPage() {
                             onShowDetails={() => setSelectedItem(loan.item)}
                             onReview={(l) => setSelectedLoanForReview(l)}
                             onLoanRequest={(i) => setSelectedItemForLoan(i)}
-                            onExtensionRequest={(l) => setSelectedLoanForExtension(l)}
+                            onExtensionRequest={(l) =>
+                              setSelectedLoanForExtension(l)
+                            }
                           />
                           {loan.status === "RETURN_PENDING" && (
                             <Badge

@@ -18,7 +18,12 @@ import { FaChevronLeft, FaFileImport } from "react-icons/fa"
 import { FiSearch } from "react-icons/fi"
 import { z } from "zod"
 
-import { type ItemPublic, type LoanPublic, ItemsService, LoansService } from "@/client"
+import {
+  type ItemPublic,
+  ItemsService,
+  type LoanPublic,
+  LoansService,
+} from "@/client"
 import { ImportItems } from "@/components/Common/ImportItems"
 import ReviewModal from "@/components/Common/ReviewModal"
 import AddItem from "@/components/Items/AddItem"
@@ -88,9 +93,12 @@ function ItemsTable() {
   } = Route.useSearch()
   const { user } = useAuth()
   const [selectedItem, setSelectedItem] = useState<ItemPublic | null>(null)
-  const [selectedLoanForReview, setSelectedLoanForReview] = useState<LoanPublic | null>(null)
-  const [selectedItemForLoan, setSelectedItemForLoan] = useState<ItemPublic | null>(null)
-  const [selectedLoanForExtension, setSelectedLoanForExtension] = useState<LoanPublic | null>(null)
+  const [selectedLoanForReview, setSelectedLoanForReview] =
+    useState<LoanPublic | null>(null)
+  const [selectedItemForLoan, setSelectedItemForLoan] =
+    useState<ItemPublic | null>(null)
+  const [selectedLoanForExtension, setSelectedLoanForExtension] =
+    useState<LoanPublic | null>(null)
 
   useEffect(() => {
     localStorage.setItem("view_mode", view_mode)

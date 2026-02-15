@@ -499,3 +499,16 @@ export const ValidationErrorSchema = {
   required: ["loc", "msg", "type"],
   title: "ValidationError",
 } as const
+
+export const $CommunityInvitationCreate = {
+  properties: {
+    friend_id: {
+      type: "string",
+      format: "uuid",
+      title: "Friend Id",
+    },
+  },
+  type: "object",
+  required: ["friend_id"],
+  title: "CommunityInvitationCreate",
+} as const

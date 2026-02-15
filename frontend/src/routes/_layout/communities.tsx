@@ -8,7 +8,11 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react"
-import { useMutation, useInfiniteQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
 import { useState } from "react"
 import { FiGlobe } from "react-icons/fi"
@@ -35,8 +39,10 @@ export const Route = createFileRoute("/_layout/communities")({
 function Communities() {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
-  const [selectedCommunityForJoin, setSelectedCommunityForJoin] = useState<CommunityPublicExtended | null>(null)
-  const [selectedCommunityForDisband, setSelectedCommunityForDisband] = useState<CommunityPublicExtended | null>(null)
+  const [selectedCommunityForJoin, setSelectedCommunityForJoin] =
+    useState<CommunityPublicExtended | null>(null)
+  const [selectedCommunityForDisband, setSelectedCommunityForDisband] =
+    useState<CommunityPublicExtended | null>(null)
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteQuery({
@@ -104,9 +110,9 @@ function Communities() {
         <VStack align="stretch" gap={8} mt={6}>
           <Grid templateColumns="repeat(auto-fill, minmax(300px, 1fr))" gap={6}>
             {allCommunities.map((community) => (
-              <CommunityCard 
-                key={community.id} 
-                community={community as CommunityPublicExtended} 
+              <CommunityCard
+                key={community.id}
+                community={community as CommunityPublicExtended}
                 onJoinRequest={setSelectedCommunityForJoin}
                 onDisbandRequest={setSelectedCommunityForDisband}
               />
@@ -144,7 +150,9 @@ function Communities() {
         <ConfirmationModal
           isOpen={!!selectedCommunityForDisband}
           onClose={() => setSelectedCommunityForDisband(null)}
-          onConfirm={() => disbandMutation.mutate(selectedCommunityForDisband.id)}
+          onConfirm={() =>
+            disbandMutation.mutate(selectedCommunityForDisband.id)
+          }
           title="Disband Community"
           message={`Are you sure you want to disband ${selectedCommunityForDisband.name}? This action is permanent and cannot be undone.`}
           isLoading={disbandMutation.isPending}

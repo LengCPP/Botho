@@ -63,7 +63,8 @@ const ForgiveModal = ({ loan, isOpen, onClose }: ForgiveModalProps) => {
         <DialogBody>
           <VStack align="stretch" gap={4}>
             <Text fontSize="sm">
-              Forgive the default for '{loan.item.title}'? This will remove the delinquency penalty from the borrower.
+              Forgive the default for '{loan.item.title}'? This will remove the
+              delinquency penalty from the borrower.
             </Text>
 
             <Field label="Forgiveness Reason">
@@ -74,22 +75,22 @@ const ForgiveModal = ({ loan, isOpen, onClose }: ForgiveModalProps) => {
                 }
               >
                 <VStack align="start" gap={2} mt={2}>
-                  <Radio value="GOOD_REASON">
-                    Borrower has good reason
-                  </Radio>
+                  <Radio value="GOOD_REASON">Borrower has good reason</Radio>
                   <Radio value="FOUND_AND_RETURNED">
                     Item found and returned
                   </Radio>
-                  <Radio value="OTHER">
-                    Other / Manual choice
-                  </Radio>
+                  <Radio value="OTHER">Other / Manual choice</Radio>
                 </VStack>
               </RadioGroup>
             </Field>
           </VStack>
         </DialogBody>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={forgiveMutation.isPending}>
+          <Button
+            variant="outline"
+            onClick={onClose}
+            disabled={forgiveMutation.isPending}
+          >
             Cancel
           </Button>
           <Button

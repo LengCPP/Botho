@@ -59,6 +59,7 @@ import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import ForgiveModal from "@/components/Common/ForgiveModal"
 import { ImportItems } from "@/components/Common/ImportItems"
 import ReviewModal from "@/components/Common/ReviewModal"
+import InviteFriend from "@/components/Communities/InviteFriend"
 import AddItem from "@/components/Items/AddItem"
 import { CollectionGrid } from "@/components/Items/CollectionGrid"
 import { CompactItemCard } from "@/components/Items/CompactItemCard"
@@ -256,8 +257,8 @@ function CommunityBoard() {
   // Permission flags
   const isMember = comm?.current_user_status === "ACCEPTED"
   const isAdmin =
-    comm?.created_by === currU?.id ||
-    currU?.is_superuser ||
+    (!!comm?.created_by && !!currU?.id && comm.created_by === currU.id) ||
+    !!currU?.is_superuser ||
     comm?.current_user_role === "ADMIN"
   const isStaff = isAdmin || comm?.current_user_role === "MODERATOR"
 
@@ -287,6 +288,17 @@ function CommunityBoard() {
       CommunitiesService.readCommunityMembers({
         id: cId,
         status: "PENDING" as any,
+      }),
+    enabled: !!isStaff,
+  })
+
+  // Invited users
+  const { data: invited, isLoading: isLoadingInvited } = useQuery({
+    queryKey: ["communityInvited", cId],
+    queryFn: () =>
+      CommunitiesService.readCommunityMembers({
+        id: cId,
+        status: "INVITED" as any,
       }),
     enabled: !!isStaff,
   })
@@ -508,6 +520,17 @@ function CommunityBoard() {
     onError: () => showErrorToast("Failed"),
   })
 
+  const joinMutation = useMutation({
+    mutationFn: () => CommunitiesService.joinCommunity({ id: cId }),
+    onSuccess: (data) => {
+      showSuccessToast(data.message)
+      queryClient.invalidateQueries({
+        queryKey: ["community", cId],
+      })
+    },
+    onError: () => showErrorToast("Failed to join"),
+  })
+
   const createFriendRequestMutation = useMutation({
     mutationFn: (friendId: string) =>
       FriendsService.createFriendRequest({ friendId }),
@@ -668,111 +691,152 @@ function CommunityBoard() {
             </HStack>
           </VStack>
 
-          {isMember && (
-            <HStack gap={2}>
-              <Button
-                size="xs"
-                variant="ghost"
-                onClick={() =>
-                  toggleNotificationsMutation.mutate(
-                    !comm.notifications_enabled,
-                  )
-                }
-                loading={toggleNotificationsMutation.isPending}
-              >
-                {comm.notifications_enabled ? (
-                  <FiBell />
-                ) : (
-                  <FiBellOff color="gray" />
-                )}
-              </Button>
-
-              {!isAdmin && (
+          <HStack gap={2}>
+            {isMember ? (
+              <>
+                <InviteFriend communityId={cId} communityName={comm.name} />
                 <Button
                   size="xs"
-                  variant="outline"
-                  colorPalette="red"
-                  onClick={() => setIsLeaveModalOpen(true)}
-                  loading={leaveCommunityMutation.isPending}
+                  variant="ghost"
+                  onClick={() =>
+                    toggleNotificationsMutation.mutate(
+                      !comm.notifications_enabled,
+                    )
+                  }
+                  loading={toggleNotificationsMutation.isPending}
                 >
-                  <FiLogOut /> Leave
+                  {comm.notifications_enabled ? (
+                    <FiBell />
+                  ) : (
+                    <FiBellOff color="gray" />
+                  )}
                 </Button>
-              )}
-            </HStack>
-          )}
+
+                {!isAdmin && (
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    colorPalette="red"
+                    onClick={() => setIsLeaveModalOpen(true)}
+                    loading={leaveCommunityMutation.isPending}
+                  >
+                    <FiLogOut /> Leave
+                  </Button>
+                )}
+              </>
+            ) : (
+              <Button
+                size="sm"
+                colorPalette="accent"
+                onClick={() => joinMutation.mutate()}
+                loading={joinMutation.isPending}
+                disabled={comm.current_user_status === "PENDING"}
+              >
+                {comm.current_user_status === "INVITED"
+                  ? "Accept Invitation"
+                  : comm.current_user_status === "PENDING"
+                    ? "Application Pending"
+                    : comm.requires_approval
+                      ? "Request to Join"
+                      : "Join Community"}
+              </Button>
+            )}
+          </HStack>
         </Flex>
 
         <Text color="fg.muted" fontSize="lg">
           {comm.description || "No description."}
         </Text>
 
+        {!isMember && (
+          <Box
+            p={10}
+            textAlign="center"
+            borderWidth="1px"
+            rounded="md"
+            bg="bg.muted"
+          >
+            <Text fontSize="lg" mb={4}>
+              You are not a member of this community.
+            </Text>
+            {comm.is_private && comm.current_user_status !== "INVITED" ? (
+              <Text color="red.500">
+                This is a private community. You can only join via invitation.
+              </Text>
+            ) : (
+              <Button
+                colorPalette="accent"
+                onClick={() => joinMutation.mutate()}
+                loading={joinMutation.isPending}
+                disabled={comm.current_user_status === "PENDING"}
+              >
+                {comm.current_user_status === "INVITED"
+                  ? "Join Now"
+                  : comm.requires_approval
+                    ? "Apply to Join"
+                    : "Join Now"}
+              </Button>
+            )}
+          </Box>
+        )}
+
         <Separator />
 
         {/* Tabs */}
-        <Tabs.Root
-          value={tab}
-          onValueChange={(e) =>
-            navigate({
-              search: (p: any) => ({
-                ...p,
-                tab: e.value as any,
-              }),
-            })
-          }
-          variant="enclosed"
-        >
-          <Tabs.List
-            display={{ base: "grid", md: "flex" }}
-            gridTemplateColumns={{
-              base: "repeat(3, 1fr)",
-              md: "none",
-            }}
-            gap={{ base: 1, md: 0 }}
+        {isMember && (
+          <Tabs.Root
+            value={tab}
+            onValueChange={(e) =>
+              navigate({
+                search: (p: any) => ({
+                  ...p,
+                  tab: e.value as any,
+                }),
+              })
+            }
+            variant="enclosed"
           >
-            <Tabs.Trigger value="board" justifyContent="center">
-              <FiMessageSquare /> Board
-            </Tabs.Trigger>
-
-            <Tabs.Trigger value="items" justifyContent="center">
-              <FiBox /> Items ({comm?.collection_index?.total ?? 0})
-            </Tabs.Trigger>
-
-            <Tabs.Trigger value="members" justifyContent="center">
-              <FiUsers /> Members ({members?.count || 0})
-            </Tabs.Trigger>
-
-            {isAdmin && (
-              <Tabs.Trigger value="loans" justifyContent="center">
-                <FiClock /> Loans
+            <Tabs.List
+              display={{ base: "grid", md: "flex" }}
+              gridTemplateColumns={{
+                base: "repeat(3, 1fr)",
+                md: "none",
+              }}
+              gap={{ base: 1, md: 0 }}
+            >
+              <Tabs.Trigger value="board" justifyContent="center">
+                <FiMessageSquare /> Board
               </Tabs.Trigger>
-            )}
 
-            {isStaff && (
-              <Tabs.Trigger value="manage" justifyContent="center">
-                <FiShield /> Manage
+              <Tabs.Trigger value="items" justifyContent="center">
+                <FiBox /> Items ({comm?.collection_index?.total ?? 0})
               </Tabs.Trigger>
-            )}
 
-            {isAdmin && (
-              <Tabs.Trigger value="import" justifyContent="center">
-                <FaFileImport /> Import
+              <Tabs.Trigger value="members" justifyContent="center">
+                <FiUsers /> Members ({members?.count || 0})
               </Tabs.Trigger>
-            )}
-          </Tabs.List>
 
-          {/* Board Tab */}
-          <Tabs.Content value="board" pt={6}>
-            {!isMember ? (
-              <Box
-                p={8}
-                textAlign="center"
-                borderWidth="1px"
-                rounded="md"
-                bg="bg.muted"
-              >
-                <Text>You must be a member.</Text>
-              </Box>
-            ) : (
+              {isAdmin && (
+                <Tabs.Trigger value="loans" justifyContent="center">
+                  <FiClock /> Loans
+                </Tabs.Trigger>
+              )}
+
+              {isStaff && (
+                <Tabs.Trigger value="manage" justifyContent="center">
+                  <FiShield /> Manage
+                </Tabs.Trigger>
+              )}
+
+              {isAdmin && (
+                <Tabs.Trigger value="import" justifyContent="center">
+                  <FaFileImport /> Import
+                </Tabs.Trigger>
+              )}
+            </Tabs.List>
+
+            {/* Board Tab */}
+            <Tabs.Content value="board" pt={6}>
               <SimpleGrid columns={{ base: 1, md: 3 }} gap={8}>
                 {/* Announcements */}
                 <Box>
@@ -869,555 +933,565 @@ function CommunityBoard() {
                   </VStack>
                 </GridItem>
               </SimpleGrid>
-            )}
-          </Tabs.Content>
+            </Tabs.Content>
 
-          {/* Items Tab */}
-          <Tabs.Content value="items" pt={6}>
-            <VStack align="stretch" gap={8}>
-              {isAdmin && (
-                <DonationManagement
-                  items={allItems}
-                  communityId={cId}
-                  otherAdminsExist={otherAdminsExist}
-                  currentUserId={currU?.id}
-                />
-              )}
+            {/* Items Tab */}
+            <Tabs.Content value="items" pt={6}>
+              <VStack align="stretch" gap={8}>
+                {isAdmin && (
+                  <DonationManagement
+                    items={allItems}
+                    communityId={cId}
+                    otherAdminsExist={otherAdminsExist}
+                    currentUserId={currU?.id}
+                  />
+                )}
 
-              {/* Controls */}
-              <Flex justify="space-between" align="center" wrap="wrap" gap={4}>
-                <HStack gap={4} align="baseline">
-                 <AddItem communityId={cId} isAdmin={isAdmin} />
-                </HStack>
+                {/* Controls */}
+                <Flex justify="space-between" align="center" wrap="wrap" gap={4}>
+                  <HStack gap={4} align="baseline">
+                   <AddItem communityId={cId} isAdmin={isAdmin} />
+                  </HStack>
 
-                <ItemsViewOptions
-                  q={qP}
-                  onChangeQ={(v) => updateSearch({ q: v })}
-                  viewMode={view_mode}
-                  onChangeViewMode={(m) =>
-                    updateSearch({
-                      view_mode: m,
-                    })
-                  }
-                  displayType={display_type}
-                  onChangeDisplayType={(t) =>
-                    updateSearch({
-                      display_type: t,
-                      subject: undefined,
-                    })
-                  }
-                  sortBy={sort_by}
-                  onChangeSortBy={(v) =>
-                    updateSearch({
-                      sort_by: v,
-                    })
-                  }
-                  sortOrder={sort_order}
-                  onChangeSortOrder={(v) =>
-                    updateSearch({
-                      sort_order: v,
-                    })
-                  }
-                  limit={limit}
-                  onChangeLimit={(v) => updateSearch({ limit: v })}
-                  category={category}
-                  onChangeCategory={(v) =>
-                    updateSearch({
-                      category: v,
-                      genre: undefined,
-                    })
-                  }
-                  genre={genre}
-                  onChangeGenre={(v) => updateSearch({ genre: v })}
-                  organizeBy={organize_by}
-                  onChangeOrganizeBy={(v) =>
-                    updateSearch({
-                      organize_by: v,
-                      subject: undefined,
-                    })
-                  }
-                  showDisplayToggle
-                  showViewToggle
-                  showFilter
-                  showSort
-                  showLimit
-                  organizeOptions={[
-                    "subject",
-                    "genre",
-                    "category",
-                    "author",
-                    ...(isAdmin ? ["ownership"] : []),
-                  ]}
-                />
-              </Flex>
+                  <ItemsViewOptions
+                    q={qP}
+                    onChangeQ={(v) => updateSearch({ q: v })}
+                    viewMode={view_mode}
+                    onChangeViewMode={(m) =>
+                      updateSearch({
+                        view_mode: m,
+                      })
+                    }
+                    displayType={display_type}
+                    onChangeDisplayType={(t) =>
+                      updateSearch({
+                        display_type: t,
+                        subject: undefined,
+                      })
+                    }
+                    sortBy={sort_by}
+                    onChangeSortBy={(v) =>
+                      updateSearch({
+                        sort_by: v,
+                      })
+                    }
+                    sortOrder={sort_order}
+                    onChangeSortOrder={(v) =>
+                      updateSearch({
+                        sort_order: v,
+                      })
+                    }
+                    limit={limit}
+                    onChangeLimit={(v) => updateSearch({ limit: v })}
+                    category={category}
+                    onChangeCategory={(v) =>
+                      updateSearch({
+                        category: v,
+                        genre: undefined,
+                      })
+                    }
+                    genre={genre}
+                    onChangeGenre={(v) => updateSearch({ genre: v })}
+                    organizeBy={organize_by}
+                    onChangeOrganizeBy={(v) =>
+                      updateSearch({
+                        organize_by: v,
+                        subject: undefined,
+                      })
+                    }
+                    showDisplayToggle
+                    showViewToggle
+                    showFilter
+                    showSort
+                    showLimit
+                    organizeOptions={[
+                      "subject",
+                      "genre",
+                      "category",
+                      "author",
+                      ...(isAdmin ? ["ownership"] : []),
+                    ]}
+                  />
+                </Flex>
 
-              {/* Content */}
-              {(isLoadingItems && !allItems.length) ||
-              (isLoadingFacets && !allCollections.length) ? (
-                <PendingItems />
-              ) : !allItems.length && !allCollections.length ? (
-                <Box
-                  p={10}
-                  textAlign="center"
-                  borderWidth="1px"
-                  borderStyle="dashed"
-                  rounded="md"
-                >
-                  <Text color="fg.muted">
-                    {qP ? "No matches." : "Empty pool."}
-                  </Text>
-                </Box>
-              ) : (
-                <Box mt={8}>
-                  {display_type === "collections" && !isFiltered ? (
-                    <Box>
-                      <CollectionGrid
-                        items={allCollections}
-                        type={organize_by}
-                        onOpen={handleOrganizeClick}
-                      />
+                {/* Content */}
+                {(isLoadingItems && !allItems.length) ||
+                (isLoadingFacets && !allCollections.length) ? (
+                  <PendingItems />
+                ) : !allItems.length && !allCollections.length ? (
+                  <Box
+                    p={10}
+                    textAlign="center"
+                    borderWidth="1px"
+                    borderStyle="dashed"
+                    rounded="md"
+                  >
+                    <Text color="fg.muted">
+                      {qP ? "No matches." : "Empty pool."}
+                    </Text>
+                  </Box>
+                ) : (
+                  <Box mt={8}>
+                    {display_type === "collections" && !isFiltered ? (
+                      <Box>
+                        <CollectionGrid
+                          items={allCollections}
+                          type={organize_by}
+                          onOpen={handleOrganizeClick}
+                        />
 
-                      {hasNextFacets && (
-                        <Flex justify="center" mt={8}>
-                          <Button
-                            variant="ghost"
-                            colorPalette="accent"
-                            onClick={() => fetchNextFacets()}
-                            loading={isFetchingNextFacets}
-                          >
-                            Load More Collections
-                          </Button>
-                        </Flex>
-                      )}
-                    </Box>
-                  ) : (
-                    <Box>
-                      {display_type === "collections" && isFiltered && (
-                        <VStack align="start" mb={6} gap={2}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              updateSearch({
-                                subject: undefined,
-                                author: undefined,
-                                genre: undefined,
-                                category: undefined,
-                              })
-                            }
-                          >
-                            <FaChevronLeft /> Collections
-                          </Button>
-
-                          <Heading
-                            size="lg"
-                            color="ui.hover"
-                            textTransform="uppercase"
-                          >
-                            {allItems[0]?.item_type === "book"
-                              ? "Books"
-                              : "Items"}{" "}
-                            {currentFilter.toLowerCase() === "others"
-                              ? `with unspecified ${organize_by}`
-                              : `${
-                                  organize_by === "author"
-                                    ? "by"
-                                    : organize_by === "genre"
-                                      ? "in"
-                                      : organize_by === "category"
-                                        ? "in category"
-                                        : "on"
-                                } ${currentFilter}`}{" "}
-                            ({commI?.pages[0]?.count})
-                          </Heading>
-                        </VStack>
-                      )}
-
-                      <VStack align="stretch" gap={8}>
-                        {renderItemGrid(groupItems(allItems, false))}
-
-                        {hasNextItems && (
-                          <Flex justify="center">
+                        {hasNextFacets && (
+                          <Flex justify="center" mt={8}>
                             <Button
                               variant="ghost"
                               colorPalette="accent"
-                              onClick={() => fetchNextItems()}
-                              loading={isFetchingNextItems}
+                              onClick={() => fetchNextFacets()}
+                              loading={isFetchingNextFacets}
                             >
-                              Load More Items
+                              Load More Collections
                             </Button>
                           </Flex>
                         )}
-                      </VStack>
-                    </Box>
-                  )}
-                </Box>
-              )}
-            </VStack>
-
-            <ItemDetailModal
-              item={selectedItem}
-              isOpen={!!selectedItem}
-              onClose={() => setSelectedItem(null)}
-            />
-          </Tabs.Content>
-
-          {/* Members Tab */}
-          <Tabs.Content value="members" pt={6}>
-            <SimpleGrid
-              columns={{
-                base: 1,
-                md: 2,
-                lg: 3,
-              }}
-              gap={4}
-            >
-              {isLoadingMembers ? (
-                <Text>...</Text>
-              ) : (
-                members?.data
-                  .filter((m: any) => m.community_status === "ACCEPTED")
-                  .map((m: any) => (
-                    <Box
-                      key={m.id}
-                      p={4}
-                      borderWidth="1px"
-                      rounded="md"
-                      bg="bg.panel"
-                      _hover={{
-                        borderColor: "ui.hover",
-                      }}
-                    >
-                      <Flex justify="space-between" align="center">
-                        <VStack align="start" gap={0}>
-                          <Text fontWeight="bold">
-                            {m.full_name || m.email}
-                          </Text>
-
-                          <Badge
-                            size="xs"
-                            colorPalette={
-                              m.community_role === "ADMIN"
-                                ? "purple"
-                                : m.community_role === "MODERATOR"
-                                  ? "main"
-                                  : "gray"
-                            }
-                          >
-                            {m.community_role || "MEMBER"}
-                          </Badge>
-                        </VStack>
-
-                        <Flex gap={2}>
-                          {m.id !== currU?.id && (
+                      </Box>
+                    ) : (
+                      <Box>
+                        {display_type === "collections" && isFiltered && (
+                          <VStack align="start" mb={6} gap={2}>
                             <Button
-                              size="xs"
                               variant="ghost"
+                              size="sm"
                               onClick={() =>
-                                !m.friendship_status &&
-                                createFriendRequestMutation.mutate(m.id)
+                                updateSearch({
+                                  subject: undefined,
+                                  author: undefined,
+                                  genre: undefined,
+                                  category: undefined,
+                                })
                               }
-                              colorPalette={
-                                m.friendship_status === "PENDING"
-                                  ? "accent"
-                                  : m.friendship_status === "ACCEPTED"
-                                    ? "green"
-                                    : "gray"
-                              }
-                              disabled={!!m.friendship_status}
                             >
-                              {m.friendship_status === "ACCEPTED" ? (
-                                <FiUserCheck />
-                              ) : (
-                                <FiUserPlus />
-                              )}
+                              <FaChevronLeft /> Collections
                             </Button>
+
+                            <Heading
+                              size="lg"
+                              color="ui.hover"
+                              textTransform="uppercase"
+                            >
+                              {allItems[0]?.item_type === "book"
+                                ? "Books"
+                                : "Items"}{" "}
+                              {currentFilter.toLowerCase() === "others"
+                                ? `with unspecified ${organize_by}`
+                                : `${
+                                    organize_by === "author"
+                                      ? "by"
+                                      : organize_by === "genre"
+                                        ? "in"
+                                        : organize_by === "category"
+                                          ? "in category"
+                                          : "on"
+                                  } ${currentFilter}`}{" "}
+                              ({commI?.pages[0]?.count})
+                            </Heading>
+                          </VStack>
+                        )}
+
+                        <VStack align="stretch" gap={8}>
+                          {renderItemGrid(groupItems(allItems, false))}
+
+                          {hasNextItems && (
+                            <Flex justify="center">
+                              <Button
+                                variant="ghost"
+                                colorPalette="accent"
+                                onClick={() => fetchNextItems()}
+                                loading={isFetchingNextItems}
+                              >
+                                Load More Items
+                              </Button>
+                            </Flex>
                           )}
+                        </VStack>
+                      </Box>
+                    )}
+                  </Box>
+                )}
+              </VStack>
 
-                          <Link to={`/users/${m.id}`}>
-                            <Button size="xs" variant="outline">
-                              Profile
-                            </Button>
-                          </Link>
-                        </Flex>
-                      </Flex>
-                    </Box>
-                  ))
-              )}
-            </SimpleGrid>
-          </Tabs.Content>
+              <ItemDetailModal
+                item={selectedItem}
+                isOpen={!!selectedItem}
+                onClose={() => setSelectedItem(null)}
+              />
+            </Tabs.Content>
 
-          {/* Loans Tab (Admin) */}
-          {isStaff && isAdmin && (
-            <Tabs.Content value="loans" pt={6}>
-              <VStack align="stretch" gap={4}>
-                <Tabs.Root defaultValue="requests" variant="plain">
-                  <Tabs.List gap={8} mb={6} borderBottomWidth="1px" pb={2}>
-                    {[
-                      {
-                        v: "requests",
-                        l: "Requests",
-                        c: pendingLoan.length,
-                      },
-                      {
-                        v: "active",
-                        l: "Active",
-                        c: activeLoan.length,
-                      },
-                      {
-                        v: "audit",
-                        l: "Audit",
-                        c: auditTrailLoan.length,
-                      },
-                    ].map((t) => (
-                      <Tabs.Trigger
-                        key={t.v}
-                        value={t.v}
-                        _selected={{
-                          color: "ui.hover",
-                          borderBottom: "2px solid",
+            {/* Members Tab */}
+            <Tabs.Content value="members" pt={6}>
+              <SimpleGrid
+                columns={{
+                  base: 1,
+                  md: 2,
+                  lg: 3,
+                }}
+                gap={4}
+              >
+                {isLoadingMembers ? (
+                  <Text>...</Text>
+                ) : (
+                  members?.data
+                    .filter((m: any) => 
+                      m.community_status === "ACCEPTED" || 
+                      (isStaff && ["PENDING", "INVITED"].includes(m.community_status))
+                    )
+                    .map((m: any) => (
+                      <Box
+                        key={m.id}
+                        p={4}
+                        borderWidth="1px"
+                        rounded="md"
+                        bg="bg.panel"
+                        _hover={{
                           borderColor: "ui.hover",
                         }}
                       >
-                        <Heading size="md">
-                          {t.l} ({t.c})
-                        </Heading>
-                      </Tabs.Trigger>
-                    ))}
-                  </Tabs.List>
-
-                  {[
-                    {
-                      v: "requests",
-                      d: pendingLoan,
-                    },
-                    {
-                      v: "active",
-                      d: activeLoan,
-                    },
-                    {
-                      v: "audit",
-                      d: auditTrailLoan,
-                    },
-                  ].map((t) => (
-                    <Tabs.Content key={t.v} value={t.v}>
-                      {isLoadingLoans ? (
-                        <Text>...</Text>
-                      ) : !t.d.length ? (
-                        <Box
-                          p={8}
-                          textAlign="center"
-                          borderWidth="1px"
-                          borderRadius="lg"
-                          borderStyle="dashed"
-                        >
-                          <Text fontStyle="italic">Empty.</Text>
-                        </Box>
-                      ) : (
-                        <VStack align="stretch" gap={4}>
-                          {t.d.map((l: any) => (
-                            <LoanCard
-                              key={l.id}
-                              loan={l}
-                              type="incoming"
-                              onReview={setSelectedLoan}
-                              onAction={handleAction}
-                            />
-                          ))}
-                        </VStack>
-                      )}
-                    </Tabs.Content>
-                  ))}
-                </Tabs.Root>
-              </VStack>
-            </Tabs.Content>
-          )}
-
-          {/* Manage Tab (Staff) */}
-          {isStaff && (
-            <Tabs.Content value="manage" pt={6}>
-              <VStack align="stretch" gap={8}>
-                {/* Pending Applicants */}
-                {!isLoadingApplicants && (apps?.data?.length ?? 0) > 0 ? (
-                  <Box>
-                    <Heading size="md" mb={4} color="ui.hover">
-                      Pending ({apps?.count})
-                    </Heading>
-
-                    <VStack align="stretch" gap={3}>
-                      {apps?.data?.map((m: any) => (
-                        <Flex
-                          key={m.id}
-                          justify="space-between"
-                          align="center"
-                          p={4}
-                          borderWidth="1px"
-                          rounded="md"
-                          bg="bg.panel"
-                          borderColor="ui.hover"
-                        >
+                        <Flex justify="space-between" align="center">
                           <VStack align="start" gap={0}>
-                            <Text fontWeight="bold">
-                              {m.full_name || m.email}
-                            </Text>
+                            <HStack>
+                              <Text fontWeight="bold">
+                                {m.full_name || m.email}
+                              </Text>
+                              {m.community_status !== "ACCEPTED" && (
+                                <Badge size="xs" colorPalette="orange" variant="outline">
+                                  {m.community_status}
+                                </Badge>
+                              )}
+                            </HStack>
 
-                            <Badge size="xs" colorPalette="yellow">
-                              APPLICANT
+                            <Badge
+                              size="xs"
+                              colorPalette={
+                                m.community_role === "ADMIN"
+                                  ? "purple"
+                                  : m.community_role === "MODERATOR"
+                                    ? "main"
+                                    : "gray"
+                              }
+                            >
+                              {m.community_role || "MEMBER"}
                             </Badge>
                           </VStack>
 
-                          <HStack gap={2}>
-                            <Button
-                              size="xs"
-                              colorPalette="green"
-                              onClick={() =>
-                                updateMemberMutation.mutate({
-                                  userId: m.id,
-                                  status: "ACCEPTED",
-                                })
-                              }
-                            >
-                              Approve
-                            </Button>
-
-                            <Button
-                              size="xs"
-                              colorPalette="red"
-                              variant="outline"
-                              onClick={() =>
-                                updateMemberMutation.mutate({
-                                  userId: m.id,
-                                  status: "REJECTED",
-                                })
-                              }
-                            >
-                              Reject
-                            </Button>
-                          </HStack>
-                        </Flex>
-                      ))}
-                    </VStack>
-                  </Box>
-                ) : null}
-
-                {/* Members List */}
-                <Box>
-                  <Heading size="md" mb={4}>
-                    Members
-                  </Heading>
-
-                  {isLoadingMembers ? (
-                    <Text>...</Text>
-                  ) : (
-                    <VStack align="stretch" gap={3}>
-                      {members?.data
-                        .filter((m: any) => m.community_status === "ACCEPTED")
-                        .map((m: any) => {
-                          const isCreator = m.id === comm.created_by
-                          const role =
-                            m.community_role || (isCreator ? "ADMIN" : "MEMBER")
-                          const isStaffMember =
-                            role === "ADMIN" || role === "MODERATOR"
-
-                          return (
-                            <Flex
-                              key={m.id}
-                              justify="space-between"
-                              align="center"
-                              p={4}
-                              borderWidth="1px"
-                              rounded="md"
-                              bg="bg.panel"
-                            >
-                              <VStack align="start" gap={0}>
-                                <Text fontWeight="bold">
-                                  {m.full_name || m.email}
-                                </Text>
-
-                                <Badge
-                                  size="xs"
-                                  colorPalette={
-                                    role === "ADMIN"
-                                      ? "purple"
-                                      : role === "MODERATOR"
-                                        ? "main"
-                                        : "gray"
-                                  }
-                                >
-                                  {role}
-                                </Badge>
-                              </VStack>
-
-                              <HStack gap={2}>
-                                {!isCreator && m.id !== currU?.id && (
-                                  <>
-                                    {isAdmin && (
-                                      <MenuRoot>
-                                        <MenuTrigger asChild>
-                                          <Button size="xs" variant="outline">
-                                            <FiSettings /> Role
-                                          </Button>
-                                        </MenuTrigger>
-
-                                        <MenuContent>
-                                          {["ADMIN", "MODERATOR", "MEMBER"].map(
-                                            (roleValue) => (
-                                              <MenuItem
-                                                key={roleValue}
-                                                value={roleValue}
-                                                onClick={() =>
-                                                  updateMemberMutation.mutate({
-                                                    userId: m.id,
-                                                    role: roleValue,
-                                                  })
-                                                }
-                                                disabled={role === roleValue}
-                                              >
-                                                {roleValue}
-                                              </MenuItem>
-                                            ),
-                                          )}
-                                        </MenuContent>
-                                      </MenuRoot>
-                                    )}
-
-                                    {(isAdmin ||
-                                      (isStaff && !isStaffMember)) && (
-                                      <Button
-                                        size="xs"
-                                        colorPalette="red"
-                                        variant="outline"
-                                        onClick={() => {
-                                          setRemoveMember({
-                                            id: m.id,
-                                            name: m.full_name || m.email,
-                                          })
-                                          setIsRemoveModalOpen(true)
-                                        }}
-                                      >
-                                        <FiUserMinus /> Remove
-                                      </Button>
-                                    )}
-                                  </>
+                          <Flex gap={2}>
+                            {m.id !== currU?.id && (
+                              <Button
+                                size="xs"
+                                variant="ghost"
+                                onClick={() =>
+                                  !m.friendship_status &&
+                                  createFriendRequestMutation.mutate(m.id)
+                                }
+                                colorPalette={
+                                  m.friendship_status === "PENDING"
+                                    ? "accent"
+                                    : m.friendship_status === "ACCEPTED"
+                                      ? "green"
+                                      : "gray"
+                                }
+                                disabled={!!m.friendship_status}
+                              >
+                                {m.friendship_status === "ACCEPTED" ? (
+                                  <FiUserCheck />
+                                ) : (
+                                  <FiUserPlus />
                                 )}
-                              </HStack>
-                            </Flex>
-                          )
-                        })}
-                    </VStack>
-                  )}
-                </Box>
-              </VStack>
-            </Tabs.Content>
-          )}
+                              </Button>
+                            )}
 
-          {/* Import Tab (Admin) */}
-          {isAdmin && (
-            <Tabs.Content value="import" pt={6}>
-              <ImportItems communityId={cId} />
+                            <Link to={`/users/${m.id}`}>
+                              <Button size="xs" variant="outline">
+                                Profile
+                              </Button>
+                            </Link>
+                          </Flex>
+                        </Flex>
+                      </Box>
+                    ))
+                )}
+              </SimpleGrid>
             </Tabs.Content>
-          )}
-        </Tabs.Root>
+
+            {/* Loans Tab (Admin) */}
+            {isStaff && isAdmin && (
+              <Tabs.Content value="loans" pt={6}>
+                <VStack align="stretch" gap={4}>
+                  <Tabs.Root defaultValue="requests" variant="plain">
+                    <Tabs.List gap={8} mb={6} borderBottomWidth="1px" pb={2}>
+                      {[
+                        {
+                          v: "requests",
+                          l: "Requests",
+                          c: pendingLoan.length,
+                        },
+                        {
+                          v: "active",
+                          l: "Active",
+                          c: activeLoan.length,
+                        },
+                        {
+                          v: "audit",
+                          l: "Audit",
+                          c: auditTrailLoan.length,
+                        },
+                      ].map((t) => (
+                        <Tabs.Trigger
+                          key={t.v}
+                          value={t.v}
+                          _selected={{
+                            color: "ui.hover",
+                            borderBottom: "2px solid",
+                            borderColor: "ui.hover",
+                          }}
+                        >
+                          <Heading size="md">
+                            {t.l} ({t.c})
+                          </Heading>
+                        </Tabs.Trigger>
+                      ))}
+                    </Tabs.List>
+
+                    {[
+                      {
+                        v: "requests",
+                        d: pendingLoan,
+                      },
+                      {
+                        v: "active",
+                        d: activeLoan,
+                      },
+                      {
+                        v: "audit",
+                        d: auditTrailLoan,
+                      },
+                    ].map((t) => (
+                      <Tabs.Content key={t.v} value={t.v}>
+                        {isLoadingLoans ? (
+                          <Text>...</Text>
+                        ) : !t.d.length ? (
+                          <Box
+                            p={8}
+                            textAlign="center"
+                            borderWidth="1px"
+                            borderRadius="lg"
+                            borderStyle="dashed"
+                          >
+                            <Text fontStyle="italic">Empty.</Text>
+                          </Box>
+                        ) : (
+                          <VStack align="stretch" gap={4}>
+                            {t.d.map((l: any) => (
+                              <LoanCard
+                                key={l.id}
+                                loan={l}
+                                type="incoming"
+                                onReview={setSelectedLoan}
+                                onAction={handleAction}
+                              />
+                            ))}
+                          </VStack>
+                        )}
+                      </Tabs.Content>
+                    ))}
+                  </Tabs.Root>
+                </VStack>
+              </Tabs.Content>
+            )}
+
+            {/* Manage Tab (Staff) */}
+            {isStaff && (
+              <Tabs.Content value="manage" pt={6}>
+                <VStack align="stretch" gap={8}>
+                  {/* Pending Applicants */}
+                  {!isLoadingApplicants && (apps?.data?.length ?? 0) > 0 ? (
+                    <Box>
+                      <Heading size="md" mb={4} color="ui.hover">
+                        Pending ({apps?.count})
+                      </Heading>
+
+                      <VStack align="stretch" gap={3}>
+                        {apps?.data?.map((m: any) => (
+                          <Flex
+                            key={m.id}
+                            justify="space-between"
+                            align="center"
+                            p={4}
+                            borderWidth="1px"
+                            rounded="md"
+                            bg="bg.panel"
+                            borderColor="ui.hover"
+                          >
+                            <VStack align="start" gap={0}>
+                              <Text fontWeight="bold">
+                                {m.full_name || m.email}
+                              </Text>
+
+                              <Badge size="xs" colorPalette="yellow">
+                                APPLICANT
+                              </Badge>
+                            </VStack>
+
+                            <HStack gap={2}>
+                              <Button
+                                size="xs"
+                                colorPalette="green"
+                                onClick={() =>
+                                  updateMemberMutation.mutate({
+                                    userId: m.id,
+                                    status: "ACCEPTED",
+                                  })
+                                }
+                              >
+                                Approve
+                              </Button>
+
+                              <Button
+                                size="xs"
+                                colorPalette="red"
+                                variant="outline"
+                                onClick={() =>
+                                  updateMemberMutation.mutate({
+                                    userId: m.id,
+                                    status: "REJECTED",
+                                  })
+                                }
+                              >
+                                Reject
+                              </Button>
+                            </HStack>
+                          </Flex>
+                        ))}
+                      </VStack>
+                    </Box>
+                  ) : null}
+
+                  {/* Members List */}
+                  <Box>
+                    <Heading size="md" mb={4}>
+                      Members
+                    </Heading>
+
+                    {isLoadingMembers ? (
+                      <Text>...</Text>
+                    ) : (
+                      <VStack align="stretch" gap={3}>
+                        {members?.data
+                          .filter((m: any) => m.community_status === "ACCEPTED")
+                          .map((m: any) => {
+                            const isCreator = m.id === comm.created_by
+                            const role =
+                              m.community_role || (isCreator ? "ADMIN" : "MEMBER")
+                            const isStaffMember =
+                              role === "ADMIN" || role === "MODERATOR"
+
+                            return (
+                              <Flex
+                                key={m.id}
+                                justify="space-between"
+                                align="center"
+                                p={4}
+                                borderWidth="1px"
+                                rounded="md"
+                                bg="bg.panel"
+                              >
+                                <VStack align="start" gap={0}>
+                                  <Text fontWeight="bold">
+                                    {m.full_name || m.email}
+                                  </Text>
+
+                                  <Badge
+                                    size="xs"
+                                    colorPalette={
+                                      role === "ADMIN"
+                                        ? "purple"
+                                        : role === "MODERATOR"
+                                          ? "main"
+                                          : "gray"
+                                    }
+                                  >
+                                    {role}
+                                  </Badge>
+                                </VStack>
+
+                                <HStack gap={2}>
+                                  {!isCreator && m.id !== currU?.id && (
+                                    <>
+                                      {isAdmin && (
+                                        <MenuRoot>
+                                          <MenuTrigger asChild>
+                                            <Button size="xs" variant="outline">
+                                              <FiSettings /> Role
+                                            </Button>
+                                          </MenuTrigger>
+
+                                          <MenuContent>
+                                            {["ADMIN", "MODERATOR", "MEMBER"].map(
+                                              (roleValue) => (
+                                                <MenuItem
+                                                  key={roleValue}
+                                                  value={roleValue}
+                                                  onClick={() =>
+                                                    updateMemberMutation.mutate({
+                                                      userId: m.id,
+                                                      role: roleValue,
+                                                    })
+                                                  }
+                                                  disabled={role === roleValue}
+                                                >
+                                                  {roleValue}
+                                                </MenuItem>
+                                              ),
+                                            )}
+                                          </MenuContent>
+                                        </MenuRoot>
+                                      )}
+
+                                      {(isAdmin ||
+                                        (isStaff && !isStaffMember)) && (
+                                        <Button
+                                          size="xs"
+                                          colorPalette="red"
+                                          variant="outline"
+                                          onClick={() => {
+                                            setRemoveMember({
+                                              id: m.id,
+                                              name: m.full_name || m.email,
+                                            })
+                                            setIsRemoveModalOpen(true)
+                                          }}
+                                        >
+                                          <FiUserMinus /> Remove
+                                        </Button>
+                                      )}
+                                    </>
+                                  )}
+                                </HStack>
+                              </Flex>
+                            )
+                          })}
+                      </VStack>
+                    )}
+                  </Box>
+                </VStack>
+              </Tabs.Content>
+            )}
+
+            {/* Import Tab (Admin) */}
+            {isAdmin && (
+              <Tabs.Content value="import" pt={6}>
+                <ImportItems communityId={cId} />
+              </Tabs.Content>
+            )}
+          </Tabs.Root>
+        )}
       </VStack>
 
       {/* Modals */}
