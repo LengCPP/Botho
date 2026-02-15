@@ -304,15 +304,15 @@ async def respond_to_loan_request(
     session.refresh(loan)
 
     # Notify requester
+    # Fix: Always redirect borrower to their personal loans section
     status_msg = "accepted" if accept else "rejected"
-    notif_link = f"/communities/{loan.community_id}?tab=loans" if loan.community_id else "/loans"
     await notify_user(
         session=session,
         recipient_id=loan.requester_id,
         title=f"Loan Request {status_msg.capitalize()}",
         message=f"Your request for '{loan.item.title}' has been {status_msg}.",
         type=NotificationType.SUCCESS if accept else NotificationType.WARNING,
-        link=notif_link
+        link="/loans"
     )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
@@ -357,9 +357,17 @@ async def cancel_loan(
 
     # Notify the other party
     if is_requester:
-        notif_link = f"/communities/{loan.community_id}?tab=loans" if loan.community_id else "/loans"
         # Notify owner or admins
-        if loan.community_id:
+        if loan.owner_id:
+            await notify_user(
+                session=session,
+                recipient_id=loan.owner_id,
+                title="Loan Request Cancelled",
+                message=f"{current_user.full_name or current_user.email} has cancelled their request for '{loan.item.title}'.",
+                type=NotificationType.WARNING,
+                link="/loans"
+            )
+        elif loan.community_id:
             admin_statement = select(CommunityMember).where(
                 CommunityMember.community_id == loan.community_id,
                 CommunityMember.role == CommunityMemberRole.ADMIN
@@ -372,27 +380,17 @@ async def cancel_loan(
                     title="Loan Request Cancelled",
                     message=f"{current_user.full_name or current_user.email} has cancelled their request for '{loan.item.title}'.",
                     type=NotificationType.WARNING,
-                    link=notif_link
+                    link=f"/communities/{loan.community_id}?tab=loans"
                 )
-        elif loan.owner_id:
-            await notify_user(
-                session=session,
-                recipient_id=loan.owner_id,
-                title="Loan Request Cancelled",
-                message=f"{current_user.full_name or current_user.email} has cancelled their request for '{loan.item.title}'.",
-                type=NotificationType.WARNING,
-                link=notif_link
-            )
     else:
         # Owner/Admin cancelled, notify requester
-        notif_link = f"/communities/{loan.community_id}?tab=loans" if loan.community_id else "/loans"
         await notify_user(
             session=session,
             recipient_id=loan.requester_id,
             title="Loan Request Cancelled",
             message=f"The owner/admin has cancelled the loan for '{loan.item.title}'.",
             type=NotificationType.WARNING,
-            link=notif_link
+            link="/loans"
         )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
@@ -419,7 +417,16 @@ async def ratify_loan(
     session.refresh(loan)
 
     # Notify owner or admins
-    if loan.community_id:
+    if loan.owner_id:
+        await notify_user(
+            session=session,
+            recipient_id=loan.owner_id,
+            title="Loan Ratified",
+            message=f"{current_user.full_name or current_user.email} confirmed they have received '{loan.item.title}'.",
+            type=NotificationType.INFO,
+            link="/loans"
+        )
+    elif loan.community_id:
         admin_statement = select(CommunityMember).where(
             CommunityMember.community_id == loan.community_id,
             CommunityMember.role == CommunityMemberRole.ADMIN
@@ -434,15 +441,6 @@ async def ratify_loan(
                 type=NotificationType.INFO,
                 link=f"/communities/{loan.community_id}?tab=loans"
             )
-    elif loan.owner_id:
-        await notify_user(
-            session=session,
-            recipient_id=loan.owner_id,
-            title="Loan Ratified",
-            message=f"{current_user.full_name or current_user.email} confirmed they have received '{loan.item.title}'.",
-            type=NotificationType.INFO,
-            link="/loans"
-        )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
 
@@ -468,7 +466,16 @@ async def signal_return(
     session.refresh(loan)
 
     # Notify owner or admins
-    if loan.community_id:
+    if loan.owner_id:
+        await notify_user(
+            session=session,
+            recipient_id=loan.owner_id,
+            title="Return Signaled",
+            message=f"{current_user.full_name or current_user.email} signaled that they have returned '{loan.item.title}'. Please confirm receipt.",
+            type=NotificationType.INFO,
+            link="/loans"
+        )
+    elif loan.community_id:
         admin_statement = select(CommunityMember).where(
             CommunityMember.community_id == loan.community_id,
             CommunityMember.role == CommunityMemberRole.ADMIN
@@ -483,15 +490,6 @@ async def signal_return(
                 type=NotificationType.INFO,
                 link=f"/communities/{loan.community_id}?tab=loans"
             )
-    elif loan.owner_id:
-        await notify_user(
-            session=session,
-            recipient_id=loan.owner_id,
-            title="Return Signaled",
-            message=f"{current_user.full_name or current_user.email} signaled that they have returned '{loan.item.title}'. Please confirm receipt.",
-            type=NotificationType.INFO,
-            link="/loans"
-        )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
 
@@ -548,14 +546,13 @@ async def return_loan(
         await refresh_user_honor(session, loan.owner_id)
 
     # Notify requester
-    notif_link = f"/communities/{loan.community_id}?tab=loans" if loan.community_id else "/loans"
     await notify_user(
         session=session,
         recipient_id=loan.requester_id,
         title="Return Confirmed",
         message=f"Receipt of '{loan.item.title}' has been confirmed.",
         type=NotificationType.SUCCESS,
-        link=notif_link
+        link="/loans"
     )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
@@ -597,7 +594,16 @@ async def create_extension_request(
 
     # Notify owner or admins
     message_text = f"{current_user.full_name or current_user.email} requested an extension for '{loan.item.title}' until {new_end_date.strftime('%Y-%m-%d')}."
-    if loan.community_id:
+    if loan.owner_id:
+        await notify_user(
+            session=session,
+            recipient_id=loan.owner_id,
+            title="Extension Requested",
+            message=message_text,
+            type=NotificationType.INFO,
+            link="/loans"
+        )
+    elif loan.community_id:
         admin_statement = select(CommunityMember).where(
             CommunityMember.community_id == loan.community_id,
             CommunityMember.role == CommunityMemberRole.ADMIN
@@ -612,15 +618,6 @@ async def create_extension_request(
                 type=NotificationType.INFO,
                 link=f"/communities/{loan.community_id}?tab=loans"
             )
-    elif loan.owner_id:
-        await notify_user(
-            session=session,
-            recipient_id=loan.owner_id,
-            title="Extension Requested",
-            message=message_text,
-            type=NotificationType.INFO,
-            link="/loans"
-        )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
 
@@ -675,14 +672,13 @@ async def respond_to_extension_request(
 
     # Notify requester
     status_msg = "accepted" if accept else "rejected"
-    notif_link = f"/communities/{loan.community_id}?tab=loans" if loan.community_id else "/loans"
     await notify_user(
         session=session,
         recipient_id=loan.requester_id,
         title=f"Extension Request {status_msg.capitalize()}",
         message=f"Your extension request for '{loan.item.title}' has been {status_msg}.",
         type=NotificationType.SUCCESS if accept else NotificationType.WARNING,
-        link=notif_link
+        link="/loans"
     )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
@@ -743,14 +739,13 @@ async def mark_loan_defaulted(
     await refresh_user_honor(session, loan.requester_id)
 
     # Notify borrower
-    notif_link = f"/communities/{loan.community_id}?tab=loans" if loan.community_id else "/loans"
     await notify_user(
         session=session,
         recipient_id=loan.requester_id,
         title="Loan Marked as Defaulted",
         message=f"The lender has marked '{loan.item.title}' as unrecoverable. Your honor score has been penalized.",
         type=NotificationType.ERROR,
-        link=notif_link
+        link="/loans"
     )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
@@ -830,14 +825,13 @@ async def forgive_loan(
     await refresh_user_honor(session, loan.requester_id)
 
     # Notify borrower
-    notif_link = f"/communities/{loan.community_id}?tab=loans" if loan.community_id else "/loans"
     await notify_user(
         session=session,
         recipient_id=loan.requester_id,
         title="Loan Forgiven",
         message=f"The lender has forgiven the defaulted loan for '{loan.item.title}'. Reason: {loan.forgiveness_reason.value}.",
         type=NotificationType.SUCCESS,
-        link=notif_link
+        link="/loans"
     )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
@@ -892,14 +886,13 @@ async def send_return_reminder(
     )
 
     # Also send in-app notification
-    notif_link = f"/communities/{loan.community_id}?tab=loans" if loan.community_id else "/loans"
     await notify_user(
         session=session,
         recipient_id=borrower.id,
         title="Return Reminder",
         message=f"{lender_name} reminded you to return '{loan.item.title}'.",
         type=NotificationType.WARNING,
-        link=notif_link
+        link="/loans"
     )
 
     return Message(message="Reminder sent successfully")
