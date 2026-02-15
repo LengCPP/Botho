@@ -17,7 +17,7 @@ import { useQuery } from "@tanstack/react-query"
 import { FiAlertCircle, FiAward, FiTrendingUp } from "react-icons/fi"
 import MyReviewsList from "./MyReviewsList"
 
-const ReputationDashboard = () => {
+const ReputationOverview = () => {
   const { data: reputation, isLoading } = useQuery({
     queryKey: ["reputation", "me"],
     queryFn: () => UsersService.readUserReputationMe(),
@@ -230,4 +230,4 @@ const ReputationDashboard = () => {
   )
 }
 
-export default ReputationDashboard
+export default ReputationOverview

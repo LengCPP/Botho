@@ -25,8 +25,8 @@ import {
 } from "react-icons/fi"
 
 import { DashboardService, ItemsService } from "@/client"
-import { LoanCalendar } from "@/components/Dashboard/LoanCalendar"
-import { QuickSearch } from "@/components/Dashboard/QuickSearch"
+import { LoanCalendar } from "@/components/Home/LoanCalendar"
+import { QuickSearch } from "@/components/Home/QuickSearch"
 import { ItemListItem } from "@/components/Items/ItemListItem"
 import {
   DialogBody,
@@ -40,16 +40,16 @@ import useAuth from "@/hooks/useAuth"
 import { groupItems } from "@/utils"
 
 export const Route = createFileRoute("/_layout/")({
-  component: Dashboard,
+  component: HomePage,
 })
 
-function Dashboard() {
+function HomePage() {
   const { user } = useAuth()
   const [isArrivalsModalOpen, setIsArrivalsModalOpen] = useState(false)
   const [isRecsModalOpen, setIsRecsModalOpen] = useState(false)
 
   const { data: stats } = useQuery({
-    queryKey: ["dashboard-stats"],
+    queryKey: ["home-stats"],
     queryFn: () => DashboardService.getDashboardStats(),
   })
 

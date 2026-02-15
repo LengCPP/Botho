@@ -15,7 +15,7 @@ import type { IconType } from "react-icons/lib"
 import useAuth from "@/hooks/useAuth"
 
 const items = [
-  { icon: FiHome, title: "Dashboard", path: "/" },
+  { icon: FiHome, title: "Home", path: "/" },
   { icon: FiBriefcase, title: "Items", path: "/items" },
   { icon: FiList, title: "Reading Log", path: "/reading-log" },
   { icon: FiGlobe, title: "Communities", path: "/communities" },

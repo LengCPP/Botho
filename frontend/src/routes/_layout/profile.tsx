@@ -15,7 +15,7 @@ import { FiAward, FiEdit2, FiShare2, FiUser } from "react-icons/fi"
 
 import type { ApiError } from "@/client"
 import EditProfileModal from "@/components/UserSettings/EditProfileModal"
-import ReputationDashboard from "@/components/UserSettings/ReputationDashboard"
+import ReputationOverview from "@/components/UserSettings/ReputationOverview"
 import UserInformation from "@/components/UserSettings/UserInformation"
 import UserProfilePicture from "@/components/UserSettings/UserProfilePicture"
 import {
@@ -96,7 +96,7 @@ function Profile() {
 
         <Tabs.Content value="reputation">
           <Box maxW="3xl">
-            <ReputationDashboard />
+            <ReputationOverview />
           </Box>
         </Tabs.Content>
       </Tabs.Root>
