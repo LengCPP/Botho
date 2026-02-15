@@ -1,6 +1,8 @@
 from google import genai
 from typing import List, Optional, Tuple
+import json
 from app.core.config import settings
+from app.constants import BOOK_CLASSIFICATION
 
 # Initialize Gemini Client
 client = None
@@ -41,44 +43,55 @@ async def generate_honor_snapshot(reviews: List[str]) -> Tuple[Optional[str], Li
         return None, []
 
 async def classify_book(title: str, author: str, description: Optional[str] = None) -> Tuple[Optional[str], Optional[str], Optional[str]]:
-    """Use Gemini to determine a descriptive category, specific genre, and subjects for a book."""
-    if not client:
-        return None, None, None
+    """Use Gemini to determine a descriptive category, specific genre, and subjects for a single book."""
+    results = await classify_books([{"title": title, "author": author, "description": description}])
+    return results[0] if results else (None, None, None)
+
+async def classify_books(books: List[dict]) -> List[Tuple[Optional[str], Optional[str], Optional[str]]]:
+    """Use Gemini to classify multiple books in a single request for RPM efficiency."""
+    if not client or not books:
+        return []
+
+    classification_guide = json.dumps(BOOK_CLASSIFICATION, indent=2)
+    books_text = "\n".join([
+        f"ID: {i} | TITLE: {b.get('title')} | AUTHOR: {b.get('author')} | DESC: {b.get('description', 'N/A')[:200]}"
+        for i, b in enumerate(books)
+    ])
 
     prompt = f"""
-    You are a professional librarian and literary critic. Classify this book:
-    TITLE: {title}
-    AUTHOR: {author}
-    DESCRIPTION: {description or "No description provided."}
+    You are a professional librarian. Classify these {len(books)} books based strictly on the provided hierarchy.
+    
+    GUIDE:
+    {classification_guide}
 
-    Provide:
-    1. CATEGORY: One of the following broad classifications: 'Fiction', 'Non-Fiction', 'Children & Young Adult', 'Academic & Professional'.
-    2. GENRE: A more specific description of the style and type of literature.
-        - For 'Academic & Professional', choose from: 'Textbooks', 'Reference', 'Research', 'Journal'.
-        - For others, choose standard genres (e.g., 'Fantasy', 'Mystery', 'Biography', 'History').
-        - Do NOT use subjects (like 'Law', 'Engineering', 'Math') as Genres. Put them in SUBJECTS instead.
-    3. SUBJECTS: A list of single words or short phrases separated by commas that describe what the book is about (e.g., 'Artificial Intelligence, Ethics, Future of Humanity', 'Calculus', 'Civil Law').
+    BOOKS TO CLASSIFY:
+    {books_text}
 
-    Strictly follow this format:
-    CATEGORY: [Broad category]
-    GENRE: [Specific genre/style]
-    SUBJECTS: [Comma-separated words/phrases]
+    INSTRUCTIONS for each book:
+    1. CATEGORY: Must be EXACTLY one of the top-level keys in the GUIDE.
+    2. GENRE: Must be EXACTLY one of the values listed under your chosen CATEGORY in the GUIDE.
+    3. SUBJECTS: A list of 3-5 descriptive words/phrases (NOT genres).
+
+    Output EXACTLY in this format for each book (one per line, keeping the original ID):
+    ID: [ID] | CATEGORY: [Category] | GENRE: [Genre] | SUBJECTS: [Subjects]
     """
     try:
         response = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
-        text = response.text
-        cat, gen, sub = None, None, None
+        results = [None] * len(books)
+        lines = response.text.strip().split("\n")
         
-        lines = text.split("\n")
         for line in lines:
-            if line.startswith("CATEGORY:"):
-                cat = line.replace("CATEGORY:", "").strip()
-            elif line.startswith("GENRE:"):
-                gen = line.replace("GENRE:", "").strip()
-            elif line.startswith("SUBJECTS:"):
-                sub = line.replace("SUBJECTS:", "").strip()
-                
-        return cat, gen, sub
+            if "|" in line and "CATEGORY:" in line:
+                try:
+                    parts = line.split("|")
+                    idx_part = parts[0].replace("ID:", "").strip()
+                    cat = parts[1].replace("CATEGORY:", "").strip()
+                    gen = parts[2].replace("GENRE:", "").strip()
+                    sub = parts[3].replace("SUBJECTS:", "").strip()
+                    results[int(idx_part)] = (cat, gen, sub)
+                except Exception:
+                    continue
+        return results
     except Exception as e:
-        print(f"Error classifying book: {e}")
-        return None, None, None
+        print(f"Error bulk classifying books: {e}")
+        return [(None, None, None)] * len(books)

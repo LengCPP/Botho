@@ -15,6 +15,7 @@ from app.api.utils import (
     get_work_metadata,
     ensure_work_metadata,
     maintenance_bulk_classify,
+    ai_classify_specific_books,
     enrich_specific_books,
     sync_item_to_archive,
     update_collection_index,
@@ -146,6 +147,29 @@ def trigger_enrich_books(
         request.overwrite
     )
     return Message(message=f"Enrichment task started for {len(request.books)} books.")
+
+
+@router.post("/book-registry/ai-classify", response_model=Message)
+def trigger_ai_classify_books(
+    *, 
+    session: SessionDep, 
+    current_user: CurrentUser, 
+    background_tasks: BackgroundTasks,
+    request: BookEnrichmentRequest # Re-using this schema as it has the list of books
+) -> Any:
+    """
+    Trigger a background task to AI-classify specific books in the registry.
+    Superuser only. Strictly for administrative maintenance of the Book Archive.
+    """
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    
+    background_tasks.add_task(
+        ai_classify_specific_books, 
+        request.books,
+        current_user.id
+    )
+    return Message(message=f"AI classification task started for {len(request.books)} books.")
 
 
 @router.post("/{id}/sync-to-archive", response_model=Message)
