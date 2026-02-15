@@ -558,14 +558,9 @@ function ItemsTable() {
 }
 
 function Items() {
-  const { user } = useAuth()
-  const collectionIndex = user?.collection_index as any
-  const totalCount = collectionIndex?.total ?? 0
-
   return (
     <Container maxW="full">
       <ItemsTable />
-      <PendingItems />
     </Container>
   )
 }
