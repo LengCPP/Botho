@@ -34,6 +34,8 @@ from app.models import (
     FriendshipStatus,
     Interest,
     Item,
+    ItemBatchAction,
+    ItemBatchEnrich,
     ItemConditionRating,
     ItemConditionRatingCreate,
     ItemConditionRatingPublic,
@@ -845,6 +847,17 @@ def read_items(
                 filters.append(f'author = "{author}"')
             if item_type:
                 filters.append(f'item_type = "{item_type.value}"')
+            
+            if lost_only:
+                filters.append("is_lost = true")
+            elif exclude_lost:
+                filters.append("is_lost = false")
+            
+            if private_only:
+                filters.append("is_private = true")
+            elif exclude_private:
+                filters.append("is_private = false")
+
             if feed_mode:
                 if allowed_community_ids:
                     allowed_ids_str = "[" + ", ".join([f'"{cid}"' for cid in allowed_community_ids]) + "]"
@@ -1064,6 +1077,16 @@ def read_items(
 
         if item_type:
             statement = statement.where(Item.item_type == item_type)
+
+        if lost_only:
+            statement = statement.where(Item.is_lost == True)
+        elif exclude_lost:
+            statement = statement.where(Item.is_lost == False)
+        
+        if private_only:
+            statement = statement.where(Item.is_private == True)
+        elif exclude_private:
+            statement = statement.where(Item.is_private == False)
 
         count = session.exec(select(func.count()).select_from(statement.subquery())).one()
 
@@ -1993,3 +2016,105 @@ def read_item_condition_ratings(
         select(ItemConditionRating).where(ItemConditionRating.item_id == item_id)
     ).all()
     return ratings
+
+
+def _is_owner_or_admin(item: Item, user: User, session: SessionDep) -> bool:
+    """Helper to check if user owns item or is admin of owning community."""
+    if item.owner_id == user.id or user.is_superuser:
+        return True
+    if item.community_owner:
+        is_member = session.exec(
+            select(CommunityMember).where(
+                CommunityMember.community_id == item.owner_id,
+                CommunityMember.user_id == user.id,
+                CommunityMember.role == CommunityMemberRole.ADMIN,
+                CommunityMember.status == CommunityMemberStatus.ACCEPTED
+            )
+        ).first()
+        return is_member is not None
+    return False
+
+
+@router.post("/batch/delete", response_model=Message)
+def batch_delete_items(
+    *, session: SessionDep, current_user: CurrentUser, action: ItemBatchAction, background_tasks: BackgroundTasks
+) -> Any:
+    """Delete multiple items. Only owner or community admin can delete."""
+    items = session.exec(select(Item).where(Item.id.in_(action.item_ids))).all()
+    deleted_count = 0
+    owner_ids = set()
+    for item in items:
+        if _is_owner_or_admin(item, current_user, session):
+            if item.image_url:
+                delete_image(item.image_url)
+            owner_ids.add(item.owner_id)
+            session.delete(item)
+            delete_item_from_search(item.id)
+            deleted_count += 1
+    
+    session.commit()
+    for o_id in owner_ids:
+        background_tasks.add_task(rebuild_collection_index_task, o_id)
+        
+    return Message(message=f"Successfully deleted {deleted_count} items.")
+
+
+@router.post("/batch/mark-lost", response_model=Message)
+def batch_mark_lost(
+    *, session: SessionDep, current_user: CurrentUser, action: ItemBatchAction
+) -> Any:
+    """Mark multiple items as lost."""
+    items = session.exec(select(Item).where(Item.id.in_(action.item_ids))).all()
+    updated_count = 0
+    for item in items:
+        if _is_owner_or_admin(item, current_user, session):
+            item.is_lost = True
+            session.add(item)
+            sync_item_to_search(item)
+            updated_count += 1
+    
+    session.commit()
+    return Message(message=f"Successfully marked {updated_count} items as lost.")
+
+
+@router.post("/batch/toggle-privacy", response_model=Message)
+def batch_toggle_privacy(
+    *, session: SessionDep, current_user: CurrentUser, action: ItemBatchAction
+) -> Any:
+    """Toggle privacy status for multiple items."""
+    items = session.exec(select(Item).where(Item.id.in_(action.item_ids))).all()
+    updated_count = 0
+    for item in items:
+        if _is_owner_or_admin(item, current_user, session):
+            item.is_private = not item.is_private
+            session.add(item)
+            sync_item_to_search(item)
+            updated_count += 1
+    
+    session.commit()
+    return Message(message=f"Successfully toggled privacy for {updated_count} items.")
+
+
+@router.post("/batch/enrich", response_model=Message)
+def batch_enrich_metadata(
+    *, session: SessionDep, current_user: CurrentUser, action: ItemBatchEnrich, background_tasks: BackgroundTasks
+) -> Any:
+    """Enrich metadata for multiple items in the background."""
+    items = session.exec(select(Item).where(Item.id.in_(action.item_ids))).all()
+    books_to_enrich = []
+    for item in items:
+        if _is_owner_or_admin(item, current_user, session) and item.item_type == ItemType.book:
+            books_to_enrich.append({"author": item.author, "title": item.title})
+    
+    if not books_to_enrich:
+        return Message(message="No valid books found for enrichment.")
+
+    background_tasks.add_task(
+        enrich_specific_books, 
+        books_to_enrich,
+        current_user.id,
+        action.fields_to_update, 
+        "auto",
+        action.overwrite
+    )
+    return Message(message=f"Started enrichment for {len(books_to_enrich)} books in background.")

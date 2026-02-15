@@ -272,6 +272,7 @@ function ItemsTable() {
     [infiniteData],
   )
   const totalItemCount = (infiniteData?.pages[0] as any)?.count || 0
+  const totalCount = (user?.collection_index as any)?.total ?? 0
 
   if (tab === "manage") {
     return (
