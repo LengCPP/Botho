@@ -20,6 +20,7 @@ export default defineConfig({
         target: "http://backend:8000",
         changeOrigin: true,
         secure: false,
+        ws: true,
         headers: {
           Host: "localhost",
         },

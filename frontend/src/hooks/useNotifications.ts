@@ -22,11 +22,7 @@ export const useNotifications = (limit = 10) => {
     let baseUrl = OpenAPI.BASE
 
     if (!baseUrl) {
-      if (window.location.hostname === "localhost") {
-        baseUrl = "http://localhost:8000"
-      } else {
-        baseUrl = window.location.origin
-      }
+      baseUrl = window.location.origin
     }
 
     // Determine WS protocol and host

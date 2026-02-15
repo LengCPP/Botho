@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from typing import Any
 
@@ -11,12 +12,14 @@ from fastapi import (
 )
 from jwt.exceptions import InvalidTokenError
 from pydantic import ValidationError
-from sqlmodel import func, select
+from sqlmodel import Session, func, select
+from starlette.websockets import WebSocketState
 
 from app.api.deps import CurrentUser, SessionDep
 from app.api.websocket_manager import notification_manager
 from app.core import security
 from app.core.config import settings
+from app.core.db import engine
 from app.models import (
     Message,
     Notification,
@@ -32,7 +35,7 @@ router = APIRouter()
 
 
 async def get_current_user_ws(
-    *, session: SessionDep, token: str = Query(...)
+    *, session: Session, token: str = Query(...)
 ) -> User:
     try:
         payload = jwt.decode(
@@ -233,22 +236,11 @@ def unsubscribe_push(
     return Message(message="Unsubscribed successfully")
 
 
-import asyncio
-
-from fastapi import APIRouter, Query
-from starlette.websockets import WebSocketState
-
-# ... rest of imports ...
-
 @router.websocket("/ws")
 async def websocket_endpoint(
     websocket: WebSocket,
     token: str = Query(...),
 ):
-    from sqlmodel import Session
-
-    from app.core.db import engine
-
     await websocket.accept()
 
     # Authenticate and get user, then release session immediately
@@ -267,7 +259,7 @@ async def websocket_endpoint(
             # We don't necessarily expect messages from client
             try:
                 # Try to receive with a timeout to detect disconnects while allowing server pushes
-                data = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+                await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
             except asyncio.TimeoutError:
                 # Send a ping or just continue to keep loop alive
                 if websocket.client_state == WebSocketState.CONNECTED:

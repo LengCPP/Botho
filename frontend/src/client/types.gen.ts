@@ -1385,3 +1385,17 @@ export type UtilsTestEmailData = {
 export type UtilsTestEmailResponse = (Message);
 
 export type UtilsHealthCheckResponse = (boolean);
+
+
+
+export type CommunitiesInviteFriendData = {
+
+    id: string;
+
+    requestBody: CommunityInvitationCreate;
+
+};
+
+
+
+export type CommunitiesInviteFriendResponse = (Message);
