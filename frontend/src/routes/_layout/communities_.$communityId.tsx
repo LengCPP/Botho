@@ -589,16 +589,21 @@ function CommunityBoard() {
           return LoansService.sendReturnReminder({ id: loan.id })
         case "default":
           return LoansService.markLoanDefaulted({ id: loan.id })
+        case "signalReturn":
+          return LoansService.signalReturn({ id: loan.id })
         default:
           throw new Error("Unknown action")
       }
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
       showSuccessToast("Action completed successfully")
       queryClient.invalidateQueries({ queryKey: ["communityLoans", cId] })
       setConfirmConfig(null)
       if (variables.action === "return") {
         setSelectedLoan(variables.loan)
+      }
+      if (variables.action === "signalReturn") {
+        setSelectedLoan(data)
       }
     },
   })

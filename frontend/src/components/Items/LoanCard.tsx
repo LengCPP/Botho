@@ -11,9 +11,16 @@ import {
 } from "@chakra-ui/react"
 import { Link as RouterLink } from "@tanstack/react-router"
 import { format } from "date-fns"
-import { FiCheckCircle, FiStar, FiXCircle } from "react-icons/fi"
+import {
+  FiCheckCircle,
+  FiClock,
+  FiRepeat,
+  FiStar,
+  FiXCircle,
+} from "react-icons/fi"
 
 import type { LoanPublic } from "@/client"
+import AddReview from "@/components/Items/AddReview"
 import useAuth from "@/hooks/useAuth"
 
 interface LoanCardProps {
@@ -30,7 +37,9 @@ interface LoanCardProps {
       | "extension"
       | "remind"
       | "default"
-      | "forgive",
+      | "forgive"
+      | "signalReturn"
+      | "requestExtension",
     params?: any,
   ) => void
 }
@@ -44,11 +53,15 @@ export function LoanCard({ loan, type, onReview, onAction }: LoanCardProps) {
   const isReturnPending = loan.status === "RETURN_PENDING"
   const isExtensionPending = loan.status === "EXTENSION_PENDING"
   const isDefaulted = loan.status === "DEFAULTED"
+  const isReturned = loan.status === "RETURNED"
   const canCancel = isPending || isAccepted
 
   const isSelfRequested =
     type === "incoming" && loan.requester_id === currentUser?.id
   const restrictionApplies = isSelfRequested && (loan as any).other_admins_exist
+
+  const canBorrowerReview =
+    type === "outgoing" && (isReturned || isReturnPending) && !loan.has_review
 
   return (
     <Box
@@ -61,12 +74,24 @@ export function LoanCard({ loan, type, onReview, onAction }: LoanCardProps) {
       filter={restrictionApplies ? "grayscale(40%)" : "none"}
       pointerEvents={restrictionApplies ? "none" : "auto"}
       position="relative"
+      borderColor={
+        (isReturned || isReturnPending) && !loan.has_review && type === "outgoing"
+          ? "ui.hover"
+          : "border.subtle"
+      }
     >
-      <Flex justify="space-between" align="start" mb={4}>
-        <VStack align="start" gap={0}>
-          <Text fontWeight="bold" fontSize="lg">
-            {loan.item.title}
-          </Text>
+      <Flex justify="space-between" align="start" mb={4} wrap="wrap" gap={4}>
+        <VStack align="start" gap={0} flex={1} minW="200px">
+          <HStack>
+            <Text fontWeight="bold" fontSize="lg">
+              {loan.item.title}
+            </Text>
+            {canBorrowerReview && (
+              <Badge colorPalette="orange" variant="solid" size="xs">
+                Review Needed
+              </Badge>
+            )}
+          </HStack>
           {type === "incoming" ? (
             <Box>
               <Text fontSize="xs" color="fg.muted" as="span">
@@ -173,30 +198,45 @@ export function LoanCard({ loan, type, onReview, onAction }: LoanCardProps) {
         </Box>
       )}
 
-      <HStack fontSize="sm" gap={4} mb={4}>
-        <VStack align="start" gap={0}>
-          <Text
-            fontSize="2xs"
-            color="fg.muted"
-            fontWeight="bold"
-            textTransform="uppercase"
-          >
-            From
-          </Text>
-          <Text>{format(new Date(loan.start_date), "MMM d, yyyy")}</Text>
-        </VStack>
-        <VStack align="start" gap={0}>
-          <Text
-            fontSize="2xs"
-            color="fg.muted"
-            fontWeight="bold"
-            textTransform="uppercase"
-          >
-            To
-          </Text>
-          <Text>{format(new Date(loan.end_date), "MMM d, yyyy")}</Text>
-        </VStack>
-      </HStack>
+      <Flex
+        fontSize="sm"
+        gap={8}
+        mb={4}
+        wrap="wrap"
+        align="center"
+        justify="space-between"
+      >
+        <HStack gap={8}>
+          <VStack align="start" gap={0}>
+            <Text
+              fontSize="2xs"
+              color="fg.muted"
+              fontWeight="bold"
+              textTransform="uppercase"
+            >
+              From
+            </Text>
+            <Text>{format(new Date(loan.start_date), "MMM d, yyyy")}</Text>
+          </VStack>
+          <VStack align="start" gap={0}>
+            <Text
+              fontSize="2xs"
+              color="fg.muted"
+              fontWeight="bold"
+              textTransform="uppercase"
+            >
+              To
+            </Text>
+            <Text>{format(new Date(loan.end_date), "MMM d, yyyy")}</Text>
+          </VStack>
+        </HStack>
+
+        {type === "outgoing" && (isActive || isReturned) && (
+          <Box>
+            <AddReview item={loan.item} />
+          </Box>
+        )}
+      </Flex>
 
       {isExtensionPending && (
         <Box
@@ -276,62 +316,89 @@ export function LoanCard({ loan, type, onReview, onAction }: LoanCardProps) {
         </Box>
       )}
 
-      <Flex gap={2} mt="auto">
-        {type === "incoming" && isPending && (
-          <>
+      <Flex gap={2} mt="auto" direction="column">
+        <Flex gap={2} wrap="wrap">
+          {type === "incoming" && isPending && (
+            <>
+              <Button
+                size="xs"
+                colorPalette="green"
+                flex={1}
+                minW="120px"
+                onClick={() => onAction?.(loan, "respond", { accept: true })}
+                disabled={restrictionApplies}
+              >
+                <FiCheckCircle /> Accept
+              </Button>
+              <Button
+                size="xs"
+                colorPalette="red"
+                variant="outline"
+                flex={1}
+                minW="120px"
+                onClick={() => onAction?.(loan, "respond", { accept: false })}
+                disabled={restrictionApplies}
+              >
+                <FiXCircle /> Reject
+              </Button>
+            </>
+          )}
+
+          {type === "outgoing" && isAccepted && (
             <Button
               size="xs"
-              colorPalette="green"
-              onClick={() => onAction?.(loan, "respond", { accept: true })}
+              colorPalette="main"
+              width="full"
+              onClick={() => onAction?.(loan, "ratify")}
               disabled={restrictionApplies}
             >
-              <FiCheckCircle /> Accept
+              <FiCheckCircle /> Confirm I have the item
             </Button>
+          )}
+
+          {type === "outgoing" && isActive && (
+            <>
+              <Button
+                size="xs"
+                variant="outline"
+                colorPalette="main"
+                flex={1}
+                minW="120px"
+                onClick={() => onAction?.(loan, "requestExtension")}
+              >
+                <FiRepeat /> Extend
+              </Button>
+              <Button
+                size="xs"
+                colorPalette="accent"
+                flex={1}
+                minW="120px"
+                onClick={() => onAction?.(loan, "signalReturn")}
+              >
+                <FiClock /> Return Item
+              </Button>
+            </>
+          )}
+
+          {type === "incoming" && (isActive || isReturnPending) && (
             <Button
               size="xs"
-              colorPalette="red"
-              variant="outline"
-              onClick={() => onAction?.(loan, "respond", { accept: false })}
+              colorPalette={isReturnPending ? "green" : "gray"}
+              width="full"
+              onClick={() => onAction?.(loan, "return")}
               disabled={restrictionApplies}
             >
-              <FiXCircle /> Reject
+              {isReturnPending ? (
+                <>
+                  <FiCheckCircle /> Confirm Receipt
+                </>
+              ) : (
+                "Mark as Returned"
+              )}
             </Button>
-          </>
-        )}
+          )}
 
-        {type === "outgoing" && isAccepted && (
-          <Button
-            size="xs"
-            colorPalette="main"
-            width="full"
-            onClick={() => onAction?.(loan, "ratify")}
-            disabled={restrictionApplies}
-          >
-            <FiCheckCircle /> Confirm I have the item
-          </Button>
-        )}
-
-        {type === "incoming" && (isActive || isReturnPending) && (
-          <Button
-            size="xs"
-            colorPalette={isReturnPending ? "green" : "gray"}
-            width="full"
-            onClick={() => onAction?.(loan, "return")}
-            disabled={restrictionApplies}
-          >
-            {isReturnPending ? (
-              <>
-                <FiCheckCircle /> Confirm Receipt
-              </>
-            ) : (
-              "Mark as Returned"
-            )}
-          </Button>
-        )}
-
-        {loan.status === "RETURNED" &&
-          !loan.has_review &&
-          (type === "outgoing" || loan.requester_id !== currentUser?.id) && (
+          {canBorrowerReview && (
             <Button
               size="xs"
               colorPalette="main"
@@ -343,43 +410,61 @@ export function LoanCard({ loan, type, onReview, onAction }: LoanCardProps) {
             </Button>
           )}
 
-        {loan.status === "RETURNED" && loan.has_review && (
-          <Badge
-            colorPalette="gray"
-            variant="subtle"
-            width="full"
-            justifyContent="center"
-            py={1}
-          >
-            Review Submitted
-          </Badge>
+          {isReturned &&
+            !loan.has_review &&
+            type === "incoming" &&
+            loan.requester_id !== currentUser?.id && (
+              <Button
+                size="xs"
+                colorPalette="main"
+                width="full"
+                onClick={() => onReview?.(loan)}
+                variant="surface"
+              >
+                <FiStar /> Review Experience
+              </Button>
+            )}
+
+          {isReturned && loan.has_review && (
+            <Badge
+              colorPalette="gray"
+              variant="subtle"
+              width="full"
+              justifyContent="center"
+              py={1}
+            >
+              Review Submitted
+            </Badge>
+          )}
+        </Flex>
+
+        {type === "incoming" && isActive && (
+          <HStack gap={2} width="full" wrap="wrap">
+            <Button
+              size="xs"
+              variant="outline"
+              colorPalette="orange"
+              flex={1}
+              minW="150px"
+              onClick={() => onAction?.(loan, "remind")}
+              disabled={restrictionApplies}
+            >
+              Send Return Reminder
+            </Button>
+            <Button
+              size="xs"
+              variant="outline"
+              colorPalette="red"
+              flex={1}
+              minW="150px"
+              onClick={() => onAction?.(loan, "default")}
+              disabled={restrictionApplies}
+            >
+              Mark Unrecoverable
+            </Button>
+          </HStack>
         )}
       </Flex>
-
-      {type === "incoming" && isActive && (
-        <HStack gap={2} width="full" mt={2}>
-          <Button
-            size="xs"
-            variant="outline"
-            colorPalette="orange"
-            flex={1}
-            onClick={() => onAction?.(loan, "remind")}
-            disabled={restrictionApplies}
-          >
-            Send Return Reminder
-          </Button>
-          <Button
-            size="xs"
-            variant="outline"
-            colorPalette="red"
-            flex={1}
-            onClick={() => onAction?.(loan, "default")}
-            disabled={restrictionApplies}
-          >
-            Mark Unrecoverable
-          </Button>
-        </HStack>
-      )}
     </Box>
   )
 }

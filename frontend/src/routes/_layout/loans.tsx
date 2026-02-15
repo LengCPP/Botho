@@ -12,7 +12,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
 import { isPast, isToday } from "date-fns"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   FiAlertCircle,
   FiArrowDownLeft,
@@ -59,6 +59,9 @@ function LoansPage() {
     useState<ItemPublic | null>(null)
   const [selectedLoanForExtension, setSelectedLoanForExtension] =
     useState<LoanPublic | null>(null)
+
+  // Track loans that have already been prompted for review in this session
+  const [seenReviewLoans, setSeenReviewLoans] = useState<Set<string>>(new Set())
 
   // Generic Confirmation State
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -181,6 +184,35 @@ function LoansPage() {
     }
   }, [activeLending])
 
+  // Automatically prompt for review of unreviewed returned items
+  useEffect(() => {
+    if (!outgoing?.data || !!selectedLoanForReview) return
+
+    const DISMISS_INTERVAL = 12 * 60 * 60 * 1000 // 12 hours
+    const now = Date.now()
+
+    const unreviewed = outgoing.data.find((l) => {
+      if (l.status !== "RETURNED" || l.has_review || seenReviewLoans.has(l.id)) {
+        return false
+      }
+
+      // Check localStorage for dismissal timestamp
+      const dismissedAt = localStorage.getItem(`review_dismissed_${l.id}`)
+      if (dismissedAt) {
+        const lastDismissed = Number.parseInt(dismissedAt, 10)
+        if (now - lastDismissed < DISMISS_INTERVAL) {
+          return false
+        }
+      }
+      return true
+    })
+
+    if (unreviewed) {
+      setSeenReviewLoans((prev) => new Set(prev).add(unreviewed.id))
+      setSelectedLoanForReview(unreviewed)
+    }
+  }, [outgoing, selectedLoanForReview, seenReviewLoans])
+
   // Client-side sorting for borrowed items
   const sortedBorrowedItems = useMemo(() => {
     return [...borrowedItems].sort((a, b) => {
@@ -232,16 +264,21 @@ function LoansPage() {
           return LoansService.sendReturnReminder({ id: loan.id })
         case "default":
           return LoansService.markLoanDefaulted({ id: loan.id })
+        case "signalReturn":
+          return LoansService.signalReturn({ id: loan.id })
         default:
           throw new Error("Unknown action")
       }
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
       showSuccessToast("Action completed successfully")
       queryClient.invalidateQueries({ queryKey: ["loans"] })
       setConfirmConfig(null)
       if (variables.action === "return") {
         setSelectedLoanForReview(variables.loan)
+      }
+      if (variables.action === "signalReturn") {
+        setSelectedLoanForReview(data as LoanPublic)
       }
     },
   })
@@ -249,6 +286,11 @@ function LoansPage() {
   const handleAction = (loan: LoanPublic, action: any, params?: any) => {
     if (action === "forgive") {
       setSelectedLoanForForgive(loan)
+      return
+    }
+
+    if (action === "requestExtension") {
+      setSelectedLoanForExtension(loan)
       return
     }
 
@@ -288,6 +330,10 @@ function LoansPage() {
         title: "Mark Unrecoverable",
         message: `Mark '${loan.item.title}' as lost? This will penalize the borrower's honor score significantly.`,
       },
+      signalReturn: {
+        title: "Signal Return",
+        message: `Signal that you are returning '${loan.item.title}'? The owner will need to confirm receipt.`,
+      },
     }[action as keyof typeof config]
 
     if (!config) return
@@ -326,10 +372,7 @@ function LoansPage() {
         >
           {title} ({loans.length})
         </Heading>
-        <SimpleGrid
-          columns={viewMode === "list" ? 1 : { base: 2, sm: 3, md: 4, lg: 5 }}
-          gap={4}
-        >
+        <SimpleGrid columns={1} gap={4}>
           {loans.map((loan) => (
             <LoanCard
               key={loan.id}
@@ -442,7 +485,7 @@ function LoansPage() {
                     <FiCheckCircle color="green.500" /> Loans I've Approved
                     (Waiting for Borrower)
                   </Heading>
-                  <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={4}>
+                  <SimpleGrid columns={1} gap={4}>
                     {approvedIncoming.map((loan) => (
                       <LoanCard
                         key={loan.id}
@@ -493,7 +536,7 @@ function LoansPage() {
                 </Box>
               )}
 
-              <SimpleGrid columns={{ base: 1, lg: 2 }} gap={12}>
+              <VStack align="stretch" gap={12}>
                 {/* Actionable Requests */}
                 <Box>
                   <Heading
@@ -553,7 +596,7 @@ function LoansPage() {
                     </VStack>
                   )}
                 </Box>
-              </SimpleGrid>
+              </VStack>
             </VStack>
           </Tabs.Content>
 
@@ -602,7 +645,16 @@ function LoansPage() {
         <ReviewModal
           loan={selectedLoanForReview}
           isOpen={!!selectedLoanForReview}
-          onClose={() => setSelectedLoanForReview(null)}
+          onClose={() => {
+            // Store dismissal timestamp
+            if (selectedLoanForReview) {
+              localStorage.setItem(
+                `review_dismissed_${selectedLoanForReview.id}`,
+                Date.now().toString(),
+              )
+            }
+            setSelectedLoanForReview(null)
+          }}
         />
       )}
 

@@ -1,15 +1,29 @@
-import { CommunitiesService, type ItemPublic, ItemsService } from "@/client"
+import {
+  CommunitiesService,
+  type ItemPublic,
+  ItemsService,
+  LoansService,
+} from "@/client"
+import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
 import {
   Button,
   IconButton,
+  MenuItem,
   VStack,
   useBreakpointValue,
 } from "@chakra-ui/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { BsThreeDotsVertical } from "react-icons/bs"
-import { FiCopy, FiEye, FiHeart, FiMinusCircle, FiTrash2 } from "react-icons/fi"
+import {
+  FiBookOpen,
+  FiCopy,
+  FiEye,
+  FiHeart,
+  FiMinusCircle,
+  FiTrash2,
+} from "react-icons/fi"
 import DeleteItem from "../Items/DeleteItem"
 import EditItem from "../Items/EditItem"
 import { LoanRequestModal } from "../Items/LoanRequestModal"
@@ -21,7 +35,7 @@ import {
   DialogRoot,
   DialogTrigger,
 } from "../ui/dialog"
-import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from "../ui/menu"
+import { MenuContent, MenuRoot, MenuTrigger } from "../ui/menu"
 import ConfirmationModal from "./ConfirmationModal"
 
 interface ItemActionsMenuProps {
@@ -43,6 +57,7 @@ export const ItemActionsMenu = ({
 }: ItemActionsMenuProps) => {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
+  const { user } = useAuth()
   const [confirmationType, setConfirmationType] = useState<
     "donate" | "removeCommunity" | "removeCollection" | null
   >(null)
@@ -52,12 +67,26 @@ export const ItemActionsMenu = ({
   const isMobile = useBreakpointValue({ base: true, md: false })
   const isCommunityOwned =
     !!item.community_owner || (item as any).is_community_owned
+  const isOwner = item.owner_id === user?.id
 
   const { data: community } = useQuery({
     queryKey: ["community", communityId],
     queryFn: () => CommunitiesService.readCommunity({ id: communityId! }),
     enabled: !!communityId,
   })
+
+  // Fetch loan context to check if already requested
+  const { data: outgoingLoans } = useQuery({
+    queryKey: ["loans", "outgoing"],
+    queryFn: () => LoansService.readOutgoingLoanRequests({}),
+    enabled: !!user && !isOwner,
+  })
+
+  const currentLoan = outgoingLoans?.data.find(
+    (l) =>
+      l.item_id === item.id &&
+      !["REJECTED", "CANCELLED", "RETURNED"].includes(l.status),
+  )
 
   const donateMutation = useMutation({
     mutationFn: () =>
@@ -188,6 +217,34 @@ export const ItemActionsMenu = ({
             <FiEye style={{ marginRight: "8px" }} /> View Details
           </MenuItem>
         ))}
+
+      {!isOwner &&
+        !currentLoan &&
+        (isMobile ? (
+          <Button
+            variant="ghost"
+            justifyContent="center"
+            width="full"
+            onClick={() => {
+              setIsLoanModalOpen(true)
+              setIsActionsModalOpen(false)
+            }}
+            disabled={!item.is_available}
+          >
+            <FiBookOpen style={{ marginRight: "8px" }} />
+            Request Loan
+          </Button>
+        ) : (
+          <MenuItem
+            value="request-loan"
+            onClick={() => setIsLoanModalOpen(true)}
+            disabled={!item.is_available}
+          >
+            <FiBookOpen style={{ marginRight: "8px" }} />
+            Request Loan
+          </MenuItem>
+        ))}
+
       <EditItem
         item={item}
         width="full"
@@ -259,6 +316,7 @@ export const ItemActionsMenu = ({
         <>
           {!isCommunityOwned &&
             !item.is_donation_pending &&
+            isOwner &&
             (isMobile ? (
               <Button
                 variant="ghost"
@@ -284,7 +342,7 @@ export const ItemActionsMenu = ({
                 Donate to Community
               </MenuItem>
             ))}
-          {(isAdmin || !isCommunityOwned) &&
+          {(isAdmin || (!isCommunityOwned && isOwner)) &&
             (isMobile ? (
               <Button
                 variant="ghost"

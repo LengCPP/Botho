@@ -113,7 +113,7 @@ export const CompactItemCard = ({
   const canManage = isOwner || (isCommunityOwned && isAdmin)
 
   const renderAction = () => {
-    if (canManage || isOwner) return null
+    if (isOwner) return null
 
     if (isPending) {
       return (

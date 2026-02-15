@@ -56,13 +56,14 @@ const ReviewModal = ({ loan, isOpen, onClose }: ReviewModalProps) => {
 
   const revieweeName = isOwner
     ? loan.requester.full_name || loan.requester.email
-    : isCommunityLoan && !isBorrower
-      ? loan.requester.full_name || loan.requester.email
+    : isCommunityLoan
+      ? isBorrower
+        ? loan.community?.name || "Community"
+        : loan.requester.full_name || loan.requester.email
       : loan.owner?.full_name || loan.owner?.email || "Owner"
 
-  // Show general review (rating/comment) if it's a personal loan OR
-  // if it's a community loan and the user is NOT the borrower (Admin reviewing member)
-  const showGeneralReview = !isCommunityLoan || !isBorrower
+  // Show general review (rating/comment)
+  const showGeneralReview = true
 
   const mutation = useMutation({
     mutationFn: (data: UserReviewCreate) =>
@@ -104,20 +105,25 @@ const ReviewModal = ({ loan, isOpen, onClose }: ReviewModalProps) => {
       >
         <DialogHeader>
           <DialogTitle>
-            {isCommunityLoan && !isOwner
-              ? `Update Condition for '${loan.item.title}'`
-              : `Rate your experience with ${revieweeName}`}
+            Review for '{loan.item.title}'
           </DialogTitle>
+          <Text fontSize="xs" color="fg.muted" mt={1}>
+            {isOwner ? (
+              <>Borrower: <Text as="span" color="ui.hover" fontWeight="bold">{loan.requester.full_name || loan.requester.email}</Text></>
+            ) : (
+              <>Owner: <Text as="span" color="purple.500" fontWeight="bold">{loan.owner?.full_name || loan.owner?.email || loan.community?.name || "Community"}</Text></>
+            )}
+          </Text>
         </DialogHeader>
         <DialogBody pb={6}>
           <form onSubmit={handleSubmit(onSubmit)}>
             <VStack gap={4} align="stretch">
               <Text fontSize="sm" color="gray.600">
                 {isOwner
-                  ? `How was the return process for '${loan.item.title}'? Did the borrower take good care of it?`
+                  ? `How was the return process? Did the borrower take good care of the item?`
                   : isCommunityLoan
-                    ? `Please update the physical state of '${loan.item.title}' after borrowing it from the community.`
-                    : `How was your experience borrowing '${loan.item.title}' from the owner?`}
+                    ? `Please update the physical state of the item after borrowing it from the community.`
+                    : `How was your experience borrowing this item from the owner?`}
               </Text>
 
               {showGeneralReview && (

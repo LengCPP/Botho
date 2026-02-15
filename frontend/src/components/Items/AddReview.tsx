@@ -163,7 +163,7 @@ const AddReview = ({ item }: AddReviewProps) => {
                   BOOK REVIEW (CONTENT)
                 </Text>
                 <VStack gap={4} align="stretch">
-                  <Field label="How much did you like the story?" required>
+                  <Field label="How would you rate the content of this book?" required>
                     <Controller
                       name="rating"
                       control={control}
