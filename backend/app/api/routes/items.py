@@ -1809,6 +1809,7 @@ async def update_item(
     category: Annotated[str | None, Form()] = None,
     genre: Annotated[str | None, Form()] = None,
     subject: Annotated[str | None, Form()] = None,
+    isbn: Annotated[str | None, Form()] = None,
     extra_data: Annotated[str | None, Form()] = None,
     info: Annotated[str | None, Form()] = None,
     image: Annotated[UploadFile | None, File()] = None,
@@ -1857,6 +1858,8 @@ async def update_item(
             db_item.genre = genre
         if subject is not None:
             db_item.subject = subject
+        if isbn is not None:
+            db_item.isbn = isbn
 
         if image_url is not None:
             if image_url.startswith("http"):

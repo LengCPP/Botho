@@ -110,13 +110,14 @@ const EditItem = ({
       category: item.category || (item.extra_data as any)?.category || "",
       genre: item.genre || (item.extra_data as any)?.genre || "",
       extra_data: (() => {
-        const { isbn, category, genre, ...rest } = (item.extra_data as any) || {}
+        const { isbn, category, genre, ...rest } =
+          (item.extra_data as any) || {}
         return rest
       })(),
       info: (item.info as any) || { grade: 10, physical_description: "" },
       image_url: item.image_url ?? "",
       work_info: {
-        tags: item.work_metadata?.tags?.join(", ") || "",
+        tags: item.subject || item.work_metadata?.tags?.join(", ") || "",
       },
     },
   })
@@ -136,9 +137,15 @@ const EditItem = ({
   }
 
   const mutation = useMutation({
-    mutationFn: async (data: { formData: Body_items_update_item; workInfo: any }) => {
-      const updatedItem = await ItemsService.updateItem({ id: item.id, formData: data.formData })
-      
+    mutationFn: async (data: {
+      formData: Body_items_update_item
+      workInfo: any
+    }) => {
+      const updatedItem = await ItemsService.updateItem({
+        id: item.id,
+        formData: data.formData,
+      })
+
       // Update work metadata if author/title are present and tags were modified
       if (data.workInfo && updatedItem.author) {
         await ItemsService.updateWorkMetadata({
@@ -171,11 +178,12 @@ const EditItem = ({
       isbn: data.isbn,
       category: data.category,
       genre: data.genre,
+      subject: data.work_info?.tags,
       extra_data: JSON.stringify(data.extra_data || {}),
       info: JSON.stringify(data.info || {}),
       image: imageFile,
       image_url: data.image_url,
-    }
+    } as any
 
     const formattedWorkInfo = data.work_info?.tags
       ? {
@@ -241,7 +249,7 @@ const EditItem = ({
                 ? "Update the condition and notes for your copy."
                 : "Update the item details below."}
             </Text>
-            
+
             {!onlyInfo && (
               <>
                 <Field
@@ -266,10 +274,7 @@ const EditItem = ({
                     >
                       General
                     </option>
-                    <option
-                      value="book"
-                      style={{ backgroundColor: selectBg }}
-                    >
+                    <option value="book" style={{ backgroundColor: selectBg }}>
                       Book
                     </option>
                   </select>
@@ -390,17 +395,15 @@ const EditItem = ({
                         Select Genre
                       </option>
                       {selectedCategory &&
-                        BOOK_CLASSIFICATION[selectedCategory]?.map(
-                          (genre) => (
-                            <option
-                              key={genre}
-                              value={genre}
-                              style={{ backgroundColor: selectBg }}
-                            >
-                              {genre}
-                            </option>
-                          ),
-                        )}
+                        BOOK_CLASSIFICATION[selectedCategory]?.map((genre) => (
+                          <option
+                            key={genre}
+                            value={genre}
+                            style={{ backgroundColor: selectBg }}
+                          >
+                            {genre}
+                          </option>
+                        ))}
                     </select>
                   </Field>
                 </HStack>

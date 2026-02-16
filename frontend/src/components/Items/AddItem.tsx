@@ -413,11 +413,7 @@ const AddItem = ({
         {itemType === "book" && (
           <>
             <Field label="Author">
-              <Input
-                id="author"
-                placeholder="Author"
-                {...register("author")}
-              />
+              <Input id="author" placeholder="Author" {...register("author")} />
             </Field>
 
             <Separator />
@@ -487,11 +483,7 @@ const AddItem = ({
             )}
 
             <Field label="ISBN">
-              <Input
-                id="isbn"
-                placeholder="ISBN"
-                {...register("isbn")}
-              />
+              <Input id="isbn" placeholder="ISBN" {...register("isbn")} />
             </Field>
             <HStack width="full" gap={4}>
               <Field label="Category" flex={1}>
