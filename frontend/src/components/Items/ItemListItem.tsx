@@ -18,6 +18,9 @@ export const ItemListItem = ({ item: itemProp }: ItemListItemProps) => {
 
   const isOwner = item.owner_id === user?.id
 
+  const info = (item.info as any) || {}
+  const condition = Number(info.average_condition_grade || info.grade || 0)
+
   // Logic for destination
   //   - If community owner: /communities/$communityId
   //   - If user owner (self): /profile
@@ -110,9 +113,22 @@ export const ItemListItem = ({ item: itemProp }: ItemListItemProps) => {
         {/* Content */}
         <VStack align="start" gap={1} flex={1} overflow="hidden">
           <HStack width="full" justify="space-between">
-            <Text fontWeight="bold" fontSize="sm" lineClamp={1}>
-              {item.title}
-            </Text>
+            <HStack gap={2} flex={1} minW={0}>
+              <Text fontWeight="bold" fontSize="sm" lineClamp={1}>
+                {item.title}
+              </Text>
+              {count === 1 && condition > 0 && (
+                <Badge
+                  size="xs"
+                  variant="subtle"
+                  colorPalette={
+                    condition >= 8 ? "green" : condition >= 5 ? "yellow" : "red"
+                  }
+                >
+                  {condition}/10
+                </Badge>
+              )}
+            </HStack>
             <Badge
               size="sm"
               variant="subtle"

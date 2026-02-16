@@ -8,8 +8,8 @@ from starlette.middleware.cors import CORSMiddleware
 
 from app.api.main import api_router
 from app.core.config import settings
-from app.tasks import check_overdue_loans
 from app.search import configure_search
+from app.tasks import check_overdue_loans
 
 
 def custom_generate_unique_id(route: APIRoute) -> str:
@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
         configure_search()
     except Exception as e:
         print(f"Search configuration failed: {e}")
-        
+
     # Start background tasks
     task = asyncio.create_task(check_overdue_loans())
     yield

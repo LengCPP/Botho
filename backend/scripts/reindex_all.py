@@ -2,15 +2,15 @@ import logging
 
 from sqlmodel import Session, select
 
+from app.api.utils import update_collection_index
 from app.core.db import engine
-from app.models import Community, Item, WorkMetadata, User
+from app.models import Community, Item, User, WorkMetadata
 from app.search import (
     configure_search,
     sync_community_to_search,
     sync_item_to_search,
     sync_work_metadata_to_search,
 )
-from app.api.utils import update_collection_index
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ def reindex_all() -> None:
         items = session.exec(select(Item)).all()
         for item in items:
             # Trigger loading of communities relationship for pooled_in indexing
-            _ = item.communities 
+            _ = item.communities
             sync_item_to_search(item)
         logger.info(f"Reindexed {len(items)} items.")
 

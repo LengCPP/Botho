@@ -2,6 +2,7 @@ import {
   Badge,
   Box,
   Flex,
+  Grid,
   HStack,
   Heading,
   Separator,
@@ -80,7 +81,6 @@ export const ItemDetailModal = ({
 }: ItemDetailModalProps) => {
   if (!item) return null
 
-  const isBook = item.item_type === "book"
   const extraData = (item.extra_data as any) || {}
   const info = (item.info as any) || {}
   const workMeta = item.work_metadata
@@ -89,6 +89,22 @@ export const ItemDetailModal = ({
     info.average_condition_grade || info.grade || 0,
   )
   const physicalNotes = info.physical_notes || []
+
+  const subjects =
+    (workMeta?.tags?.length ? workMeta.tags : null) ||
+    item.subject
+      ?.split(",")
+      .map((s: string) => s.trim())
+      .filter(Boolean) ||
+    []
+
+  const details = [
+    { label: "Publisher", value: extraData.publisher },
+    { label: "Published", value: extraData.publishedDate || extraData.publication_year },
+    { label: "Language", value: extraData.language },
+    { label: "Pages", value: extraData.pageCount || extraData.pages },
+    { label: "ISBN", value: item.isbn || workMeta?.isbn || extraData.isbn },
+  ].filter((d) => d.value)
 
   return (
     <DialogRoot
@@ -109,19 +125,19 @@ export const ItemDetailModal = ({
               <Badge colorPalette="teal" variant="solid">
                 {String(item.item_type || "General")}
               </Badge>
-              {isBook && extraData.category && (
+              {item.category && (
                 <Badge variant="outline" colorPalette="main">
-                  {extraData.category}
+                  {item.category}
                 </Badge>
               )}
-              {isBook && extraData.genre && (
+              {item.genre && (
                 <Badge variant="outline" colorPalette="purple">
-                  {extraData.genre}
+                  {item.genre}
                 </Badge>
               )}
             </HStack>
 
-            {isBook && item.author && (
+            {item.author && (
               <Text fontSize="md" fontWeight="bold">
                 Author:{" "}
                 <Text as="span" fontWeight="normal" fontStyle="italic">
@@ -151,7 +167,72 @@ export const ItemDetailModal = ({
               </Text>
             </Box>
 
-            {isBook && workMeta?.tags && workMeta.tags.length > 0 && (
+            {details.length > 0 && (
+              <Box width="full">
+                <Grid templateColumns="repeat(2, 1fr)" gap={4}>
+                  {details.map((detail) => (
+                    <Box key={detail.label}>
+                      <Text fontSize="xs" fontWeight="bold" color="fg.subtle" textTransform="uppercase">
+                        {detail.label}
+                      </Text>
+                      <Text fontSize="sm">{detail.value}</Text>
+                    </Box>
+                  ))}
+                </Grid>
+              </Box>
+            )}
+
+            {(averageCondition > 0 || physicalNotes.length > 0) && (
+              <Box
+                width="full"
+                p={4}
+                bg="bg.muted"
+                borderRadius="md"
+                borderWidth="1px"
+                borderColor="border.subtle"
+              >
+                <Heading size="xs" mb={3} textTransform="uppercase" color="ui.main">
+                  Copy Specifics
+                </Heading>
+                <VStack align="start" gap={3}>
+                  {averageCondition > 0 && (
+                    <HStack gap={2}>
+                      <Text fontSize="sm" fontWeight="bold">
+                        Condition Grade:
+                      </Text>
+                      <Badge
+                        colorPalette={
+                          averageCondition >= 8
+                            ? "green"
+                            : averageCondition >= 5
+                              ? "yellow"
+                              : "red"
+                        }
+                        variant="solid"
+                      >
+                        {averageCondition}/10
+                      </Badge>
+                    </HStack>
+                  )}
+                  {physicalNotes.length > 0 && (
+                    <Box>
+                      <Text fontSize="sm" fontWeight="bold" mb={1}>
+                        Physical Notes:
+                      </Text>
+                      <VStack align="start" gap={1} pl={2} borderLeftWidth="2px" borderColor="ui.main">
+                        {physicalNotes.map((note: string, idx: number) => (
+                          <Text key={idx} fontSize="sm" fontStyle="italic">
+                            "{note}"
+                          </Text>
+                        ))}
+                      </VStack>
+                    </Box>
+                  )}
+                </VStack>
+              </Box>
+            )}
+
+            {subjects.length > 0 && (
               <Box width="full">
                 <Text
                   fontSize="xs"
@@ -162,8 +243,8 @@ export const ItemDetailModal = ({
                 >
                   Subjects
                 </Text>
-                <HStack gap={2} wrap="wrap">
-                  {workMeta.tags.map((tag: string) => (
+                <Flex wrap="wrap" gap={2}>
+                  {subjects.map((tag: string) => (
                     <Badge
                       key={tag}
                       size="xs"
@@ -173,92 +254,13 @@ export const ItemDetailModal = ({
                       {tag}
                     </Badge>
                   ))}
-                </HStack>
+                </Flex>
               </Box>
             )}
 
             <Separator />
 
-            <Box width="full">
-              <Heading size="sm" mb={3} color="ui.hover">
-                Condition & Copy Details
-              </Heading>
-              <VStack align="start" gap={3} width="full">
-                <HStack justify="space-between" width="full">
-                  <Text fontSize="xs" fontWeight="bold" color="fg.subtle">
-                    AVERAGED CONDITION GRADE:
-                  </Text>
-                  <Badge
-                    colorPalette={
-                      averageCondition > 7
-                        ? "green"
-                        : averageCondition > 4
-                          ? "yellow"
-                          : "red"
-                    }
-                  >
-                    {averageCondition > 0
-                      ? `${averageCondition.toFixed(1)}/10`
-                      : "?"}
-                  </Badge>
-                </HStack>
-
-                {physicalNotes.length > 0 ? (
-                  <Box width="full">
-                    <Text
-                      fontSize="xs"
-                      fontWeight="bold"
-                      color="fg.subtle"
-                      mb={2}
-                    >
-                      PHYSICAL NOTES:
-                    </Text>
-                    <VStack align="stretch" gap={2}>
-                      {physicalNotes.map((note: any, idx: number) => (
-                        <Box
-                          key={idx}
-                          p={2}
-                          bg="bg.subtle"
-                          rounded="sm"
-                          borderLeft="4px solid"
-                          borderColor="ui.hover"
-                        >
-                          <Text fontSize="sm" fontStyle="italic">
-                            "{note.note}"
-                          </Text>
-                        </Box>
-                      ))}
-                    </VStack>
-                  </Box>
-                ) : (
-                  <Box>
-                    {info.physical_description && (
-                      <>
-                        <Text fontSize="xs" fontWeight="bold" color="fg.subtle">
-                          OWNER DESCRIPTION:
-                        </Text>
-                        <Text fontSize="sm">{info.physical_description}</Text>
-                      </>
-                    )}
-                    {!info.physical_description && (
-                      <Text fontSize="xs" color="fg.muted" fontStyle="italic">
-                        No extra description provided by owner.
-                      </Text>
-                    )}
-                  </Box>
-                )}
-              </VStack>
-            </Box>
-
-            {isBook && extraData.isbn && (
-              <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" mt={2}>
-                ISBN: {String(extraData.isbn)}
-              </Text>
-            )}
-
-            <Separator />
-
-            {isBook && item.author && (
+            {item.author && (
               <ReviewSection author={item.author} title={item.title} />
             )}
           </VStack>

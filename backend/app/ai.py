@@ -1,15 +1,16 @@
-from google import genai
-from typing import List, Optional, Tuple
 import json
-from app.core.config import settings
+
+from google import genai
+
 from app.constants import BOOK_CLASSIFICATION
+from app.core.config import settings
 
 # Initialize Gemini Client
 client = None
 if settings.GEMINI_API_KEY:
     client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
-async def generate_honor_snapshot(reviews: List[str]) -> Tuple[Optional[str], List[str]]:
+async def generate_honor_snapshot(reviews: list[str]) -> tuple[str | None, list[str]]:
     """Use Gemini to synthesize a reputation summary and improvement tips."""
     if not client or not reviews:
         return None, []
@@ -42,12 +43,12 @@ async def generate_honor_snapshot(reviews: List[str]) -> Tuple[Optional[str], Li
         print(f"Error calling Gemini: {e}")
         return None, []
 
-async def classify_book(title: str, author: str, description: Optional[str] = None) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+async def classify_book(title: str, author: str, description: str | None = None) -> tuple[str | None, str | None, str | None]:
     """Use Gemini to determine a descriptive category, specific genre, and subjects for a single book."""
     results = await classify_books([{"title": title, "author": author, "description": description}])
     return results[0] if results else (None, None, None)
 
-async def classify_books(books: List[dict]) -> List[Tuple[Optional[str], Optional[str], Optional[str]]]:
+async def classify_books(books: list[dict]) -> list[tuple[str | None, str | None, str | None]]:
     """Use Gemini to classify multiple books in a single request for RPM efficiency."""
     if not client or not books:
         return []
@@ -79,7 +80,7 @@ async def classify_books(books: List[dict]) -> List[Tuple[Optional[str], Optiona
         response = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
         results = [None] * len(books)
         lines = response.text.strip().split("\n")
-        
+
         for line in lines:
             if "|" in line and "CATEGORY:" in line:
                 try:

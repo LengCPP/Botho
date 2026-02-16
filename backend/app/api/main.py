@@ -4,6 +4,7 @@ from app.api.routes import (
     communities,
     dashboard,
     friends,
+    imports,
     interests,
     items,
     loans,
@@ -16,7 +17,6 @@ from app.api.routes import (
     storage,
     users,
     utils,
-    imports,
 )
 from app.core.config import settings
 

@@ -2,13 +2,13 @@ from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.dialects.sqlite.base import SQLiteTypeCompiler
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
-from sqlalchemy.dialects.sqlite.base import SQLiteTypeCompiler
-from sqlalchemy.dialects.postgresql import JSONB
 
 from app.api.deps import get_db
 from app.main import app
+
 
 def visit_JSONB(self, type_, **kw):
     return self.visit_JSON(type_, **kw)

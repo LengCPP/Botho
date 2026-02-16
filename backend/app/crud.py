@@ -140,7 +140,7 @@ def join_community(
     community = session.get(Community, community_id)
     status = CommunityMemberStatus.ACCEPTED
     role = CommunityMemberRole.MEMBER
-    
+
     # Check if user is creator
     if community and community.created_by == user_id:
         status = CommunityMemberStatus.ACCEPTED

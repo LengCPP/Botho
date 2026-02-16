@@ -12,20 +12,21 @@ def configure_search():
     """Set up Meilisearch indexes with correct filterable and sortable attributes."""
     items_index = client.index("items")
     items_index.update_filterable_attributes([
-        "owner_id", 
-        "pooled_in", 
-        "category", 
-        "genre", 
+        "owner_id",
+        "pooled_in",
+        "category",
+        "genre",
         "author",
         "subject",
-        "item_type", 
+        "item_type",
         "is_available",
         "is_lost",
-        "is_private"
+        "is_private",
+        "isbn"
     ])
     items_index.update_sortable_attributes([
-        "title", 
-        "author", 
+        "title",
+        "author",
         "created_at"
     ])
 
@@ -38,27 +39,13 @@ def configure_search():
 
 def sync_item_to_search(item: Item):
     index = client.index("items")
-    
-    # Extract category and genre from extra_data
-    category = None
-    genre = None
-    if item.extra_data:
-        category = item.extra_data.get("category")
-        genre = item.extra_data.get("genre")
-        
+
     # Get pooled communities
     pooled_in = [str(c.id) for c in item.communities]
 
-    # Fetch tags from WorkMetadata registry
-    tags = []
-    from app.core.db import engine
-    from sqlmodel import Session, select
-    if item.author and item.title:
-        with Session(engine) as session:
-            meta = session.get(WorkMetadata, (item.author, item.title))
-            if meta:
-                tags = meta.tags
-    
+    # Use top-level subject tags split by comma
+    tags = [s.strip() for s in item.subject.split(",")] if item.subject else []
+
     document = {
         "id": str(item.id),
         "title": item.title,
@@ -68,9 +55,10 @@ def sync_item_to_search(item: Item):
         "image_url": item.image_url,
         "owner_id": str(item.owner_id),
         "pooled_in": pooled_in,
-        "category": category,
-        "genre": genre,
+        "category": item.category,
+        "genre": item.genre,
         "subject": tags,
+        "isbn": item.isbn,
         "created_at": int(item.created_at.timestamp()) if item.created_at else None,
         "is_available": True,
         "is_lost": item.is_lost,
@@ -118,19 +106,19 @@ def sync_work_metadata_to_search(meta: WorkMetadata):
 def reindex_all_data(session: Session) -> None:
     """Reindex all data into Meilisearch. Superuser only trigger."""
     configure_search()
-    
+
     # 1. Reindex Items
     items = session.exec(select(Item)).all()
     for item in items:
         # Trigger loading of communities relationship
         _ = item.communities
         sync_item_to_search(item)
-        
+
     # 2. Reindex Communities
     communities = session.exec(select(Community)).all()
     for community in communities:
         sync_community_to_search(community)
-        
+
     # 3. Reindex Work Metadata
     works = session.exec(select(WorkMetadata)).all()
     for work in works:

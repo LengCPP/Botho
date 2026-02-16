@@ -31,7 +31,7 @@ test("Collections: Filtering by Author, Category, Genre, and Subject", async ({
   await page.locator('input[name="title"]').fill(titleFull)
 
   // Fill Author
-  await page.locator('input[name="extra_data.author"]').fill(authorFull)
+  await page.locator('input[name="author"]').fill(authorFull)
 
   // Fill Subjects (Work Info)
   await page.locator('input[name="work_info.tags"]').fill("Space, Aliens")
@@ -58,7 +58,7 @@ test("Collections: Filtering by Author, Category, Genre, and Subject", async ({
 
   await page.selectOption("select#item_type", "book")
   await page.locator('input[name="title"]').fill(titleEmpty)
-  await page.locator('input[name="extra_data.author"]').fill(authorEmpty)
+  await page.locator('input[name="author"]').fill(authorEmpty)
 
   // Intentionally leave Category, Genre, and Subjects EMPTY
 

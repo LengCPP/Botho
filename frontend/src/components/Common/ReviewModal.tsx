@@ -104,14 +104,25 @@ const ReviewModal = ({ loan, isOpen, onClose }: ReviewModalProps) => {
         borderRadius="xl"
       >
         <DialogHeader>
-          <DialogTitle>
-            Review for '{loan.item.title}'
-          </DialogTitle>
+          <DialogTitle>Review for '{loan.item.title}'</DialogTitle>
           <Text fontSize="xs" color="fg.muted" mt={1}>
             {isOwner ? (
-              <>Borrower: <Text as="span" color="ui.hover" fontWeight="bold">{loan.requester.full_name || loan.requester.email}</Text></>
+              <>
+                Borrower:{" "}
+                <Text as="span" color="ui.hover" fontWeight="bold">
+                  {loan.requester.full_name || loan.requester.email}
+                </Text>
+              </>
             ) : (
-              <>Owner: <Text as="span" color="purple.500" fontWeight="bold">{loan.owner?.full_name || loan.owner?.email || loan.community?.name || "Community"}</Text></>
+              <>
+                Owner:{" "}
+                <Text as="span" color="purple.500" fontWeight="bold">
+                  {loan.owner?.full_name ||
+                    loan.owner?.email ||
+                    loan.community?.name ||
+                    "Community"}
+                </Text>
+              </>
             )}
           </Text>
         </DialogHeader>
@@ -120,10 +131,10 @@ const ReviewModal = ({ loan, isOpen, onClose }: ReviewModalProps) => {
             <VStack gap={4} align="stretch">
               <Text fontSize="sm" color="gray.600">
                 {isOwner
-                  ? `How was the return process? Did the borrower take good care of the item?`
+                  ? "How was the return process? Did the borrower take good care of the item?"
                   : isCommunityLoan
-                    ? `Please update the physical state of the item after borrowing it from the community.`
-                    : `How was your experience borrowing this item from the owner?`}
+                    ? "Please update the physical state of the item after borrowing it from the community."
+                    : "How was your experience borrowing this item from the owner?"}
               </Text>
 
               {showGeneralReview && (

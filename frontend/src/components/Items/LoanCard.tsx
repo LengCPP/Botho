@@ -75,7 +75,9 @@ export function LoanCard({ loan, type, onReview, onAction }: LoanCardProps) {
       pointerEvents={restrictionApplies ? "none" : "auto"}
       position="relative"
       borderColor={
-        (isReturned || isReturnPending) && !loan.has_review && type === "outgoing"
+        (isReturned || isReturnPending) &&
+        !loan.has_review &&
+        type === "outgoing"
           ? "ui.hover"
           : "border.subtle"
       }

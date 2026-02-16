@@ -1,33 +1,26 @@
 from typing import Any
-import uuid
+
 from fastapi import APIRouter
-from sqlmodel import func, select, or_
 from sqlalchemy.orm import selectinload
+from sqlmodel import func, or_, select
 
 from app.api.deps import CurrentUser, SessionDep
+from app.api.utils import (
+    filter_owner_privacy,
+)
 from app.models import (
-    Community,
     CommunityItem,
     CommunityMember,
     CommunityMemberStatus,
     Friendship,
     FriendshipStatus,
     Item,
+    ItemConditionRating,
+    ItemPublic,
+    ItemsPublic,
     Loan,
     LoanStatus,
-    User,
-    ItemsPublic,
-    ItemPublic,
     WorkMetadata,
-    ItemConditionRating,
-    ItemOwnerPublic
-)
-from app.api.utils import (
-    check_item_availability, 
-    get_item_condition_data, 
-    check_possession, 
-    filter_owner_privacy,
-    get_work_metadata
 )
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -71,7 +64,7 @@ def get_dashboard_stats(session: SessionDep, current_user: CurrentUser) -> Any:
             CommunityMember.status == CommunityMemberStatus.ACCEPTED
         )
     ).all()
-    
+
     community_pending = 0
     if admin_communities:
         community_pending = session.exec(
@@ -95,7 +88,7 @@ def get_dashboard_stats(session: SessionDep, current_user: CurrentUser) -> Any:
 
 @router.get("/recent-activity", response_model=ItemsPublic)
 def get_recent_activity(
-    session: SessionDep, 
+    session: SessionDep,
     current_user: CurrentUser,
     limit: int = 10
 ) -> Any:
@@ -115,20 +108,20 @@ def get_recent_activity(
             friend_ids.add(f.friend_id)
         else:
             friend_ids.add(f.user_id)
-            
+
     # Communities
     comm_stmt = select(CommunityMember.community_id).where(
         CommunityMember.user_id == current_user.id,
         CommunityMember.status == CommunityMemberStatus.ACCEPTED
     )
     community_ids = {cid for cid in session.exec(comm_stmt).all()}
-    
+
     # 2. Query Items
     # owner_id IN friends OR owner_id IN communities OR id IN (pooled items of my communities)
-    
+
     if not friend_ids and not community_ids:
         return ItemsPublic(data=[], count=0)
-        
+
     # Exclude items with DEFAULTED loans
     defaulted_item_ids = select(Loan.item_id).where(Loan.status == LoanStatus.DEFAULTED)
 
@@ -148,16 +141,16 @@ def get_recent_activity(
         .order_by(Item.created_at.desc())
         .limit(limit)
     )
-    
+
     items = session.exec(statement).all()
-    
+
     if not items:
         return ItemsPublic(data=[], count=0)
 
     # 3. Bulk Enrichment (Optimized)
     item_ids = [item.id for item in items]
     work_keys = {(item.author, item.title) for item in items if item.author and item.title}
-    
+
     # 3.1 Bulk fetch WorkMetadata
     work_meta_map = {}
     if work_keys:
@@ -175,7 +168,7 @@ def get_recent_activity(
         select(Loan.item_id).where(
             Loan.item_id.in_(item_ids),
             Loan.status.in_([
-                LoanStatus.ACTIVE, LoanStatus.PENDING, LoanStatus.ACCEPTED, 
+                LoanStatus.ACTIVE, LoanStatus.PENDING, LoanStatus.ACCEPTED,
                 LoanStatus.RETURN_PENDING, LoanStatus.EXTENSION_PENDING, LoanStatus.DEFAULTED
             ])
         )
@@ -187,7 +180,7 @@ def get_recent_activity(
             Loan.item_id.in_(item_ids),
             Loan.requester_id == current_user.id,
             Loan.status.in_([
-                LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING, 
+                LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING,
                 LoanStatus.RETURNED, LoanStatus.EXTENSION_PENDING
             ])
         )
@@ -197,8 +190,8 @@ def get_recent_activity(
     condition_ratings = session.exec(
         select(ItemConditionRating).where(ItemConditionRating.item_id.in_(item_ids))
     ).all()
-    
-    condition_data_map = {} 
+
+    condition_data_map = {}
     for r in condition_ratings:
         if r.item_id not in condition_data_map:
             condition_data_map[r.item_id] = {"sum": 0.0, "count": 0, "notes": []}
@@ -216,17 +209,17 @@ def get_recent_activity(
         is_avail = item.id not in active_loan_item_ids
         owner_pub = None
         community_pub = None
-        
+
         if item.user_owner:
             owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser)
             owner_pub.is_available = is_avail
         elif item.community_owner:
             community_pub = item.community_owner
-            
+
         cond_stats = condition_data_map.get(item.id, {"sum": 0.0, "count": 0, "notes": []})
         avg_grade = cond_stats["sum"] / cond_stats["count"] if cond_stats["count"] > 0 else 0.0
         had_possession = item.owner_id == current_user.id or item.id in possession_loan_item_ids
-        
+
         item_pub = ItemPublic(
             id=item.id,
             owner_id=item.owner_id,
@@ -248,11 +241,11 @@ def get_recent_activity(
             is_available=is_avail,
             work_metadata=work_meta_map.get((item.author, item.title)),
             had_possession=had_possession,
-            category=item.extra_data.get("category") if item.extra_data else None,
-            genre=item.extra_data.get("genre") if item.extra_data else None,
-            subject=item.extra_data.get("subject") if item.extra_data else None
+            category=item.category,
+            genre=item.genre,
+            subject=item.subject
         )
         public_items.append(item_pub)
-        
+
     return ItemsPublic(data=public_items, count=len(public_items))
 

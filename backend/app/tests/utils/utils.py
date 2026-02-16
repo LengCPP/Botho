@@ -46,7 +46,7 @@ def get_token_headers(client: TestClient, session: Session, email: str = None) -
     password = "password123"
     if not email:
         email = random_email()
-    
+
     user = crud.get_user_by_email(session=session, email=email)
     if not user:
         user_in = UserCreate(email=email, password=password)

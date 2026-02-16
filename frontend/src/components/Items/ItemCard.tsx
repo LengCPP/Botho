@@ -544,27 +544,9 @@ const ItemCard = ({
                     Copy Info
                   </Badge>
                 ) : (
-                                      <HStack gap={1}>
-                                      {item.work_metadata?.category || item.category ? (
-                                        <Badge variant="solid" colorPalette="blue" size="sm">
-                                          {item.work_metadata?.category || item.category}
-                                        </Badge>
-                                      ) : item.subject ? (
-                                        <Badge variant="solid" colorPalette="purple" size="sm">
-                                          {item.subject}
-                                        </Badge>
-                                      ) : (
-                                        <Badge colorPalette="teal" variant="solid" size="sm">
-                                          {String(item.item_type || "General")}
-                                        </Badge>
-                                      )}
-                                      {(item.work_metadata?.genre || item.genre) && (
-                                        <Badge variant="outline" colorPalette="teal" size="sm">
-                                          {item.work_metadata?.genre || item.genre}
-                                        </Badge>
-                                      )}
-                                    </HStack>
-                  
+                  <Badge colorPalette="teal" variant="solid" size="sm">
+                    {String(item.item_type || "General")}
+                  </Badge>
                 )}
 
                 <HStack gap={1} onClick={(e) => e.stopPropagation()}>
@@ -647,8 +629,50 @@ const ItemCard = ({
                     </Text>
                   )}
 
+                  <HStack gap={1} wrap="wrap" mt={1}>
+                    {(item.work_metadata?.category || item.category) && (
+                      <Badge variant="solid" colorPalette="blue" size="xs">
+                        {item.work_metadata?.category || item.category}
+                      </Badge>
+                    )}
+                    {(item.work_metadata?.genre || item.genre) && (
+                      <Badge variant="outline" colorPalette="teal" size="xs">
+                        {item.work_metadata?.genre || item.genre}
+                      </Badge>
+                    )}
+                  </HStack>
+
+                  {/* Subjects in Details */}
+                  {(() => {
+                    const rawSubjects =
+                      (item.work_metadata?.tags?.length
+                        ? item.work_metadata.tags
+                        : null) ||
+                      item.subject
+                        ?.split(",")
+                        .map((s: string) => s.trim())
+                        .filter(Boolean) ||
+                      []
+                    return (
+                      rawSubjects.length > 0 && (
+                        <Flex wrap="wrap" gap={1} mt={1}>
+                          {rawSubjects.map((tag: string) => (
+                            <Badge
+                              key={tag}
+                              variant="subtle"
+                              colorPalette="cyan"
+                              size="2xs"
+                            >
+                              {tag}
+                            </Badge>
+                          ))}
+                        </Flex>
+                      )
+                    )
+                  })()}
+
                   <Box
-                    mt={2}
+                    mt={1}
                     flex="1"
                     overflowY="auto"
                     width="full"
@@ -658,7 +682,7 @@ const ItemCard = ({
                       scrollbarWidth: "none",
                     }}
                   >
-                    <Text fontSize="xs" color="inherit" opacity={0.9}>
+                    <Text fontSize="xs" color="inherit" opacity={0.9} mb={2}>
                       {item.description || "No description provided."}
                     </Text>
                   </Box>

@@ -260,7 +260,14 @@ export const ImportItems = ({
   const totalCount = stagedItems?.count || 0
   const totalPages = Math.ceil(totalCount / limit)
 
-  const columns = ["title", "author", "isbn", "category", "genre", "description"]
+  const columns = [
+    "title",
+    "author",
+    "isbn",
+    "category",
+    "genre",
+    "description",
+  ]
 
   const handlePageChange = (newPage: number) => {
     setFocusedCell(null)

@@ -50,13 +50,12 @@ interface ItemCreate {
   title: string
   description?: string
   item_type?: string
-  extra_data?: {
-    author?: string
-    isbn?: string
-    category?: string
-    genre?: string
-    [key: string]: any
-  }
+  author?: string
+  isbn?: string
+  category?: string
+  genre?: string
+  subject?: string
+  extra_data?: Record<string, any>
   info?: {
     grade?: number
     physical_description?: string
@@ -111,6 +110,11 @@ const AddItem = ({
       title: "",
       description: "",
       item_type: "",
+      author: "",
+      isbn: "",
+      category: "",
+      genre: "",
+      subject: "",
       extra_data: {},
       info: {
         grade: 10,
@@ -125,7 +129,7 @@ const AddItem = ({
 
   const itemType = watch("item_type")
   const description = watch("description") || ""
-  const selectedCategory = watch("extra_data.category")
+  const selectedCategory = watch("category")
 
   const { data: myItems } = useQuery({
     queryKey: ["my-items-for-community"],
@@ -164,9 +168,9 @@ const AddItem = ({
 
   const handleBookSelect = async (book: BookResult) => {
     setValue("title", book.title, { shouldValidate: true })
-    setValue("description", book.description.substring(0, 1600))
-    setValue("extra_data.author", book.authors.join(", "))
-    setValue("extra_data.isbn", book.isbn)
+    setValue("description", book.description.substring(0, 2000))
+    setValue("author", book.authors.join(", "))
+    setValue("isbn", book.isbn)
     setValue("image_url", book.thumbnail)
     setValue("item_type", "book")
 
@@ -178,11 +182,12 @@ const AddItem = ({
         })) as { category?: string; genre?: string; subject?: string }
 
         if (mapping.category) {
-          setValue("extra_data.category", mapping.category)
+          setValue("category", mapping.category)
           if (mapping.genre) {
-            setValue("extra_data.genre", mapping.genre)
+            setValue("genre", mapping.genre)
           }
         } else if (mapping.subject) {
+          setValue("subject", mapping.subject)
           const currentTags = watch("work_info.tags")
           const newTags = currentTags
             ? `${currentTags}, ${mapping.subject}`
@@ -248,8 +253,12 @@ const AddItem = ({
     const itemData: Body_items_create_item = {
       title: data.title,
       description: data.description,
-      author: data.extra_data?.author,
+      author: data.author,
       item_type: data.item_type as any,
+      isbn: data.isbn,
+      category: data.category,
+      genre: data.genre,
+      subject: data.subject,
       extra_data: JSON.stringify(data.extra_data || {}),
       info: JSON.stringify(data.info || {}),
       image: imageFile,
@@ -293,7 +302,7 @@ const AddItem = ({
 
   const creationFormContent = (
     <form onSubmit={handleSubmit(onSubmit)}>
-      <VStack gap={4}>
+      <VStack gap={4} align="stretch">
         {isScanning && (
           <BarcodeScanner
             onScan={(code) => {
@@ -381,9 +390,9 @@ const AddItem = ({
               <Text fontSize="xs">Brief summary of the item.</Text>
               <Text
                 fontSize="xs"
-                color={description.length > 1600 ? "red.500" : "inherit"}
+                color={description.length > 2000 ? "red.500" : "inherit"}
               >
-                {description.length}/1600
+                {description.length}/2000
               </Text>
             </HStack>
           }
@@ -392,8 +401,8 @@ const AddItem = ({
             id="description"
             {...register("description", {
               maxLength: {
-                value: 1600,
-                message: "Maximum 1600 characters",
+                value: 2000,
+                message: "Maximum 2000 characters",
               },
             })}
             placeholder="Description"
@@ -407,7 +416,7 @@ const AddItem = ({
               <Input
                 id="author"
                 placeholder="Author"
-                {...register("extra_data.author" as any)}
+                {...register("author")}
               />
             </Field>
 
@@ -481,14 +490,14 @@ const AddItem = ({
               <Input
                 id="isbn"
                 placeholder="ISBN"
-                {...register("extra_data.isbn" as any)}
+                {...register("isbn")}
               />
             </Field>
             <HStack width="full" gap={4}>
               <Field label="Category" flex={1}>
                 <select
                   id="category"
-                  {...register("extra_data.category" as any)}
+                  {...register("category")}
                   style={selectStyle}
                 >
                   <option value="" style={{ backgroundColor: selectBg }}>
@@ -508,7 +517,7 @@ const AddItem = ({
               <Field label="Genre" flex={1}>
                 <select
                   id="genre"
-                  {...register("extra_data.genre" as any)}
+                  {...register("genre")}
                   style={selectStyle}
                   disabled={!selectedCategory}
                 >
@@ -564,7 +573,7 @@ const AddItem = ({
             variant="solid"
             type="submit"
             colorPalette="accent"
-            disabled={!isValid || description.length > 1600}
+            disabled={!isValid || description.length > 2000}
             loading={isSubmitting}
           >
             Add Item

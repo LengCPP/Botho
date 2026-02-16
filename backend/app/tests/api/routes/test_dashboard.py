@@ -4,14 +4,15 @@ from sqlmodel import Session
 
 from app import crud
 from app.core.config import settings
-from app.models import UserCreate, Item, Friendship, FriendshipStatus
-from app.tests.utils.utils import random_email, random_lower_string
+from app.models import Friendship, FriendshipStatus, Item, UserCreate
+from app.tests.utils.utils import random_email
+
 
 def get_token_headers(client: TestClient, db: Session, email: str = None) -> dict[str, str]:
     password = "password123"
     if not email:
         email = random_email()
-    
+
     user = crud.get_user_by_email(session=db, email=email)
     if not user:
         user_in = UserCreate(email=email, password=password)
@@ -51,7 +52,7 @@ def test_recent_activity_with_friend_items(client: TestClient, db: Session) -> N
     password_b = "password123"
     user_in_b = UserCreate(email=email_b, password=password_b)
     user_b = crud.create_user(session=db, user_create=user_in_b)
-    
+
     # Create Friendship
     friendship = Friendship(
         user_id=user_a.id,
@@ -70,7 +71,7 @@ def test_recent_activity_with_friend_items(client: TestClient, db: Session) -> N
     )
     db.add(item)
     db.commit()
-    
+
     # Query Recent Activity
     r = client.get(f"{settings.API_V1_STR}/dashboard/recent-activity", headers=headers_a)
     assert r.status_code == 200

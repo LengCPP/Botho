@@ -1,17 +1,15 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
-from sqlmodel import col, func, or_, select, text, cast, String
+from fastapi import APIRouter, BackgroundTasks, HTTPException
+from sqlmodel import String, cast, col, func, or_, select, text
 
 from app import crud
 from app.api.deps import CurrentUser, SessionDep
 from app.api.utils import (
-    check_item_availability,
     filter_loan_privacy,
     filter_owner_privacy,
     filter_user_privacy,
-    update_collection_index,
     invalidate_item_caches,
     rebuild_collection_index_task,
 )
@@ -37,7 +35,6 @@ from app.models import (
     CommunityUpdate,
     Friendship,
     FriendshipStatus,
-    Interest,
     Item,
     ItemPublic,
     ItemsPublic,
@@ -68,7 +65,7 @@ def get_community_admin_count(session: SessionDep, community_id: uuid.UUID) -> i
         .where(
             CommunityMember.community_id == community_id,
             CommunityMember.role == CommunityMemberRole.ADMIN,
-            CommunityMember.status == CommunityMemberStatus.ACCEPTED
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
         )
     )
     return session.exec(statement).one()
@@ -76,7 +73,11 @@ def get_community_admin_count(session: SessionDep, community_id: uuid.UUID) -> i
 
 @router.get("/", response_model=CommunitiesPublic)
 def read_communities(
-    session: SessionDep, current_user: CurrentUser, skip: int = 0, limit: int = 100, member_only: bool = False
+    session: SessionDep,
+    current_user: CurrentUser,
+    skip: int = 0,
+    limit: int = 100,
+    member_only: bool = False,
 ) -> Any:
     """
     Retrieve communities.
@@ -86,7 +87,7 @@ def read_communities(
         user_memberships = session.exec(
             select(CommunityMember.community_id).where(
                 CommunityMember.user_id == current_user.id,
-                CommunityMember.status == CommunityMemberStatus.ACCEPTED
+                CommunityMember.status == CommunityMemberStatus.ACCEPTED,
             )
         ).all()
         statement = select(Community).where(Community.id.in_(user_memberships))
@@ -99,10 +100,7 @@ def read_communities(
         ).all()
         # Filter: Public OR (Private AND (Member OR Invited OR Applicant))
         statement = select(Community).where(
-            or_(
-                Community.is_private == False,
-                Community.id.in_(user_memberships)
-            )
+            or_(Community.is_private == False, Community.id.in_(user_memberships))
         )
 
     count_statement = select(func.count()).select_from(statement.subquery())
@@ -119,15 +117,16 @@ def read_communities(
         memberships = session.exec(
             select(CommunityMember).where(
                 CommunityMember.user_id == current_user.id,
-                CommunityMember.community_id.in_(community_ids)
+                CommunityMember.community_id.in_(community_ids),
             )
         ).all()
         membership_map = {
             m.community_id: {
                 "role": m.role,
                 "status": m.status,
-                "notif": m.notifications_enabled
-            } for m in memberships
+                "notif": m.notifications_enabled,
+            }
+            for m in memberships
         }
     else:
         membership_map = {}
@@ -158,7 +157,9 @@ def create_community(
 
 
 @router.get("/{id}", response_model=CommunityPublic)
-def read_community(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> Any:
+def read_community(
+    session: SessionDep, current_user: CurrentUser, id: uuid.UUID
+) -> Any:
     """
     Get community by ID.
     """
@@ -168,8 +169,7 @@ def read_community(session: SessionDep, current_user: CurrentUser, id: uuid.UUID
 
     # Get membership info for current user
     statement = select(CommunityMember).where(
-        CommunityMember.community_id == id,
-        CommunityMember.user_id == current_user.id
+        CommunityMember.community_id == id, CommunityMember.user_id == current_user.id
     )
     membership = session.exec(statement).first()
 
@@ -207,7 +207,7 @@ def update_community(
     statement = select(CommunityMember).where(
         CommunityMember.community_id == id,
         CommunityMember.user_id == current_user.id,
-        CommunityMember.role == CommunityMemberRole.ADMIN
+        CommunityMember.role == CommunityMemberRole.ADMIN,
     )
     membership = session.exec(statement).first()
     if not membership and not current_user.is_superuser:
@@ -237,7 +237,7 @@ def delete_community(
     statement = select(CommunityMember).where(
         CommunityMember.community_id == id,
         CommunityMember.user_id == current_user.id,
-        CommunityMember.role == CommunityMemberRole.ADMIN
+        CommunityMember.role == CommunityMemberRole.ADMIN,
     )
     membership = session.exec(statement).first()
     if not membership and not current_user.is_superuser:
@@ -271,25 +271,34 @@ async def join_community(
         if membership.status == CommunityMemberStatus.PENDING:
             raise HTTPException(status_code=400, detail="Join request already pending")
         if membership.status == CommunityMemberStatus.ACCEPTED:
-            raise HTTPException(status_code=400, detail="Already a member of this community")
+            raise HTTPException(
+                status_code=400, detail="Already a member of this community"
+            )
         if membership.status == CommunityMemberStatus.REJECTED:
             raise HTTPException(status_code=400, detail="Join request was rejected")
         if membership.status == CommunityMemberStatus.BANNED:
-            raise HTTPException(status_code=403, detail="You are banned from this community")
+            raise HTTPException(
+                status_code=403, detail="You are banned from this community"
+            )
         if membership.status == CommunityMemberStatus.SUSPENDED:
-            raise HTTPException(status_code=403, detail="Your account is suspended in this community")
-        
+            raise HTTPException(
+                status_code=403, detail="Your account is suspended in this community"
+            )
+
         if membership.status == CommunityMemberStatus.INVITED:
             # Check who invited them
             # Check inviter's role
             inviter_membership = session.exec(
                 select(CommunityMember).where(
                     CommunityMember.community_id == id,
-                    CommunityMember.user_id == membership.invited_by
+                    CommunityMember.user_id == membership.invited_by,
                 )
             ).first()
-            
-            if inviter_membership and inviter_membership.role in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]:
+
+            if inviter_membership and inviter_membership.role in [
+                CommunityMemberRole.ADMIN,
+                CommunityMemberRole.MODERATOR,
+            ]:
                 # Staff invite -> Auto join
                 membership.status = CommunityMemberStatus.ACCEPTED
                 membership.role = CommunityMemberRole.MEMBER
@@ -305,8 +314,10 @@ async def join_community(
                 # Notify staff
                 admin_statement = select(CommunityMember).where(
                     CommunityMember.community_id == id,
-                    CommunityMember.role.in_([CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]),
-                    CommunityMember.status == CommunityMemberStatus.ACCEPTED
+                    CommunityMember.role.in_(
+                        [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]
+                    ),
+                    CommunityMember.status == CommunityMemberStatus.ACCEPTED,
                 )
                 staff = session.exec(admin_statement).all()
                 for staff_member in staff:
@@ -316,7 +327,7 @@ async def join_community(
                         title="New Join Request",
                         message=f"{current_user.full_name or current_user.email} applied to join {community.name} (Referral).",
                         type=NotificationType.INFO,
-                        link=f"/communities/{id}?tab=manage"
+                        link=f"/communities/{id}?tab=manage",
                     )
                 return Message(message="Application sent via referral")
 
@@ -326,8 +337,10 @@ async def join_community(
     if community.requires_approval:
         admin_statement = select(CommunityMember).where(
             CommunityMember.community_id == id,
-            CommunityMember.role.in_([CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]),
-            CommunityMember.status == CommunityMemberStatus.ACCEPTED
+            CommunityMember.role.in_(
+                [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]
+            ),
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
         )
         staff = session.exec(admin_statement).all()
         for member in staff:
@@ -337,15 +350,23 @@ async def join_community(
                 title="New Join Request",
                 message=f"{current_user.full_name or current_user.email} applied to join {community.name}.",
                 type=NotificationType.INFO,
-                link=f"/communities/{id}?tab=manage"
+                link=f"/communities/{id}?tab=manage",
             )
 
-    return Message(message="Application sent" if community.requires_approval else "Joined successfully")
+    return Message(
+        message="Application sent"
+        if community.requires_approval
+        else "Joined successfully"
+    )
 
 
 @router.post("/{id}/invite", response_model=Message)
 async def invite_friend(
-    *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, invite_in: CommunityInvitationCreate
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    invite_in: CommunityInvitationCreate,
 ) -> Any:
     """
     Invite a friend to join a community.
@@ -359,7 +380,7 @@ async def invite_friend(
         select(CommunityMember).where(
             CommunityMember.community_id == id,
             CommunityMember.user_id == current_user.id,
-            CommunityMember.status == CommunityMemberStatus.ACCEPTED
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
         )
     ).first()
     if not my_membership:
@@ -375,7 +396,7 @@ async def invite_friend(
         select(Friendship).where(
             Friendship.user_id == current_user.id,
             Friendship.friend_id == invite_in.friend_id,
-            Friendship.status == FriendshipStatus.ACCEPTED
+            Friendship.status == FriendshipStatus.ACCEPTED,
         )
     ).first()
     if not is_friend and not current_user.is_superuser:
@@ -385,7 +406,7 @@ async def invite_friend(
     existing = session.exec(
         select(CommunityMember).where(
             CommunityMember.community_id == id,
-            CommunityMember.user_id == invite_in.friend_id
+            CommunityMember.user_id == invite_in.friend_id,
         )
     ).first()
     if existing:
@@ -394,8 +415,10 @@ async def invite_friend(
         if existing.status == CommunityMemberStatus.INVITED:
             return Message(message="User is already invited")
         if existing.status == CommunityMemberStatus.PENDING:
-            raise HTTPException(status_code=400, detail="User has a pending application")
-        
+            raise HTTPException(
+                status_code=400, detail="User has a pending application"
+            )
+
         # Update existing record (e.g. if REJECTED, BANNED or SUSPENDED we allow re-inviting to reset status)
         existing.status = CommunityMemberStatus.INVITED
         existing.invited_by = current_user.id
@@ -407,11 +430,11 @@ async def invite_friend(
             community_id=id,
             user_id=invite_in.friend_id,
             status=CommunityMemberStatus.INVITED,
-            role=CommunityMemberRole.MEMBER, # Default
-            invited_by=current_user.id
+            role=CommunityMemberRole.MEMBER,  # Default
+            invited_by=current_user.id,
         )
         session.add(membership)
-    
+
     session.commit()
 
     # Notify friend
@@ -421,7 +444,7 @@ async def invite_friend(
         title="Community Invitation",
         message=f"{current_user.full_name or current_user.email} invited you to join {community.name}.",
         type=NotificationType.INFO,
-        link=f"/communities/{id}"
+        link=f"/communities/{id}",
     )
 
     return Message(message="Invitation sent")
@@ -466,7 +489,7 @@ def read_community_members(
     id: uuid.UUID,
     skip: int = 0,
     limit: int = 100,
-    status: CommunityMemberStatus | None = None
+    status: CommunityMemberStatus | None = None,
 ) -> Any:
     """
     Get members of a community.
@@ -477,35 +500,47 @@ def read_community_members(
 
     # Get current user's membership
     my_membership_stmt = select(CommunityMember).where(
-        CommunityMember.community_id == id,
-        CommunityMember.user_id == current_user.id
+        CommunityMember.community_id == id, CommunityMember.user_id == current_user.id
     )
     my_membership = session.exec(my_membership_stmt).first()
     is_staff = (
-        (my_membership and my_membership.role in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]) or
-        community.created_by == current_user.id
-    )
+        my_membership
+        and my_membership.role
+        in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]
+    ) or community.created_by == current_user.id
 
     # Privacy check for closed communities
     if community.requires_approval and not current_user.is_superuser and not is_staff:
         if not my_membership or my_membership.status != CommunityMemberStatus.ACCEPTED:
             raise HTTPException(
                 status_code=403,
-                detail="This community is closed. You must be a member to view the member list."
+                detail="This community is closed. You must be a member to view the member list.",
             )
 
     # Base statement
-    base_stmt = select(User, CommunityMember).join(CommunityMember, User.id == CommunityMember.user_id).where(CommunityMember.community_id == id)
+    base_stmt = (
+        select(User, CommunityMember)
+        .join(CommunityMember, User.id == CommunityMember.user_id)
+        .where(CommunityMember.community_id == id)
+    )
 
     # Filter by status if provided, otherwise default to ACCEPTED/INVITED for non-admins
     if status:
-        if status != CommunityMemberStatus.ACCEPTED and not is_staff and not current_user.is_superuser:
-            raise HTTPException(status_code=403, detail="Only staff can filter by non-accepted status")
+        if (
+            status != CommunityMemberStatus.ACCEPTED
+            and not is_staff
+            and not current_user.is_superuser
+        ):
+            raise HTTPException(
+                status_code=403, detail="Only staff can filter by non-accepted status"
+            )
         base_stmt = base_stmt.where(CommunityMember.status == status)
     elif not is_staff and not current_user.is_superuser:
         # Non-staff see both accepted and invited to avoid double-invites
         base_stmt = base_stmt.where(
-            CommunityMember.status.in_([CommunityMemberStatus.ACCEPTED, CommunityMemberStatus.INVITED])
+            CommunityMember.status.in_(
+                [CommunityMemberStatus.ACCEPTED, CommunityMemberStatus.INVITED]
+            )
         )
 
     count = session.exec(select(func.count()).select_from(base_stmt.subquery())).one()
@@ -518,15 +553,15 @@ def read_community_members(
         friendships = session.exec(
             select(Friendship).where(
                 Friendship.user_id == current_user.id,
-                Friendship.friend_id.in_(member_ids)
+                Friendship.friend_id.in_(member_ids),
             )
         ).all()
         friendship_map = {f.friend_id: f.status for f in friendships}
 
     # Reveal details if Closed community AND current user is an accepted member (or superuser)
     reveal_details = community.requires_approval and (
-        current_user.is_superuser or
-        (my_membership and my_membership.status == CommunityMemberStatus.ACCEPTED)
+        current_user.is_superuser
+        or (my_membership and my_membership.status == CommunityMemberStatus.ACCEPTED)
     )
 
     users_with_meta = []
@@ -538,14 +573,19 @@ def read_community_members(
             user,
             current_user.id,
             is_admin=current_user.is_superuser or reveal_details,
-            is_friend=is_friend
+            is_friend=is_friend,
         )
         user_public.community_role = membership.role
         user_public.community_status = membership.status
         user_public.friendship_status = f_status
 
         # Restrict data if not friends and not revealed
-        if not current_user.is_superuser and not reveal_details and user.id != current_user.id and not is_friend:
+        if (
+            not current_user.is_superuser
+            and not reveal_details
+            and user.id != current_user.id
+            and not is_friend
+        ):
             user_public.communities = []
             user_public.interests = []
 
@@ -572,35 +612,48 @@ async def update_community_member_role(
 
     # Get current user's membership
     my_membership_stmt = select(CommunityMember).where(
-        CommunityMember.community_id == id,
-        CommunityMember.user_id == current_user.id
+        CommunityMember.community_id == id, CommunityMember.user_id == current_user.id
     )
     my_membership = session.exec(my_membership_stmt).first()
 
     # Permission check: ADMIN or MODERATOR (for specific tasks)
-    is_admin = (my_membership and my_membership.role == CommunityMemberRole.ADMIN) or current_user.is_superuser
-    is_moderator = (my_membership and my_membership.role == CommunityMemberRole.MODERATOR)
+    is_admin = (
+        my_membership and my_membership.role == CommunityMemberRole.ADMIN
+    ) or current_user.is_superuser
+    is_moderator = my_membership and my_membership.role == CommunityMemberRole.MODERATOR
 
     if not is_admin and not is_moderator:
         raise HTTPException(status_code=400, detail="Not enough permissions")
 
     # Target member
     target_membership_stmt = select(CommunityMember).where(
-        CommunityMember.community_id == id,
-        CommunityMember.user_id == user_id
+        CommunityMember.community_id == id, CommunityMember.user_id == user_id
     )
     target_membership = session.exec(target_membership_stmt).first()
     if not target_membership:
-         raise HTTPException(status_code=404, detail="Member not found in this community")
+        raise HTTPException(
+            status_code=404, detail="Member not found in this community"
+        )
 
     # Moderator restrictions: can only manage non-staff
     if is_moderator and not is_admin:
         # Cannot promote to ADMIN or MODERATOR
-        if member_in.role and member_in.role in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]:
-            raise HTTPException(status_code=403, detail="Moderators cannot promote members to staff roles")
+        if member_in.role and member_in.role in [
+            CommunityMemberRole.ADMIN,
+            CommunityMemberRole.MODERATOR,
+        ]:
+            raise HTTPException(
+                status_code=403,
+                detail="Moderators cannot promote members to staff roles",
+            )
         # Cannot modify existing staff
-        if target_membership.role in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]:
-            raise HTTPException(status_code=403, detail="Moderators cannot modify staff members")
+        if target_membership.role in [
+            CommunityMemberRole.ADMIN,
+            CommunityMemberRole.MODERATOR,
+        ]:
+            raise HTTPException(
+                status_code=403, detail="Moderators cannot modify staff members"
+            )
 
     updated_member = crud.update_community_member(
         session=session,
@@ -611,7 +664,9 @@ async def update_community_member_role(
     )
 
     if not updated_member:
-        raise HTTPException(status_code=404, detail="Member not found in this community")
+        raise HTTPException(
+            status_code=404, detail="Member not found in this community"
+        )
 
     # Notify user of status/role change
     if member_in.status == CommunityMemberStatus.ACCEPTED:
@@ -621,7 +676,7 @@ async def update_community_member_role(
             title="Community Request Accepted",
             message=f"You are now a member of {community.name}.",
             type=NotificationType.SUCCESS,
-            link=f"/communities/{id}"
+            link=f"/communities/{id}",
         )
     elif member_in.role:
         await notify_user(
@@ -630,11 +685,13 @@ async def update_community_member_role(
             title="Community Role Updated",
             message=f"Your role in {community.name} has been updated to {member_in.role}.",
             type=NotificationType.INFO,
-            link=f"/communities/{id}"
+            link=f"/communities/{id}",
         )
 
     user = session.get(User, user_id)
-    user_public = filter_user_privacy(user, current_user.id, is_admin=current_user.is_superuser)
+    user_public = filter_user_privacy(
+        user, current_user.id, is_admin=current_user.is_superuser
+    )
     user_public.community_role = updated_member.role
     user_public.community_status = updated_member.status
     return user_public
@@ -692,79 +749,95 @@ def read_community_item_facets(
     )
     membership = session.exec(statement).first()
     if not membership and not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="Must be a member to view community items")
+        raise HTTPException(
+            status_code=403, detail="Must be a member to view community items"
+        )
 
     # Optimization: Check collection index total
     if community.collection_index:
         total = community.collection_index.get("total")
         if total == 0:
-             return {"data": [], "count": 0}
+            return {"data": [], "count": 0}
 
     # Meilisearch logic if q is present
     if q:
         from app.search import client as meili_client
+
         try:
             index = meili_client.index("items")
-            
+
             # Map facet field
             facet_field = group_by
             if group_by == "subject":
                 facet_field = "subject"
-            
+
             search_params = {
                 "filter": f'owner_id = "{id}" OR pooled_in = "{id}"',
                 "facets": [facet_field],
-                "limit": 0 # We only care about facets
+                "limit": 0,  # We only care about facets
             }
-            
+
             search_results = index.search(q, search_params)
-            distribution = search_results.get("facetDistribution", {}).get(facet_field, {})
-            
+            distribution = search_results.get("facetDistribution", {}).get(
+                facet_field, {}
+            )
+
             # Convert to list and sort by name
-            all_facets = [{"name": name, "count": count} for name, count in distribution.items()]
+            all_facets = [
+                {"name": name, "count": count} for name, count in distribution.items()
+            ]
             all_facets.sort(key=lambda x: x["name"].lower())
             total_count = len(all_facets)
-            
+
             if not all_facets:
                 raise Exception("No facets found in Meilisearch, falling back to SQL")
 
             # Slice for pagination
             paged_facets = all_facets[skip : skip + limit]
-            
+
             # Fetch sample images from DB for these facets
             results = []
             for f in paged_facets:
                 name = f["name"]
-                
+
                 # Items in this community (owned or pooled)
-                comm_item_ids = select(CommunityItem.item_id).where(CommunityItem.community_id == id)
+                comm_item_ids = select(CommunityItem.item_id).where(
+                    CommunityItem.community_id == id
+                )
                 base_filter = or_(Item.owner_id == id, Item.id.in_(comm_item_ids))
-                
+
                 stmt = select(Item.image_url).where(base_filter)
                 if group_by == "author":
                     stmt = stmt.where(Item.author == name)
-                elif group_by in ["category", "genre"]:
-                    stmt = stmt.where(func.json_extract_path_text(Item.extra_data, group_by) == name)
+                elif group_by == "category":
+                    stmt = stmt.where(Item.category == name)
+                elif group_by == "genre":
+                    stmt = stmt.where(Item.genre == name)
                 elif group_by == "subject":
-                    stmt = stmt.join(WorkMetadata, (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title))\
-                               .where(cast(WorkMetadata.tags, String).ilike(f'%"{name}"%'))
-                
-                imgs = session.exec(stmt.where(Item.image_url.is_not(None)).limit(5)).all()
-                results.append({
-                    "name": name,
-                    "count": f["count"],
-                    "sample_images": list(imgs)
-                })
-            
+                    stmt = stmt.join(
+                        WorkMetadata,
+                        (Item.author == WorkMetadata.author)
+                        & (Item.title == WorkMetadata.title),
+                    ).where(cast(WorkMetadata.tags, String).ilike(f'%"{name}"%'))
+
+                imgs = session.exec(
+                    stmt.where(Item.image_url.is_not(None)).limit(5)
+                ).all()
+                results.append(
+                    {"name": name, "count": f["count"], "sample_images": list(imgs)}
+                )
+
             return {"data": results, "count": len(all_facets)}
         except Exception:
-            pass # Fallback to SQL if Meilisearch fails
+            pass  # Fallback to SQL if Meilisearch fails
 
     # SQL Fallback
     # Filter for items in this community (owned or pooled)
-    comm_item_ids = select(CommunityItem.item_id).where(CommunityItem.community_id == id)
+    comm_item_ids = select(CommunityItem.item_id).where(
+        CommunityItem.community_id == id
+    )
     base_filter = or_(Item.owner_id == id, Item.id.in_(comm_item_ids))
-    
+
     results = []
     total_count = 0
     if group_by == "author":
@@ -773,82 +846,145 @@ def read_community_item_facets(
             count_stmt = count_stmt.where(Item.author.ilike(f"%{q}%"))
         total_count = session.exec(count_stmt).one()
 
-        stmt = select(Item.author, func.count(Item.id), func.array_agg(Item.image_url))\
-            .where(base_filter)
+        stmt = select(
+            Item.author, func.count(Item.id), func.array_agg(Item.image_url)
+        ).where(base_filter)
         if q:
             stmt = stmt.where(Item.author.ilike(f"%{q}%"))
-        stmt = stmt.group_by(Item.author).order_by(Item.author.asc()).offset(skip).limit(limit)
-        
+        stmt = (
+            stmt.group_by(Item.author)
+            .order_by(Item.author.asc())
+            .offset(skip)
+            .limit(limit)
+        )
+
         rows = session.exec(stmt).all()
         for author, count, imgs in rows:
             valid_imgs = [img for img in (imgs or []) if img][:5]
-            results.append({"name": author or "Others", "count": count, "sample_images": valid_imgs})
-            
-    elif group_by in ["category", "genre"]:
-        json_field = group_by
-        name_expr = func.json_extract_path_text(Item.extra_data, json_field)
-        
-        count_stmt = select(func.count(func.distinct(name_expr))).where(base_filter)
+            results.append(
+                {
+                    "name": author or "Others",
+                    "count": count,
+                    "sample_images": valid_imgs,
+                }
+            )
+
+    elif group_by == "category":
+        count_stmt = select(func.count(func.distinct(Item.category))).where(base_filter)
         if q:
-            count_stmt = count_stmt.where(name_expr.ilike(f"%{q}%"))
+            count_stmt = count_stmt.where(Item.category.ilike(f"%{q}%"))
         total_count = session.exec(count_stmt).one()
 
         stmt = select(
-            name_expr.label("name"),
+            Item.category.label("name"),
             func.count(Item.id).label("count"),
-            func.array_agg(Item.image_url).label("sample_images")
+            func.array_agg(Item.image_url).label("sample_images"),
         ).where(base_filter)
         if q:
-            stmt = stmt.where(name_expr.ilike(f"%{q}%"))
-        stmt = stmt.group_by("name").order_by(name_expr.asc()).offset(skip).limit(limit)
-        
+            stmt = stmt.where(Item.category.ilike(f"%{q}%"))
+        stmt = (
+            stmt.group_by("name")
+            .order_by(Item.category.asc())
+            .offset(skip)
+            .limit(limit)
+        )
+
         rows = session.exec(stmt).all()
         for name, count, imgs in rows:
             valid_imgs = [img for img in (imgs or []) if img][:5]
-            results.append({"name": name or "Others", "count": count, "sample_images": valid_imgs})
-            
+            results.append(
+                {"name": name or "Others", "count": count, "sample_images": valid_imgs}
+            )
+
+    elif group_by == "genre":
+        count_stmt = select(func.count(func.distinct(Item.genre))).where(base_filter)
+        if q:
+            count_stmt = count_stmt.where(Item.genre.ilike(f"%{q}%"))
+        total_count = session.exec(count_stmt).one()
+
+        stmt = select(
+            Item.genre.label("name"),
+            func.count(Item.id).label("count"),
+            func.array_agg(Item.image_url).label("sample_images"),
+        ).where(base_filter)
+        if q:
+            stmt = stmt.where(Item.genre.ilike(f"%{q}%"))
+        stmt = (
+            stmt.group_by("name").order_by(Item.genre.asc()).offset(skip).limit(limit)
+        )
+
+        rows = session.exec(stmt).all()
+        for name, count, imgs in rows:
+            valid_imgs = [img for img in (imgs or []) if img][:5]
+            results.append(
+                {"name": name or "Others", "count": count, "sample_images": valid_imgs}
+            )
+
     elif group_by == "subject":
         # 1. Tags query
         tags_expr = func.json_array_elements_text(WorkMetadata.tags)
-        tags_stmt = select(
-            tags_expr.label("name"),
-            func.count(Item.id).label("count"),
-            func.array_agg(Item.image_url).label("sample_images")
-        ).join(
-            WorkMetadata, (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title)
-        ).where(base_filter)
+        tags_stmt = (
+            select(
+                tags_expr.label("name"),
+                func.count(Item.id).label("count"),
+                func.array_agg(Item.image_url).label("sample_images"),
+            )
+            .join(
+                WorkMetadata,
+                (Item.author == WorkMetadata.author)
+                & (Item.title == WorkMetadata.title),
+            )
+            .where(base_filter)
+        )
         if q:
             tags_stmt = tags_stmt.where(tags_expr.ilike(f"%{q}%"))
         tags_stmt = tags_stmt.group_by("name")
 
         # 2. Others query
-        others_stmt = select(
-            cast("Others", String).label("name"),
-            func.count(Item.id).label("count"),
-            func.array_agg(Item.image_url).label("sample_images")
-        ).outerjoin(
-            WorkMetadata, (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title)
-        ).where(base_filter)\
-         .where(or_(
-             WorkMetadata.tags.is_(None),
-             func.json_array_length(WorkMetadata.tags) == 0,
-             WorkMetadata.author.is_(None)
-         ))
-        
+        others_stmt = (
+            select(
+                cast("Others", String).label("name"),
+                func.count(Item.id).label("count"),
+                func.array_agg(Item.image_url).label("sample_images"),
+            )
+            .outerjoin(
+                WorkMetadata,
+                (Item.author == WorkMetadata.author)
+                & (Item.title == WorkMetadata.title),
+            )
+            .where(base_filter)
+            .where(
+                or_(
+                    WorkMetadata.tags.is_(None),
+                    func.json_array_length(WorkMetadata.tags) == 0,
+                    WorkMetadata.author.is_(None),
+                )
+            )
+        )
+
         if q and "others".find(q.lower()) == -1:
             full_stmt = tags_stmt
         else:
             full_stmt = tags_stmt.union_all(others_stmt)
 
         try:
-            total_count = session.exec(select(func.count()).select_from(full_stmt.subquery())).one()
-            rows = session.exec(select(full_stmt.subquery()).order_by(text("name ASC")).offset(skip).limit(limit)).all()
+            total_count = session.exec(
+                select(func.count()).select_from(full_stmt.subquery())
+            ).one()
+            rows = session.exec(
+                select(full_stmt.subquery())
+                .order_by(text("name ASC"))
+                .offset(skip)
+                .limit(limit)
+            ).all()
             for name, count, imgs in rows:
                 valid_imgs = [img for img in (imgs or []) if img][:5]
-                results.append({"name": name, "count": count, "sample_images": valid_imgs})
+                results.append(
+                    {"name": name, "count": count, "sample_images": valid_imgs}
+                )
         except Exception:
             pass
-            
+
     return {"data": results, "count": total_count}
 
 
@@ -885,21 +1021,24 @@ def read_community_items(
     )
     membership = session.exec(statement).first()
     if not membership and not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="Must be a member to view community items")
+        raise HTTPException(
+            status_code=403, detail="Must be a member to view community items"
+        )
 
     # Exclude items with DEFAULTED loans
     defaulted_item_ids = select(Loan.item_id).where(Loan.status == LoanStatus.DEFAULTED)
 
     from app.search import client as meili_client
+
     meili_success = False
-    
+
     # Only use Meilisearch if q is provided, otherwise SQL is faster
     if q:
         try:
             index = meili_client.index("items")
             # Filter: item belongs to community (owned or pooled)
             filters = [f'(owner_id = "{id}" OR pooled_in = "{id}")']
-            
+
             if category:
                 filters.append(f'category = "{category}"')
             if genre:
@@ -908,20 +1047,24 @@ def read_community_items(
                 filters.append(f'subject = "{subject}"')
             if author:
                 filters.append(f'author = "{author}"')
-                
+
             search_params = {
                 "limit": limit,
                 "offset": skip,
                 "filter": " AND ".join(filters),
-                "sort": [f"{sort_by}:{sort_order}"]
+                "sort": [f"{sort_by}:{sort_order}"],
             }
-            
+
             search_results = index.search(q, search_params)
             item_ids = [uuid.UUID(hit["id"]) for hit in search_results["hits"]]
-            count = search_results.get("totalHits") or search_results.get("nbHits") or len(item_ids)
+            count = (
+                search_results.get("totalHits")
+                or search_results.get("nbHits")
+                or len(item_ids)
+            )
             facets = search_results.get("facetDistribution")
             facet_stats = search_results.get("facetStats")
-            
+
             if not item_ids:
                 meili_success = False
             else:
@@ -945,45 +1088,69 @@ def read_community_items(
             q_filter = or_(
                 col(Item.title).ilike(f"%{q}%"),
                 col(Item.description).ilike(f"%{q}%"),
-                col(Item.author).ilike(f"%{q}%")
+                col(Item.author).ilike(f"%{q}%"),
             )
-            statement = select(Item).where(
-                q_filter,
-                or_(
-                    Item.owner_id == id,
-                    select(CommunityItem).where(
-                        CommunityItem.item_id == Item.id,
-                        CommunityItem.community_id == id
-                    ).exists()
+            statement = (
+                select(Item)
+                .where(
+                    q_filter,
+                    or_(
+                        Item.owner_id == id,
+                        select(CommunityItem)
+                        .where(
+                            CommunityItem.item_id == Item.id,
+                            CommunityItem.community_id == id,
+                        )
+                        .exists(),
+                    ),
                 )
-            ).where(Item.id.not_in(defaulted_item_ids))
+                .where(Item.id.not_in(defaulted_item_ids))
+            )
         else:
-            statement = select(Item).where(
-                or_(
-                    Item.owner_id == id,
-                    select(CommunityItem).where(
-                        CommunityItem.item_id == Item.id,
-                        CommunityItem.community_id == id
-                    ).exists()
+            statement = (
+                select(Item)
+                .where(
+                    or_(
+                        Item.owner_id == id,
+                        select(CommunityItem)
+                        .where(
+                            CommunityItem.item_id == Item.id,
+                            CommunityItem.community_id == id,
+                        )
+                        .exists(),
+                    )
                 )
-            ).where(Item.id.not_in(defaulted_item_ids))
+                .where(Item.id.not_in(defaulted_item_ids))
+            )
 
         # Basic SQL filtering
         if category:
-            statement = statement.where(
-                func.json_extract_path_text(Item.extra_data, "category") == category
-            )
+            statement = statement.where(Item.category == category)
         if genre:
-            statement = statement.where(
-                func.json_extract_path_text(Item.extra_data, "genre") == genre
-            )
+            statement = statement.where(Item.genre == genre)
         if subject:
             if subject == "Others":
-                statement = statement.join(WorkMetadata, (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title), isouter=True)
-                statement = statement.where(or_(WorkMetadata.tags.is_(None), func.json_array_length(WorkMetadata.tags) == 0))
+                statement = statement.join(
+                    WorkMetadata,
+                    (Item.author == WorkMetadata.author)
+                    & (Item.title == WorkMetadata.title),
+                    isouter=True,
+                )
+                statement = statement.where(
+                    or_(
+                        WorkMetadata.tags.is_(None),
+                        func.json_array_length(WorkMetadata.tags) == 0,
+                    )
+                )
             else:
-                statement = statement.join(WorkMetadata, (Item.author == WorkMetadata.author) & (Item.title == WorkMetadata.title))
-                statement = statement.where(cast(WorkMetadata.tags, String).ilike(f'%"{subject}"%'))
+                statement = statement.join(
+                    WorkMetadata,
+                    (Item.author == WorkMetadata.author)
+                    & (Item.title == WorkMetadata.title),
+                )
+                statement = statement.where(
+                    cast(WorkMetadata.tags, String).ilike(f'%"{subject}"%')
+                )
         if author:
             statement = statement.where(col(Item.author).ilike(f"%{author}%"))
 
@@ -1007,17 +1174,19 @@ def read_community_items(
     item_ids = [item.id for item in items]
     comm_items = session.exec(
         select(CommunityItem).where(
-            CommunityItem.community_id == id,
-            CommunityItem.item_id.in_(item_ids)
+            CommunityItem.community_id == id, CommunityItem.item_id.in_(item_ids)
         )
     ).all()
     comm_item_map = {ci.item_id: ci for ci in comm_items}
 
     # Bulk fetch WorkMetadata
-    work_keys = {(item.author, item.title) for item in items if item.author and item.title}
+    work_keys = {
+        (item.author, item.title) for item in items if item.author and item.title
+    }
     work_meta_map = {}
     if work_keys:
         from sqlalchemy import tuple_
+
         work_metas = session.exec(
             select(WorkMetadata).where(
                 tuple_(WorkMetadata.author, WorkMetadata.title).in_(list(work_keys))
@@ -1027,15 +1196,23 @@ def read_community_items(
             work_meta_map[(wm.author, wm.title)] = wm
 
     # Bulk fetch active loans for availability
-    active_loan_item_ids = set(session.exec(
-        select(Loan.item_id).where(
-            Loan.item_id.in_(item_ids),
-            Loan.status.in_([
-                LoanStatus.ACTIVE, LoanStatus.PENDING, LoanStatus.ACCEPTED, 
-                LoanStatus.RETURN_PENDING, LoanStatus.EXTENSION_PENDING, LoanStatus.DEFAULTED
-            ])
-        )
-    ).all())
+    active_loan_item_ids = set(
+        session.exec(
+            select(Loan.item_id).where(
+                Loan.item_id.in_(item_ids),
+                Loan.status.in_(
+                    [
+                        LoanStatus.ACTIVE,
+                        LoanStatus.PENDING,
+                        LoanStatus.ACCEPTED,
+                        LoanStatus.RETURN_PENDING,
+                        LoanStatus.EXTENSION_PENDING,
+                        LoanStatus.DEFAULTED,
+                    ]
+                ),
+            )
+        ).all()
+    )
 
     items_public = []
     for item in items:
@@ -1044,7 +1221,9 @@ def read_community_items(
         owner_pub = None
         community_pub = None
         if item.user_owner:
-            owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser)
+            owner_pub = filter_owner_privacy(
+                item.user_owner, current_user.id, is_admin=current_user.is_superuser
+            )
             owner_pub.is_available = is_avail
         elif item.community_owner:
             community_pub = item.community_owner
@@ -1057,6 +1236,10 @@ def read_community_items(
             author=item.author,
             item_type=item.item_type,
             image_url=item.image_url,
+            isbn=item.isbn,
+            category=item.category,
+            genre=item.genre,
+            subject=item.subject,
             extra_data=item.extra_data,
             info=item.info,
             count=item.count,
@@ -1064,11 +1247,10 @@ def read_community_items(
             owner=owner_pub,
             community_owner=community_pub,
             is_available=is_avail,
-            work_metadata=work_meta_map.get((item.author, item.title)) if item.author else None,
-            had_possession=item.owner_id == current_user.id, # Simplified
-            category=item.extra_data.get("category") if item.extra_data else None,
-            genre=item.extra_data.get("genre") if item.extra_data else None,
-            subject=item.extra_data.get("subject") if item.extra_data else None
+            work_metadata=work_meta_map.get((item.author, item.title))
+            if item.author
+            else None,
+            had_possession=item.owner_id == current_user.id,  # Simplified
         )
 
         # Add pooling metadata if applicable
@@ -1079,13 +1261,19 @@ def read_community_items(
 
         items_public.append(item_pub)
 
-    return ItemsPublic(data=items_public, count=count, facets=facets, facet_stats=facet_stats)
-
+    return ItemsPublic(
+        data=items_public, count=count, facets=facets, facet_stats=facet_stats
+    )
 
 
 @router.post("/{id}/items/{item_id}", response_model=Message)
 def add_item_to_community(
-    *, session: SessionDep, current_user: CurrentUser, background_tasks: BackgroundTasks, id: uuid.UUID, item_id: uuid.UUID
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
+    id: uuid.UUID,
+    item_id: uuid.UUID,
 ) -> Any:
     """
     Add an item to a community pool (Any member).
@@ -1102,7 +1290,9 @@ def add_item_to_community(
     )
     membership = session.exec(statement).first()
     if not membership and not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="Must be a member to add items to community")
+        raise HTTPException(
+            status_code=403, detail="Must be a member to add items to community"
+        )
 
     item = session.get(Item, item_id)
     if not item:
@@ -1110,30 +1300,30 @@ def add_item_to_community(
 
     # Check if current user is the owner
     if not item.user_owner or item.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Only the owner can add this item to a pool")
+        raise HTTPException(
+            status_code=403, detail="Only the owner can add this item to a pool"
+        )
 
     # Check if already added
     statement = select(CommunityItem).where(
-        CommunityItem.community_id == id,
-        CommunityItem.item_id == item_id
+        CommunityItem.community_id == id, CommunityItem.item_id == item_id
     )
     existing = session.exec(statement).first()
     if existing:
         raise HTTPException(status_code=400, detail="Item already in community pool")
 
     comm_item = CommunityItem(
-        community_id=id,
-        item_id=item_id,
-        added_by=current_user.id
+        community_id=id, item_id=item_id, added_by=current_user.id
     )
     session.add(comm_item)
 
     session.commit()
-    
+
     # Update collection index for owner and pooled communities in background
     invalidate_item_caches(session, item_id, background_tasks)
 
     from app.search import sync_item_to_search
+
     session.refresh(item)
     sync_item_to_search(item)
     return Message(message="Item added to community pool")
@@ -1155,15 +1345,16 @@ async def initiate_donation(
         raise HTTPException(status_code=404, detail="Item not found")
 
     statement = select(CommunityItem).where(
-        CommunityItem.community_id == id,
-        CommunityItem.item_id == item_id
+        CommunityItem.community_id == id, CommunityItem.item_id == item_id
     )
     comm_item = session.exec(statement).first()
     if not comm_item:
         raise HTTPException(status_code=404, detail="Item not found in community")
 
     if comm_item.added_by != current_user.id:
-        raise HTTPException(status_code=403, detail="Only the person who pooled the item can donate it")
+        raise HTTPException(
+            status_code=403, detail="Only the person who pooled the item can donate it"
+        )
 
     comm_item.is_donation_pending = True
     session.add(comm_item)
@@ -1176,7 +1367,7 @@ async def initiate_donation(
         .where(
             CommunityMember.community_id == id,
             CommunityMember.role == CommunityMemberRole.ADMIN,
-            CommunityMember.status == CommunityMemberStatus.ACCEPTED
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
         )
     )
     staff_results = session.exec(admin_statement).all()
@@ -1190,7 +1381,7 @@ async def initiate_donation(
             title="Item Donation Pending",
             message=f"{donor_name} wants to donate an item to the community.",
             type=NotificationType.INFO,
-            link=f"/communities/{id}?tab=items"
+            link=f"/communities/{id}?tab=items",
         )
         # Send email notification
         email_data = generate_donation_notification_email(
@@ -1198,12 +1389,12 @@ async def initiate_donation(
             donor_name=donor_name,
             item_title=item.title,
             community_name=community.name,
-            community_id=id
+            community_id=id,
         )
         send_email(
             email_to=user.email,
             subject=email_data.subject,
-            html_content=email_data.html_content
+            html_content=email_data.html_content,
         )
 
     return Message(message="Donation request sent to admins")
@@ -1211,7 +1402,12 @@ async def initiate_donation(
 
 @router.post("/{id}/items/{item_id}/ratify-donation", response_model=Message)
 async def ratify_donation(
-    *, session: SessionDep, current_user: CurrentUser, background_tasks: BackgroundTasks, id: uuid.UUID, item_id: uuid.UUID
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
+    id: uuid.UUID,
+    item_id: uuid.UUID,
 ) -> Any:
     """
     Ratify a donation (Admin only).
@@ -1221,7 +1417,7 @@ async def ratify_donation(
     statement = select(CommunityMember).where(
         CommunityMember.community_id == id,
         CommunityMember.user_id == current_user.id,
-        CommunityMember.role == CommunityMemberRole.ADMIN
+        CommunityMember.role == CommunityMemberRole.ADMIN,
     )
     community_admin = session.exec(statement).first()
     if not community_admin and not current_user.is_superuser:
@@ -1232,8 +1428,7 @@ async def ratify_donation(
         raise HTTPException(status_code=404, detail="Community not found")
 
     statement = select(CommunityItem).where(
-        CommunityItem.community_id == id,
-        CommunityItem.item_id == item_id
+        CommunityItem.community_id == id, CommunityItem.item_id == item_id
     )
     comm_item = session.exec(statement).first()
     if not comm_item or not comm_item.is_donation_pending:
@@ -1245,7 +1440,7 @@ async def ratify_donation(
         if admin_count > 1:
             raise HTTPException(
                 status_code=403,
-                detail="You cannot ratify your own donation when other admins are present"
+                detail="You cannot ratify your own donation when other admins are present",
             )
 
     item = session.get(Item, item_id)
@@ -1263,7 +1458,15 @@ async def ratify_donation(
     # Update active/pending loans to reflect new ownership (Community is now the lender)
     loans_stmt = select(Loan).where(
         Loan.item_id == item_id,
-        Loan.status.in_([LoanStatus.PENDING, LoanStatus.ACCEPTED, LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING, LoanStatus.EXTENSION_PENDING])
+        Loan.status.in_(
+            [
+                LoanStatus.PENDING,
+                LoanStatus.ACCEPTED,
+                LoanStatus.ACTIVE,
+                LoanStatus.RETURN_PENDING,
+                LoanStatus.EXTENSION_PENDING,
+            ]
+        ),
     )
     loans = session.exec(loans_stmt).all()
     for loan in loans:
@@ -1274,13 +1477,14 @@ async def ratify_donation(
     session.add(item)
     session.add(comm_item)
     session.commit()
-    
+
     # Update collection index for owner and pooled communities in background
     invalidate_item_caches(session, item_id, background_tasks)
     # Also update previous owner's index
     background_tasks.add_task(rebuild_collection_index_task, donor_id)
 
     from app.search import sync_item_to_search
+
     session.refresh(item)
     sync_item_to_search(item)
 
@@ -1291,7 +1495,7 @@ async def ratify_donation(
         title="Donation Ratified",
         message=f"Your donation of '{item.title}' to {community.name} has been ratified. Thank you!",
         type=NotificationType.SUCCESS,
-        link=f"/communities/{id}"
+        link=f"/communities/{id}",
     )
 
     return Message(message="Donation ratified! The community now owns this item.")
@@ -1299,7 +1503,12 @@ async def ratify_donation(
 
 @router.delete("/{id}/items/{item_id}", response_model=Message)
 def remove_item_from_community(
-    *, session: SessionDep, current_user: CurrentUser, background_tasks: BackgroundTasks, id: uuid.UUID, item_id: uuid.UUID
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
+    id: uuid.UUID,
+    item_id: uuid.UUID,
 ) -> Any:
     """
     Remove an item from a community.
@@ -1317,14 +1526,17 @@ def remove_item_from_community(
     )
     membership = session.exec(statement).first()
     if not membership and not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="Must be a member to manage community items")
+        raise HTTPException(
+            status_code=403, detail="Must be a member to manage community items"
+        )
 
-    is_admin = (membership and membership.role == CommunityMemberRole.ADMIN) or current_user.is_superuser
+    is_admin = (
+        membership and membership.role == CommunityMemberRole.ADMIN
+    ) or current_user.is_superuser
 
     # Try to find pooling meta
     statement = select(CommunityItem).where(
-        CommunityItem.community_id == id,
-        CommunityItem.item_id == item_id
+        CommunityItem.community_id == id, CommunityItem.item_id == item_id
     )
     comm_item = session.exec(statement).first()
 
@@ -1338,10 +1550,12 @@ def remove_item_from_community(
     # Permissions: Admin can remove anything. Members can only remove items they added.
     is_adder = comm_item and comm_item.added_by == current_user.id
     if not is_admin and not is_adder:
-        raise HTTPException(status_code=403, detail="Not enough permissions to remove this item")
+        raise HTTPException(
+            status_code=403, detail="Not enough permissions to remove this item"
+        )
 
     from app.search import delete_item_from_search, sync_item_to_search
-    
+
     # Update collection index for owner and pooled communities in background BEFORE deletion
     invalidate_item_caches(session, item_id, background_tasks)
 
@@ -1363,7 +1577,12 @@ def remove_item_from_community(
 
 @router.get("/{id}/announcements", response_model=CommunityAnnouncementsPublic)
 def read_community_announcements(
-    *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, skip: int = 0, limit: int = 100
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    skip: int = 0,
+    limit: int = 100,
 ) -> Any:
     """
     Get announcements for a community.
@@ -1380,7 +1599,9 @@ def read_community_announcements(
     )
     membership = session.exec(statement).first()
     if not membership and not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="Must be a member to view announcements")
+        raise HTTPException(
+            status_code=403, detail="Must be a member to view announcements"
+        )
 
     count = session.exec(
         select(func.count()).where(CommunityAnnouncement.community_id == id)
@@ -1415,17 +1636,19 @@ async def create_community_announcement(
     statement = select(CommunityMember).where(
         CommunityMember.community_id == id,
         CommunityMember.user_id == current_user.id,
-        CommunityMember.role.in_([CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]),
+        CommunityMember.role.in_(
+            [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]
+        ),
         CommunityMemberStatus.ACCEPTED,
     )
     membership = session.exec(statement).first()
     if not membership and not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="Only staff can create announcements")
+        raise HTTPException(
+            status_code=403, detail="Only staff can create announcements"
+        )
 
     announcement = CommunityAnnouncement(
-        **announcement_in.model_dump(),
-        community_id=id,
-        author_id=current_user.id
+        **announcement_in.model_dump(), community_id=id, author_id=current_user.id
     )
     session.add(announcement)
     session.commit()
@@ -1446,7 +1669,7 @@ async def create_community_announcement(
             title=f"New Announcement in {community.name}",
             message=announcement.title,
             type=NotificationType.INFO,
-            link=f"/communities/{id}"
+            link=f"/communities/{id}",
         )
 
     return announcement
@@ -1454,7 +1677,12 @@ async def create_community_announcement(
 
 @router.get("/{id}/messages", response_model=CommunityMessagesPublic)
 def read_community_messages(
-    *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, skip: int = 0, limit: int = 100
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    skip: int = 0,
+    limit: int = 100,
 ) -> Any:
     """
     Get messages for a community board.
@@ -1513,9 +1741,7 @@ def create_community_message(
         raise HTTPException(status_code=403, detail="Must be a member to post messages")
 
     message = CommunityMessage(
-        **message_in.model_dump(),
-        community_id=id,
-        author_id=current_user.id
+        **message_in.model_dump(), community_id=id, author_id=current_user.id
     )
     session.add(message)
     session.commit()
@@ -1540,7 +1766,9 @@ def update_community_message(
         raise HTTPException(status_code=404, detail="Message not found")
 
     if message.author_id != current_user.id and not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="Not enough permissions to edit this message")
+        raise HTTPException(
+            status_code=403, detail="Not enough permissions to edit this message"
+        )
 
     message.content = message_in.content
     session.add(message)
@@ -1569,11 +1797,13 @@ def delete_community_message(
     is_author = message.author_id == current_user.id
 
     my_membership_stmt = select(CommunityMember).where(
-        CommunityMember.community_id == id,
-        CommunityMember.user_id == current_user.id
+        CommunityMember.community_id == id, CommunityMember.user_id == current_user.id
     )
     my_membership = session.exec(my_membership_stmt).first()
-    is_staff = my_membership and my_membership.role in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]
+    is_staff = my_membership and my_membership.role in [
+        CommunityMemberRole.ADMIN,
+        CommunityMemberRole.MODERATOR,
+    ]
 
     if not is_author and not is_staff and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Not enough permissions")
@@ -1585,7 +1815,12 @@ def delete_community_message(
 
 @router.get("/{id}/loans", response_model=LoansPublic)
 def read_community_loans(
-    *, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, skip: int = 0, limit: int = 100
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    skip: int = 0,
+    limit: int = 100,
 ) -> Any:
     """
     Get loans for a community. Staff see all, members see their own.
@@ -1598,17 +1833,23 @@ def read_community_loans(
     my_membership_stmt = select(CommunityMember).where(
         CommunityMember.community_id == id,
         CommunityMember.user_id == current_user.id,
-        CommunityMember.status == CommunityMemberStatus.ACCEPTED
+        CommunityMember.status == CommunityMemberStatus.ACCEPTED,
     )
     my_membership = session.exec(my_membership_stmt).first()
-    
-    if not my_membership and not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="Must be a member to view community loans")
 
-    is_staff = current_user.is_superuser or (my_membership and my_membership.role in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR])
+    if not my_membership and not current_user.is_superuser:
+        raise HTTPException(
+            status_code=403, detail="Must be a member to view community loans"
+        )
+
+    is_staff = current_user.is_superuser or (
+        my_membership
+        and my_membership.role
+        in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]
+    )
 
     base_stmt = select(Loan).where(Loan.community_id == id)
-    
+
     if not is_staff:
         # Members only see their own loans in this community
         base_stmt = base_stmt.where(Loan.requester_id == current_user.id)
@@ -1616,14 +1857,14 @@ def read_community_loans(
     count_statement = select(func.count()).select_from(base_stmt.subquery())
     count = session.exec(count_statement).one()
 
-    statement = (
-        base_stmt
-        .order_by(Loan.created_at.desc())
-        .offset(skip)
-        .limit(limit)
-    )
+    statement = base_stmt.order_by(Loan.created_at.desc()).offset(skip).limit(limit)
     loans = session.exec(statement).all()
     return LoansPublic(
-        data=[filter_loan_privacy(l, current_user.id, is_admin=current_user.is_superuser, session=session) for l in loans],
-        count=count
+        data=[
+            filter_loan_privacy(
+                l, current_user.id, is_admin=current_user.is_superuser, session=session
+            )
+            for l in loans
+        ],
+        count=count,
     )

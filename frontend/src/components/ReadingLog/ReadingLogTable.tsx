@@ -31,16 +31,8 @@ import {
   ReadingLogService,
   type ReadingLogStatus,
 } from "@/client"
-import ItemExtendedInfo from "@/components/Items/ItemExtendedInfo"
+import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
 import { useColorModeValue } from "@/components/ui/color-mode"
-import {
-  DialogBody,
-  DialogCloseTrigger,
-  DialogContent,
-  DialogHeader,
-  DialogRoot,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import {
   MenuContent,
   MenuItem,
@@ -61,7 +53,7 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const [selectedLog, setSelectedLog] = useState<ReadingLogPublic | null>(null)
-  const [isInfoOpen, setIsInfoOpen] = useState(false)
+  const [isDetailOpen, setIsDetailOpen] = useState(false)
 
   const bgColor = useColorModeValue("main.50", "gray.900")
   const borderColor = useColorModeValue("main.200", "gray.700")
@@ -114,9 +106,9 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
     onError: () => showErrorToast("Failed to remove entry"),
   })
 
-  const handleOpenInfo = (log: ReadingLogPublic) => {
+  const handleOpenDetail = (log: ReadingLogPublic) => {
     setSelectedLog(log)
-    setIsInfoOpen(true)
+    setIsDetailOpen(true)
   }
 
   const allLogs = useMemo(
@@ -140,6 +132,24 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
       </Box>
     )
   }
+
+  const selectedItem = useMemo(() => {
+    if (!selectedLog) return null
+    return {
+      ...selectedLog,
+      item_type: "book",
+      description: selectedLog.work_metadata?.description || "",
+      isbn: selectedLog.work_metadata?.isbn,
+      category: selectedLog.work_metadata?.category,
+      genre: selectedLog.work_metadata?.genre,
+      extra_data: {},
+      info: {},
+      id: selectedLog.id,
+      owner_id: selectedLog.user_id,
+      count: 1,
+      created_at: selectedLog.created_at.toString(),
+    } as any
+  }, [selectedLog])
 
   return (
     <>
@@ -221,7 +231,7 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
                             variant="ghost"
                             size="xs"
                             aria-label="View Info"
-                            onClick={() => handleOpenInfo(log)}
+                            onClick={() => handleOpenDetail(log)}
                             colorPalette="main"
                           >
                             <FiInfo size="14px" />
@@ -232,7 +242,7 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
                             variant="ghost"
                             size="xs"
                             aria-label="View Details"
-                            onClick={() => handleOpenInfo(log)}
+                            onClick={() => handleOpenDetail(log)}
                             colorPalette="main"
                           >
                             <FiMaximize2 size="14px" />
@@ -286,7 +296,7 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
                       </MenuTrigger>
                       <MenuContent>
                         <MenuItem
-                          onClick={() => handleOpenInfo(log)}
+                          onClick={() => handleOpenDetail(log)}
                           value="info"
                         >
                           <FiBookOpen style={{ marginRight: "8px" }} /> Review /
@@ -366,38 +376,11 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
         )}
       </VStack>
 
-      <DialogRoot
-        open={isInfoOpen}
-        onOpenChange={(e) => setIsInfoOpen(e.open)}
-        placement="center"
-        size="lg"
-        scrollBehavior="inside"
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{selectedLog?.title}</DialogTitle>
-          </DialogHeader>
-          <DialogBody>
-            {selectedLog && (
-              <ItemExtendedInfo
-                item={
-                  {
-                    ...selectedLog,
-                    info: {},
-                    id: selectedLog.id,
-                    owner_id: selectedLog.user_id,
-                    count: 1,
-                    created_at: selectedLog.created_at.toString(),
-                  } as any
-                }
-                isOwner={false}
-                showAddReview={true}
-              />
-            )}
-          </DialogBody>
-          <DialogCloseTrigger />
-        </DialogContent>
-      </DialogRoot>
+      <ItemDetailModal
+        item={selectedItem}
+        isOpen={isDetailOpen}
+        onClose={() => setIsDetailOpen(false)}
+      />
     </>
   )
 }

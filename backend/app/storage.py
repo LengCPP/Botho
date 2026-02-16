@@ -29,7 +29,7 @@ def upload_image(file_data: bytes, file_name: str, folder: str = "item-images") 
         ext = "png"
         if file_name and "." in file_name:
             ext = file_name.split(".")[-1].lower()
-        
+
         unique_name = f"{uuid.uuid4()}.{ext}"
         file_path = f"{folder}/{unique_name}"
         data = BytesIO(file_data)

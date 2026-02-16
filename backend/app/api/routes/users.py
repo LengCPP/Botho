@@ -17,9 +17,6 @@ from app.core.config import settings
 from app.core.security import get_password_hash, verify_password
 from app.models import (
     CommunityItem,
-    CommunityMember,
-    CommunityMemberRole,
-    CommunityMemberStatus,
     Contribution,
     ForgivenessReason,
     Friendship,
@@ -62,12 +59,12 @@ def calculate_honor_score(session: Session, user: User) -> dict[str, Any]:
     returned_count = session.exec(
         select(func.count()).select_from(Loan).where(Loan.requester_id == user.id, Loan.status == LoanStatus.RETURNED)
     ).one()
-    
+
     # Only count defaults that are NOT forgiven, OR forgiven for "OTHER" reasons
     # (GOOD_REASON, FOUND_AND_RETURNED, REPLACED_ITEM clear the penalty)
     defaulted_count = session.exec(
         select(func.count()).select_from(Loan).where(
-            Loan.requester_id == user.id, 
+            Loan.requester_id == user.id,
             Loan.status == LoanStatus.DEFAULTED,
             or_(
                 Loan.is_forgiven == False,
@@ -75,75 +72,75 @@ def calculate_honor_score(session: Session, user: User) -> dict[str, Any]:
             )
         )
     ).one()
-    
+
     total_returned_or_penalized_default = returned_count + defaulted_count
-    
+
     default_penalty = 0
     if total_returned_or_penalized_default > 0:
         # Penalty is proportional to default rate, capped at -100
         default_penalty = (defaulted_count / total_returned_or_penalized_default) * -100
-        
+
     # 2. Community Pooling: (pooled / owned) * 15 (capped at 6 items)
     owned_count = session.exec(
         select(func.count()).select_from(Item).where(Item.owner_id == user.id)
     ).one()
-    
+
     pooled_count = session.exec(
         select(func.count()).select_from(CommunityItem).where(CommunityItem.added_by == user.id)
     ).one()
-    
+
     pooling_bonus = 15 # Baseline: full points if no items owned yet
     if owned_count > 0:
         # Bonus based on what percentage of your (up to 6) items you share
         denominator = min(owned_count, 6)
         numerator = min(pooled_count, denominator)
         pooling_bonus = (numerator / denominator) * 15
-        
+
     # 3. Book Reviews: (reviews / borrowed) * 15 (capped at 1:1)
     borrowed_count = session.exec(
         select(func.count()).select_from(Loan).where(Loan.requester_id == user.id, Loan.status.in_([LoanStatus.RETURNED, LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING, LoanStatus.DEFAULTED]))
     ).one()
-    
+
     reviews_count = session.exec(
         select(func.count()).select_from(ItemReview).where(ItemReview.user_id == user.id)
     ).one()
-    
+
     review_bonus = 15 # Baseline: full points if never borrowed anything
     if borrowed_count > 0:
         review_bonus = (min(reviews_count, borrowed_count) / borrowed_count) * 15
-        
+
     # 4. Approval Rate: (approved / received) * 10
     received_count = session.exec(
         select(func.count()).select_from(Loan).where(Loan.owner_id == user.id)
     ).one()
-    
+
     # Exclude cancelled/pending from approval calculation to be fair
     decided_stmt = select(func.count()).select_from(Loan).where(
         Loan.owner_id == user.id,
         Loan.status.in_([LoanStatus.ACCEPTED, LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING, LoanStatus.RETURNED, LoanStatus.REJECTED, LoanStatus.DEFAULTED])
     )
     decided_count = session.exec(decided_stmt).one()
-    
+
     approved_count = session.exec(
         select(func.count()).select_from(Loan).where(
             Loan.owner_id == user.id,
             Loan.status.in_([LoanStatus.ACCEPTED, LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING, LoanStatus.RETURNED])
         )
     ).one()
-    
+
     approval_bonus = 10 # Baseline: full points if never received a request
     if decided_count > 0:
         approval_bonus = (approved_count / decided_count) * 10
-        
+
     # 5. Spec Updates: (contributions / borrowed) * 10 (clamped 1:1)
     updates_count = session.exec(
         select(func.count()).select_from(Contribution).where(Contribution.user_id == user.id)
     ).one()
-    
+
     updates_bonus = 10 # Baseline: full points if never borrowed
     if borrowed_count > 0:
         updates_bonus = (min(updates_count, borrowed_count) / borrowed_count) * 10
-        
+
     # 6. Average Rating from Lenders: (avg_rating / 5) * 25
     ratings_stmt = select(func.avg(UserReview.rating)).where(
         UserReview.reviewee_id == user.id,
@@ -153,7 +150,7 @@ def calculate_honor_score(session: Session, user: User) -> dict[str, Any]:
     rating_bonus = (float(avg_rating) / 5.0) * 25
     if not avg_rating:
         rating_bonus = 25 # Start with full trust until rated poorly
-    
+
     # 7. Punctuality: (on_time / total_returned) * 25
     on_time_count = session.exec(
         select(func.count()).select_from(Loan).where(
@@ -162,13 +159,13 @@ def calculate_honor_score(session: Session, user: User) -> dict[str, Any]:
             Loan.returned_at <= Loan.end_date
         )
     ).one()
-    
+
     punctuality_bonus = 0
     if returned_count > 0:
         punctuality_bonus = (on_time_count / returned_count) * 25
     else:
         punctuality_bonus = 25 # Perfect punctuality if never borrowed
-        
+
     # 8. Overdue Penalty: -15 per item currently past end_date
     overdue_count = session.exec(
         select(func.count()).select_from(Loan).where(
@@ -177,13 +174,13 @@ def calculate_honor_score(session: Session, user: User) -> dict[str, Any]:
             Loan.end_date < datetime.now(timezone.utc)
         )
     ).one()
-    
+
     overdue_penalty = overdue_count * -15
-    
+
     # Final Score Calculation
     total_score = default_penalty + pooling_bonus + review_bonus + approval_bonus + updates_bonus + rating_bonus + punctuality_bonus + overdue_penalty
     final_score = max(0.0, min(100.0, total_score))
-    
+
     # Delinquent if any un-forgiven defaults OR significantly overdue (e.g. > 7 days)
     unforgiven_defaults = session.exec(
         select(func.count()).select_from(Loan).where(
@@ -192,7 +189,7 @@ def calculate_honor_score(session: Session, user: User) -> dict[str, Any]:
             Loan.is_forgiven == False
         )
     ).one()
-    
+
     return {
         "honor_score": round(final_score, 2),
         "is_delinquent": unforgiven_defaults > 0,
@@ -565,7 +562,7 @@ def read_user_reputation_me(session: SessionDep, current_user: CurrentUser) -> A
     current_user.is_delinquent = score_data["is_delinquent"]
     session.add(current_user)
     session.commit()
-    
+
     # Ensure ai_honor_summary is a string if it's stored as JSON
     summary = current_user.ai_honor_summary
     if isinstance(summary, dict):

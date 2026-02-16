@@ -564,6 +564,10 @@ class ItemBase(SQLModel):
     author: str | None = Field(default=None, max_length=255)
     item_type: ItemType = Field(default=ItemType.general)
     image_url: str | None = Field(default=None, max_length=512)
+    isbn: str | None = Field(default=None, max_length=20, index=True)
+    category: str | None = Field(default=None, max_length=255)
+    genre: str | None = Field(default=None, max_length=255)
+    subject: str | None = Field(default=None, max_length=512)
     extra_data: dict[str, Any] | None = Field(default={}, sa_column=Column(JSON))
     info: dict[str, Any] | None = Field(default={}, sa_column=Column(JSON)) # physical_description, grade (1-10)
     is_lost: bool = Field(default=False)
@@ -792,10 +796,6 @@ class ItemPublic(ItemBase):
     is_donation_pending: bool = False
     work_metadata: WorkMetadataPublic | None = None
     had_possession: bool = False
-    # Convenient classification fields (mirrored from extra_data or work_metadata)
-    category: str | None = None
-    genre: str | None = None
-    subject: str | None = None
 
 
 class ItemMinimal(SQLModel):
@@ -806,6 +806,9 @@ class ItemMinimal(SQLModel):
     author: str | None = None
     item_type: ItemType
     image_url: str | None = None
+    category: str | None = None
+    genre: str | None = None
+    subject: str | None = None
     count: int
     created_at: datetime
     is_available: bool = True
@@ -815,10 +818,6 @@ class ItemMinimal(SQLModel):
     is_lost: bool = False
     is_private: bool = False
     owner_name: str | None = None
-    # Minimal metadata for classification in grid
-    category: str | None = None
-    genre: str | None = None
-    subject: str | None = None
 
 
 class BookPublic(ItemPublic):

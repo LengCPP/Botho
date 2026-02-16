@@ -219,7 +219,7 @@ def test_loan_forgiveness_flow(
     requester = crud.get_user_by_email(session=db, email=user_email)
     requester.is_verified = True
     db.add(requester)
-    
+
     from app.models import Friendship, FriendshipStatus
     db.add(Friendship(user_id=requester.id, friend_id=superuser.id, status=FriendshipStatus.ACCEPTED))
     db.commit()

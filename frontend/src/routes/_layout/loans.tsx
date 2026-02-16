@@ -192,7 +192,11 @@ function LoansPage() {
     const now = Date.now()
 
     const unreviewed = outgoing.data.find((l) => {
-      if (l.status !== "RETURNED" || l.has_review || seenReviewLoans.has(l.id)) {
+      if (
+        l.status !== "RETURNED" ||
+        l.has_review ||
+        seenReviewLoans.has(l.id)
+      ) {
         return false
       }
 

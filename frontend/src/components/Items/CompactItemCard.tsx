@@ -184,6 +184,8 @@ export const CompactItemCard = ({
   }
 
   const category = item.work_metadata?.category || (item as any).category
+  const info = (item.info as any) || {}
+  const condition = Number(info.average_condition_grade || info.grade || 0)
 
   return (
     <Box
@@ -240,9 +242,22 @@ export const CompactItemCard = ({
 
         <VStack align="start" gap={0} flex={1} overflow="hidden">
           <HStack width="full" justify="space-between" align="baseline">
-            <Text fontSize="sm" fontWeight="bold" lineClamp={1} flex={1}>
-              {item.title}
-            </Text>
+            <HStack gap={2} flex={1} minW={0}>
+              <Text fontSize="sm" fontWeight="bold" lineClamp={1}>
+                {item.title}
+              </Text>
+              {condition > 0 && (
+                <Badge
+                  size="xs"
+                  variant="subtle"
+                  colorPalette={
+                    condition >= 8 ? "green" : condition >= 5 ? "yellow" : "red"
+                  }
+                >
+                  {condition}/10
+                </Badge>
+              )}
+            </HStack>
             {category && (
               <Badge size="xs" colorPalette="blue" variant="subtle">
                 {category}

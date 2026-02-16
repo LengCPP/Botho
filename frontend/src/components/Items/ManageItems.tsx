@@ -22,18 +22,20 @@ import {
 import React, { useCallback, useMemo, useState } from "react"
 import {
   FiArchive,
-  FiFilePlus,
-  FiRefreshCw,
-  FiTrash2,
   FiEye,
   FiEyeOff,
+  FiFilePlus,
   FiMapPin,
+  FiMaximize2,
+  FiRefreshCw,
+  FiTrash2,
   FiZap,
 } from "react-icons/fi"
 
-import { ItemsService, type ItemPublic } from "@/client"
+import { type ItemPublic, ItemsService } from "@/client"
 import { ImportItems } from "@/components/Common/ImportItems"
 import useCustomToast from "@/hooks/useCustomToast"
+import { ItemDetailModal } from "./ItemDetailModal"
 
 interface ManageItemsProps {
   ownerId: string
@@ -48,6 +50,7 @@ const ItemRow = React.memo(
     onDelete,
     onMarkLost,
     onTogglePrivate,
+    onView,
     isProcessing,
   }: {
     item: ItemPublic
@@ -56,8 +59,13 @@ const ItemRow = React.memo(
     onDelete: (id: string) => void
     onMarkLost: (id: string) => void
     onTogglePrivate: (id: string) => void
+    onView: (item: ItemPublic) => void
     isProcessing: boolean
   }) => {
+    const info = (item.info as any) || {}
+    const condition = Number(info.average_condition_grade || info.grade || 0)
+    const physicalNotes = info.physical_notes || []
+
     return (
       <Table.Row bg={isSelected ? "bg.subtle" : undefined} verticalAlign="top">
         <Table.Cell>
@@ -86,6 +94,24 @@ const ItemRow = React.memo(
             <Text fontSize="xs" color="fg.muted">
               {item.author}
             </Text>
+            {condition > 0 && (
+              <HStack gap={1} mt={1}>
+                <Badge
+                  size="xs"
+                  variant="subtle"
+                  colorPalette={
+                    condition >= 8 ? "green" : condition >= 5 ? "yellow" : "red"
+                  }
+                >
+                  Cond: {condition}/10
+                </Badge>
+                {physicalNotes.length > 0 && (
+                  <Text fontSize="2xs" color="fg.subtle" lineClamp={1}>
+                    • {physicalNotes[0]}
+                  </Text>
+                )}
+              </HStack>
+            )}
           </VStack>
         </Table.Cell>
         <Table.Cell>
@@ -102,6 +128,14 @@ const ItemRow = React.memo(
         </Table.Cell>
         <Table.Cell>
           <HStack gap={2}>
+            <IconButton
+              size="xs"
+              variant="ghost"
+              onClick={() => onView(item)}
+              title="View Details"
+            >
+              <FiMaximize2 />
+            </IconButton>
             <IconButton
               size="xs"
               variant="ghost"
@@ -147,6 +181,7 @@ export const ManageItems: React.FC<ManageItemsProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState("catalogue")
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [viewItem, setViewItem] = useState<ItemPublic | null>(null)
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const queryClient = useQueryClient()
 
@@ -278,7 +313,10 @@ export const ManageItems: React.FC<ManageItemsProps> = ({
         </Tabs.List>
 
         <Tabs.Content value="bulk" pt={6}>
-          <ImportItems communityId={communityId} onBack={() => setActiveTab("catalogue")} />
+          <ImportItems
+            communityId={communityId}
+            onBack={() => setActiveTab("catalogue")}
+          />
         </Tabs.Content>
 
         {activeTab !== "bulk" && (
@@ -337,14 +375,20 @@ export const ManageItems: React.FC<ManageItemsProps> = ({
                 </IconButton>
               </Flex>
 
-              <Box overflowX="auto" border="1px solid" borderColor="border.subtle" borderRadius="md">
+              <Box
+                overflowX="auto"
+                border="1px solid"
+                borderColor="border.subtle"
+                borderRadius="md"
+              >
                 <Table.Root size="sm">
                   <Table.Header>
                     <Table.Row>
                       <Table.ColumnHeader w="40px">
                         <Checkbox
                           checked={
-                            items.length > 0 && selectedIds.length === items.length
+                            items.length > 0 &&
+                            selectedIds.length === items.length
                           }
                           onCheckedChange={(e) => toggleSelectAll(!!e.checked)}
                         />
@@ -364,7 +408,10 @@ export const ManageItems: React.FC<ManageItemsProps> = ({
                         onSelect={(checked) => toggleSelect(item.id, checked)}
                         onDelete={(id) => batchDeleteMutation.mutate([id])}
                         onMarkLost={(id) => batchLostMutation.mutate([id])}
-                        onTogglePrivate={(id) => batchPrivateMutation.mutate([id])}
+                        onTogglePrivate={(id) =>
+                          batchPrivateMutation.mutate([id])
+                        }
+                        onView={(i) => setViewItem(i)}
                         isProcessing={isProcessing}
                       />
                     ))}
@@ -385,6 +432,12 @@ export const ManageItems: React.FC<ManageItemsProps> = ({
           </Tabs.Content>
         )}
       </Tabs.Root>
+
+      <ItemDetailModal
+        item={viewItem}
+        isOpen={!!viewItem}
+        onClose={() => setViewItem(null)}
+      />
     </VStack>
   )
 }

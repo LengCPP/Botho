@@ -1,5 +1,5 @@
-import uuid
 from datetime import datetime, timedelta, timezone
+
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
@@ -7,18 +7,16 @@ from app import crud
 from app.core.config import settings
 from app.models import (
     Community,
-    CommunityItem,
     CommunityMember,
     CommunityMemberRole,
     CommunityMemberStatus,
     Item,
     ItemType,
-    LoanStatus,
     Notification,
     User,
-    UserCreate,
 )
 from app.tests.utils.utils import random_email, random_lower_string
+
 
 def get_token_headers(client: TestClient, email: str, password: str) -> dict[str, str]:
     login_data = {

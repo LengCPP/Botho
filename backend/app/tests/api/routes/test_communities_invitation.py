@@ -1,20 +1,22 @@
 import random
 import string
 import uuid
+
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from app import crud
 from app.core.config import settings
 from app.models import (
-    CommunityCreate, 
-    CommunityMemberRole, 
-    CommunityMemberStatus, 
-    UserCreate,
+    CommunityCreate,
+    CommunityMember,
+    CommunityMemberRole,
+    CommunityMemberStatus,
     Friendship,
     FriendshipStatus,
-    CommunityMember
+    UserCreate,
 )
+
 
 def random_lower_string() -> str:
     return "".join(random.choices(string.ascii_lowercase, k=32))
@@ -62,8 +64,8 @@ def test_community_invitation_staff_flow(client: TestClient, db: Session) -> Non
 
     # 5. Staff invites User
     client.post(
-        f"{settings.API_V1_STR}/communities/{community_id}/invite", 
-        headers=admin_headers, 
+        f"{settings.API_V1_STR}/communities/{community_id}/invite",
+        headers=admin_headers,
         json={"friend_id": str(invitee_id)}
     )
 
@@ -97,7 +99,7 @@ def test_community_invitation_member_referral_flow(client: TestClient, db: Sessi
     member_email, member_pass, member_id = create_verified_user(db)
     member_headers = get_user_headers(client, db, member_email, member_pass)
     client.post(f"{settings.API_V1_STR}/communities/{community_id}/join", headers=member_headers)
-    
+
     # 3. Create Invitee
     invitee_email, invitee_pass, invitee_id = create_verified_user(db)
     invitee_headers = get_user_headers(client, db, invitee_email, invitee_pass)
@@ -109,8 +111,8 @@ def test_community_invitation_member_referral_flow(client: TestClient, db: Sessi
 
     # 5. Member invites User (Referral)
     client.post(
-        f"{settings.API_V1_STR}/communities/{community_id}/invite", 
-        headers=member_headers, 
+        f"{settings.API_V1_STR}/communities/{community_id}/invite",
+        headers=member_headers,
         json={"friend_id": str(invitee_id)}
     )
 

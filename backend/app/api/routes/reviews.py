@@ -149,7 +149,11 @@ async def create_review(
         role_reviewed = UserRoleReviewed.OWNER
     elif loan.community_id:
         # Check if current user is an admin of the community
-        from app.models import CommunityMember, CommunityMemberRole, CommunityMemberStatus
+        from app.models import (
+            CommunityMember,
+            CommunityMemberRole,
+            CommunityMemberStatus,
+        )
         is_admin = session.exec(
             select(CommunityMember).where(
                 CommunityMember.community_id == loan.community_id,
@@ -158,12 +162,12 @@ async def create_review(
                 CommunityMember.status == CommunityMemberStatus.ACCEPTED
             )
         ).first() is not None
-        
+
         if is_admin:
             # Admins review the borrower
             reviewee_id = loan.requester_id
             role_reviewed = UserRoleReviewed.BORROWER
-            
+
             # Prevent self-review (admin is the borrower)
             if reviewee_id == current_user.id:
                 raise HTTPException(
@@ -259,14 +263,14 @@ async def update_user_metrics(user_id: uuid.UUID, session: Session) -> None:
     avg_rating = session.exec(
         select(func.avg(UserReview.rating)).where(UserReview.reviewee_id == user_id)
     ).one()
-    
+
     ratings_score = 50.0 # Default if no reviews (Trust by default)
     if avg_rating is not None:
         # Scale 1.0-5.0 average rating to 0-50 points.
         ratings_score = (float(avg_rating) / 5) * 50
 
     # 2. Community Interactions (Max 50 points total)
-    
+
     # 2a. Punctuality (Max 20 points)
     reliability_rate = 100.0
     if completed_borrows > 0:
@@ -278,7 +282,7 @@ async def update_user_metrics(user_id: uuid.UUID, session: Session) -> None:
             )
         ).one()
         reliability_rate = (returned_on_time / completed_borrows) * 100
-    
+
     user.reliability_rate = reliability_rate
     punctuality_score = (reliability_rate / 100) * 20
 

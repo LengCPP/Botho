@@ -23,6 +23,7 @@ from app.models import (
     WorkMetadata,
 )
 
+
 def _update_collection_index_logic(session: Session, owner_id: uuid.UUID):
     """
     Internal logic to update the collection_index for a user or community.
@@ -30,12 +31,12 @@ def _update_collection_index_logic(session: Session, owner_id: uuid.UUID):
     """
     import logging
     logger = logging.getLogger(__name__)
-    
+
     user = session.get(User, owner_id)
     community = None
     if not user:
         community = session.get(Community, owner_id)
-    
+
     if not user and not community:
         logger.warning(f"Owner {owner_id} not found for index update.")
         return
@@ -50,19 +51,6 @@ def _update_collection_index_logic(session: Session, owner_id: uuid.UUID):
     else:
         items = session.exec(select(Item).where(Item.owner_id == owner_id)).all()
         logger.info(f"Rebuilding index for user {owner_id}, found {len(items)} items.")
-    
-    # Pre-fetch work metadata for subjects (tags)
-    work_keys = {(item.author, item.title) for item in items if item.author and item.title}
-    work_meta_map = {}
-    if work_keys:
-        from sqlalchemy import tuple_
-        work_metas = session.exec(
-            select(WorkMetadata).where(
-                tuple_(WorkMetadata.author, WorkMetadata.title).in_(list(work_keys))
-            )
-        ).all()
-        for wm in work_metas:
-            work_meta_map[(wm.author, wm.title)] = wm
 
     index = {
         "total": len(items),
@@ -94,10 +82,9 @@ def _update_collection_index_logic(session: Session, owner_id: uuid.UUID):
             if item.image_url not in index["author"][author]["sample_images"]:
                 index["author"][author]["sample_images"].append(item.image_url)
 
-        # 2. Category & Genre
-        extra = item.extra_data or {}
-        category = extra.get("category") or "Others"
-        genre = extra.get("genre") or "Others"
+        # 2. Category & Genre (Top-level fields)
+        category = item.category or "Others"
+        genre = item.genre or "Others"
 
         if category not in index["category"]:
             index["category"][category] = {"count": 0, "sample_images": []}
@@ -113,12 +100,11 @@ def _update_collection_index_logic(session: Session, owner_id: uuid.UUID):
             if item.image_url not in index["genre"][genre]["sample_images"]:
                 index["genre"][genre]["sample_images"].append(item.image_url)
 
-        # 3. Subject (Tags)
-        meta = work_meta_map.get((item.author, item.title))
-        tags = meta.tags if meta and meta.tags else []
+        # 3. Subject (Tags) - Top-level field
+        tags = [s.strip() for s in item.subject.split(",")] if item.subject else []
         if not tags:
             tags = ["Others"]
-        
+
         for tag in tags:
             if tag not in index["subject"]:
                 index["subject"][tag] = {"count": 0, "sample_images": []}
@@ -143,7 +129,7 @@ def _update_collection_index_logic(session: Session, owner_id: uuid.UUID):
     elif community:
         community.collection_index = index
         session.add(community)
-    
+
     session.commit()
     logger.info(f"Successfully updated collection index for {owner_id}")
 
@@ -158,7 +144,7 @@ def invalidate_item_caches(session: Session, item_id: uuid.UUID, background_task
     """
     Trigger index rebuild for the item owner and all communities it is pooled in.
     """
-    from app.models import Item, CommunityItem
+    from app.models import CommunityItem, Item
     item = session.get(Item, item_id)
     if not item:
         return
@@ -188,38 +174,34 @@ def rebuild_collection_index_task(owner_id: uuid.UUID):
 
 async def maintenance_bulk_classify(user_id: uuid.UUID):
     """Background task to classify all books and clean up polluted ISBNs."""
-    from app.ai import classify_book
-    from app.search import sync_item_to_search
-    from app.core.db import engine
-    from app.api.websocket_manager import notification_manager
     import logging
+
+    from app.api.websocket_manager import notification_manager
+    from app.core.db import engine
+    from app.search import sync_item_to_search
 
     logger = logging.getLogger(__name__)
     logger.info("Starting maintenance bulk classification and cleanup...")
     print("DEBUG: Starting maintenance bulk classification and cleanup...")
 
     with Session(engine) as session:
-        # 1. Clean up polluted ISBNs in Item extra_data and WorkMetadata
-        # Some ISBNs are stored as "[]" or empty strings
+        # 1. Clean up polluted ISBNs in Item and WorkMetadata
         items_to_fix = session.exec(select(Item).where(Item.item_type == ItemType.book)).all()
         fixed_items = 0
         for item in items_to_fix:
-            extra = item.extra_data or {}
-            isbn = extra.get("isbn")
-            if isbn == "[]" or isbn == "" or isbn == []:
-                extra["isbn"] = None
-                item.extra_data = extra
+            if item.isbn in ["[]", "", []]:
+                item.isbn = None
                 session.add(item)
                 fixed_items += 1
-        
+
         works_to_fix = session.exec(select(WorkMetadata)).all()
         fixed_works = 0
         for work in works_to_fix:
-            if work.isbn == "[]" or work.isbn == "" or work.isbn == []:
+            if work.isbn in ["[]", "", []]:
                 work.isbn = None
                 session.add(work)
                 fixed_works += 1
-        
+
         session.flush()
         logger.info(f"ISBN Cleanup: Fixed {fixed_items} items and {fixed_works} work metadata entries.")
         print(f"DEBUG: ISBN Cleanup: Fixed {fixed_items} items and {fixed_works} work metadata entries.")
@@ -227,15 +209,14 @@ async def maintenance_bulk_classify(user_id: uuid.UUID):
         # 2. Bulk Classify
         statement = select(Item).where(Item.item_type == ItemType.book)
         books = session.exec(statement).all()
-        
+
         books_to_classify = []
         books_objects = []
-        
+
         for book in books:
-            extra = book.extra_data or {}
             # Re-classify if generic or missing
-            is_generic = extra.get("category") in ["Fiction", "Non-Fiction", None] or extra.get("genre") is None
-            
+            is_generic = book.category in ["Fiction", "Non-Fiction", None] or book.genre is None
+
             if is_generic:
                 books_to_classify.append({
                     "title": book.title,
@@ -246,44 +227,42 @@ async def maintenance_bulk_classify(user_id: uuid.UUID):
 
         classified_count = 0
         from app.ai import classify_books
-        
+
         # Process in chunks of 10 for RPM efficiency
         CHUNK_SIZE = 10
         for i in range(0, len(books_to_classify), CHUNK_SIZE):
             chunk = books_to_classify[i:i + CHUNK_SIZE]
             chunk_objs = books_objects[i:i + CHUNK_SIZE]
-            
+
             logger.info(f"Classifying chunk {i//CHUNK_SIZE + 1} ({len(chunk)} books)...")
             print(f"DEBUG: Classifying chunk {i//CHUNK_SIZE + 1} ({len(chunk)} books)...")
-            
+
             results = await classify_books(chunk)
-            
+
             for book, res in zip(chunk_objs, results):
                 if not res: continue
                 cat, gen, sub = res
-                
-                extra = book.extra_data or {}
-                if cat: extra["category"] = cat
-                if gen: extra["genre"] = gen
-                if sub: extra["subject"] = sub
-                book.extra_data = extra
+
+                if cat: book.category = cat
+                if gen: book.genre = gen
+                if sub: book.subject = sub
                 session.add(book)
                 session.flush()
                 sync_item_to_search(book)
-                
+
                 # Convert subjects string to tags list
                 tags = [s.strip() for s in sub.split(",")] if sub else []
-                
+
                 # Ensure WorkMetadata also gets updated
                 ensure_work_metadata(session, book.author, book.title, category=cat, genre=gen, tags=tags)
                 classified_count += 1
-            
+
             await asyncio.sleep(4.0) # Safer throttle for Gemini free tier (15 RPM)
-        
+
         session.commit()
         logger.info(f"Maintenance complete: Classified {classified_count} books.")
         print(f"DEBUG: Maintenance complete: Classified {classified_count} books.")
-        
+
         # Notify user
         await notification_manager.send_personal_message(
             {"type": "BOOK_ARCHIVE_UPDATED", "count": classified_count, "action": "classified"},
@@ -295,11 +274,12 @@ async def ai_classify_specific_books(
     user_id: uuid.UUID
 ):
     """Administrative task to trigger AI classification for specific books in the registry."""
-    from app.ai import classify_books
-    from app.search import sync_item_to_search
-    from app.core.db import engine
-    from app.api.websocket_manager import notification_manager
     import logging
+
+    from app.ai import classify_books
+    from app.api.websocket_manager import notification_manager
+    from app.core.db import engine
+    from app.search import sync_item_to_search
 
     logger = logging.getLogger(__name__)
     logger.info(f"Starting AI classification for {len(books_to_classify)} specific books...")
@@ -307,14 +287,14 @@ async def ai_classify_specific_books(
     with Session(engine) as session:
         books_data = []
         books_meta_objs = []
-        
+
         for b in books_to_classify:
             author, title = b.get("author"), b.get("title")
             if not author or not title: continue
-            
+
             meta = session.get(WorkMetadata, (author, title))
             if not meta: continue
-            
+
             books_data.append({
                 "title": title,
                 "author": author,
@@ -327,36 +307,34 @@ async def ai_classify_specific_books(
         for i in range(0, len(books_data), CHUNK_SIZE):
             chunk = books_data[i:i + CHUNK_SIZE]
             chunk_metas = books_meta_objs[i:i + CHUNK_SIZE]
-            
+
             results = await classify_books(chunk)
-            
+
             for meta, res in zip(chunk_metas, results):
                 if not res: continue
                 cat, gen, sub = res
-                
+
                 if cat: meta.category = cat
                 if gen: meta.genre = gen
                 if sub: meta.tags = [s.strip() for s in sub.split(",")]
-                
+
                 session.add(meta)
                 session.flush()
-                
+
                 # Also sync items that use this metadata
                 items = session.exec(select(Item).where(Item.author == meta.author, Item.title == meta.title)).all()
                 for item in items:
-                    extra = item.extra_data or {}
-                    if cat: extra["category"] = cat
-                    if gen: extra["genre"] = gen
-                    if sub: extra["subject"] = sub
-                    item.extra_data = extra
+                    if cat: item.category = cat
+                    if gen: item.genre = gen
+                    if sub: item.subject = sub
                     session.add(item)
                     sync_item_to_search(item)
-                
+
                 classified_count += 1
-            
+
             if i + CHUNK_SIZE < len(books_data):
                 await asyncio.sleep(4.0)
-        
+
         session.commit()
         await notification_manager.send_personal_message(
             {"type": "BOOK_ARCHIVE_UPDATED", "count": classified_count, "action": "ai_classified"},
@@ -364,15 +342,16 @@ async def ai_classify_specific_books(
         )
 
 async def fetch_external_book_metadata(
-    author: str, 
-    title: str, 
-    isbn: str | None = None, 
+    author: str,
+    title: str,
+    isbn: str | None = None,
     source_api: str = "auto"
 ) -> tuple[dict | None, dict | None]:
     """Consolidated helper to fetch metadata from Google Books and OpenLibrary."""
     import httpx
+
     from app.core.config import settings
-    
+
     google_data = None
     open_library_data = None
     clean_isbn = "".join(c for c in isbn if c.isdigit() or c.upper() == "X").upper() if isbn else None
@@ -447,10 +426,10 @@ async def enrich_specific_books(
     overwrite: bool = False
 ):
     """Background task to enrich specific books using external APIs and syncing with WorkMetadata (no AI)."""
-    from app.core.db import engine
-    from app.storage import upload_image_from_url
-    from app.search import sync_item_to_search
     from app.api.websocket_manager import notification_manager
+    from app.core.db import engine
+    from app.search import sync_item_to_search
+    from app.storage import upload_image_from_url
 
     # Defaults if not specified
     if not fields_to_update:
@@ -467,13 +446,13 @@ async def enrich_specific_books(
             # Attempt to find ISBN if not provided
             items = session.exec(select(Item).where(Item.author == author, Item.title == title)).all()
             meta = session.get(WorkMetadata, (author, title))
-            
+
             if not isbn:
-                isbn = meta.isbn if meta and meta.isbn else next((i.extra_data.get("isbn") for i in items if i.extra_data and i.extra_data.get("isbn")), None)
-            
+                isbn = meta.isbn if meta and meta.isbn else next((i.isbn for i in items if i.isbn), None)
+
             async with semaphore:
                 google_data, ol_data = await fetch_external_book_metadata(author, title, isbn, source_api)
-            
+
             new_desc, new_isbn, new_img, new_cat, new_genre, new_tags = None, None, None, None, None, []
 
             if google_data:
@@ -482,7 +461,7 @@ async def enrich_specific_books(
                     if id_obj["type"] in ["ISBN_13", "ISBN_10"]:
                         new_isbn = id_obj["identifier"]
                         if id_obj["type"] == "ISBN_13": break
-                
+
                 if google_data.get("categories"):
                     c, gn, sj = map_book_classification(google_data["categories"])
                     new_cat, new_genre = c, gn
@@ -501,7 +480,7 @@ async def enrich_specific_books(
                 if thumb:
                     try: new_img = await upload_image_from_url(thumb, folder="items")
                     except Exception: pass
-                
+
                 ol_subjects = ol_data.get("subject") or ol_data.get("subject_name", [])
                 if ol_subjects:
                     c, gn, sj = map_book_classification(ol_subjects)
@@ -516,20 +495,20 @@ async def enrich_specific_books(
             final_img = new_img if "image_url" in fields_to_update and new_img else (meta.image_url if meta else None)
             final_cat = new_cat if "category" in fields_to_update and new_cat else (meta.category if meta else None)
             final_genre = new_genre if "genre" in fields_to_update and new_genre else (meta.genre if meta else None)
-            
+
             final_tags = meta.tags if meta else []
             if "tags" in fields_to_update and new_tags:
                 final_tags = list(set(final_tags) | set(new_tags))
 
             if final_isbn or final_desc or final_img or final_cat or final_genre or final_tags:
                 meta = ensure_work_metadata(
-                    session, 
-                    author, 
-                    title, 
-                    isbn=final_isbn, 
-                    description=final_desc, 
-                    image_url=final_img, 
-                    category=final_cat, 
+                    session,
+                    author,
+                    title,
+                    isbn=final_isbn,
+                    description=final_desc,
+                    image_url=final_img,
+                    category=final_cat,
                     genre=final_genre,
                     tags=final_tags,
                     overwrite=overwrite
@@ -538,28 +517,26 @@ async def enrich_specific_books(
 
             for item in items:
                 updated = False
-                extra = item.extra_data or {}
-                
+
                 # Update Item fields from WorkMetadata (the Archive)
                 if meta:
-                    if "isbn" in fields_to_update and (overwrite or not extra.get("isbn")) and meta.isbn:
-                        extra["isbn"], updated = meta.isbn, True
+                    if "isbn" in fields_to_update and (overwrite or not item.isbn) and meta.isbn:
+                        item.isbn, updated = meta.isbn, True
                     if "description" in fields_to_update and (overwrite or not item.description) and meta.description:
                         item.description, updated = meta.description, True
                     if "image_url" in fields_to_update and (overwrite or not item.image_url) and meta.image_url:
                         item.image_url, updated = meta.image_url, True
-                    if "category" in fields_to_update and (overwrite or not extra.get("category")) and meta.category:
-                        extra["category"], updated = meta.category, True
-                    if "genre" in fields_to_update and (overwrite or not extra.get("genre")) and meta.genre:
-                        extra["genre"], updated = meta.genre, True
-                    
+                    if "category" in fields_to_update and (overwrite or not item.category) and meta.category:
+                        item.category, updated = meta.category, True
+                    if "genre" in fields_to_update and (overwrite or not item.genre) and meta.genre:
+                        item.genre, updated = meta.genre, True
+
                     if "tags" in fields_to_update and meta.tags:
-                        existing_tags = extra.get("subject", "").split(",") if extra.get("subject") else []
+                        existing_tags = item.subject.split(",") if item.subject else []
                         merged_tags = list(set([t.strip() for t in existing_tags if t.strip()]) | set(meta.tags))
-                        extra["subject"], updated = ", ".join(merged_tags), True
+                        item.subject, updated = ", ".join(merged_tags), True
 
                 if updated:
-                    item.extra_data = extra
                     session.add(item)
                     sync_item_to_search(item)
 
@@ -573,18 +550,17 @@ async def sync_item_to_archive(session: Session, item_id: uuid.UUID):
     item = session.get(Item, item_id)
     if not item or item.item_type != ItemType.book:
         return
-    
-    tags = []
-    if item.extra_data and item.extra_data.get("subject"):
-        tags = [s.strip() for s in item.extra_data["subject"].split(",")]
+
+    tags = [s.strip() for s in item.subject.split(",")] if item.subject else []
 
     ensure_work_metadata(
-        session, 
-        item.author, 
-        item.title, 
-        isbn=item.extra_data.get("isbn") if item.extra_data else None,
+        session,
+        item.author,
+        item.title,
+        isbn_val=item.isbn,
         description=item.description,
-        category=item.extra_data.get("category") if item.extra_data else None,
+        category=item.category,
+        genre=item.genre,
         image_url=item.image_url,
         tags=tags
     )
@@ -600,7 +576,7 @@ def ensure_work_metadata(
     session: Session,
     author: str | None,
     title: str,
-    isbn: str | None = None,
+    isbn_val: str | None = None,
     description: str | None = None,
     category: str | None = None,
     genre: str | None = None,
@@ -608,10 +584,16 @@ def ensure_work_metadata(
     tags: list[str] | None = None,
     overwrite: bool = False
 ) -> WorkMetadata | None:
-    if not author:
-        return None
-    meta = session.get(WorkMetadata, (author, title))
-    
+    meta = None
+
+    # 1. Match by ISBN first
+    if isbn_val:
+        meta = session.exec(select(WorkMetadata).where(WorkMetadata.isbn == isbn_val)).first()
+
+    # 2. Match by Author/Title if no ISBN match or ISBN missing
+    if not meta and author:
+        meta = session.get(WorkMetadata, (author, title))
+
     # If category/genre are missing but we have tags/subjects, try to map them
     if (not category or not genre) and tags:
         c, g, s = map_book_classification(tags)
@@ -621,10 +603,11 @@ def ensure_work_metadata(
             tags = (tags or []) + [s]
 
     if not meta:
+        if not author: return None # Can't create without author (PK)
         meta = WorkMetadata(
             author=author,
             title=title,
-            isbn=isbn,
+            isbn=isbn_val,
             description=description,
             category=category,
             genre=genre,
@@ -634,8 +617,8 @@ def ensure_work_metadata(
         session.add(meta)
     else:
         # Update info if missing OR if overwrite is requested
-        if isbn and (overwrite or not meta.isbn):
-            meta.isbn = isbn
+        if isbn_val and (overwrite or not meta.isbn):
+            meta.isbn = isbn_val
         if description and (overwrite or not meta.description):
             meta.description = description
         if category and (overwrite or not meta.category):
@@ -745,10 +728,9 @@ def filter_loan_privacy(loan: Loan, current_user_id: Any = None, is_admin: bool 
 
     # Populate convenience fields for the item
     if loan.item:
-        extra = loan.item.extra_data or {}
-        loan_public.item.category = extra.get("category")
-        loan_public.item.genre = extra.get("genre")
-        loan_public.item.subject = extra.get("subject")
+        loan_public.item.category = loan.item.category
+        loan_public.item.genre = loan.item.genre
+        loan_public.item.subject = loan.item.subject
 
     reveal_requester = is_admin
     reveal_owner = is_admin
@@ -804,7 +786,11 @@ def filter_loan_privacy(loan: Loan, current_user_id: Any = None, is_admin: bool 
 
     # Check if current user is an admin of the loan's community
     if session and current_user_id and loan.community_id:
-        from app.models import CommunityMember, CommunityMemberRole, CommunityMemberStatus
+        from app.models import (
+            CommunityMember,
+            CommunityMemberRole,
+            CommunityMemberStatus,
+        )
         is_community_admin = session.exec(
             select(CommunityMember).where(
                 CommunityMember.community_id == loan.community_id,
@@ -835,7 +821,11 @@ def filter_loan_privacy(loan: Loan, current_user_id: Any = None, is_admin: bool 
 
         # Check if other admins exist for community loans
         if loan.community_id:
-            from app.models import CommunityMember, CommunityMemberRole, CommunityMemberStatus
+            from app.models import (
+                CommunityMember,
+                CommunityMemberRole,
+                CommunityMemberStatus,
+            )
             other_admins = session.exec(
                 select(func.count()).select_from(CommunityMember).where(
                     CommunityMember.community_id == loan.community_id,
@@ -913,7 +903,7 @@ def map_book_classification(raw_values: str | list[str] | None) -> tuple[str | N
         return None, None, None
 
     from app.constants import BOOK_CLASSIFICATION
-    
+
     # Normalize inputs to a list of strings
     if isinstance(raw_values, str):
         candidates = [raw_values]

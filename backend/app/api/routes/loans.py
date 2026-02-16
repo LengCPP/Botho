@@ -28,7 +28,7 @@ from app.models import (
     User,
 )
 from app.notifications import notify_user
-from app.search import delete_item_from_search, sync_item_to_search
+from app.search import sync_item_to_search
 from app.utils import generate_loan_reminder_email, send_email
 
 router = APIRouter(prefix="/loans", tags=["loans"])
@@ -578,7 +578,7 @@ async def create_extension_request(
     # Ensure both are timezone-aware for comparison
     if new_end_date.tzinfo is None:
         new_end_date = new_end_date.replace(tzinfo=timezone.utc)
-    
+
     current_end_date = loan.end_date
     if current_end_date.tzinfo is None:
         current_end_date = current_end_date.replace(tzinfo=timezone.utc)
@@ -796,11 +796,11 @@ async def forgive_loan(
         # Effectively treat as returned
         loan.status = LoanStatus.RETURNED
         loan.returned_at = datetime.now(timezone.utc)
-    
+
     elif forgiveness_in.reason == ForgivenessReason.REPLACED_ITEM:
         if not forgiveness_in.new_item_specs:
             raise HTTPException(status_code=400, detail="Replacement item specs required")
-        
+
         # Create new item based on specs
         # Ensure owner_id is set correctly (User or Community)
         new_item = Item(
@@ -809,11 +809,11 @@ async def forgive_loan(
         )
         session.add(new_item)
         session.flush() # Get ID
-        
+
         # Update loan to reflect it's "returned" via replacement
         loan.status = LoanStatus.RETURNED
         loan.returned_at = datetime.now(timezone.utc)
-        
+
         # Sync the new item to search
         sync_item_to_search(new_item)
 
@@ -878,7 +878,7 @@ async def send_return_reminder(
         item_title=loan.item.title,
         due_date=loan.end_date
     )
-    
+
     send_email(
         email_to=borrower.email,
         subject=email_data.subject,

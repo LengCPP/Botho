@@ -53,12 +53,10 @@ interface FormValues {
   description?: string
   author?: string
   item_type?: string
-  extra_data: {
-    isbn?: string
-    category?: string
-    genre?: string
-    [key: string]: any
-  }
+  isbn?: string
+  category?: string
+  genre?: string
+  extra_data: Record<string, any>
   info: {
     grade?: number
     physical_description?: string
@@ -108,7 +106,13 @@ const EditItem = ({
       description: item.description ?? "",
       author: item.author ?? "",
       item_type: item.item_type as any,
-      extra_data: (item.extra_data as any) || {},
+      isbn: item.isbn || (item.extra_data as any)?.isbn || "",
+      category: item.category || (item.extra_data as any)?.category || "",
+      genre: item.genre || (item.extra_data as any)?.genre || "",
+      extra_data: (() => {
+        const { isbn, category, genre, ...rest } = (item.extra_data as any) || {}
+        return rest
+      })(),
       info: (item.info as any) || { grade: 10, physical_description: "" },
       image_url: item.image_url ?? "",
       work_info: {
@@ -119,7 +123,7 @@ const EditItem = ({
 
   const itemType = watch("item_type")
   const description = watch("description") || ""
-  const selectedCategory = watch("extra_data.category")
+  const selectedCategory = watch("category")
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null
@@ -164,6 +168,9 @@ const EditItem = ({
       description: data.description,
       author: data.author,
       item_type: data.item_type as any,
+      isbn: data.isbn,
+      category: data.category,
+      genre: data.genre,
       extra_data: JSON.stringify(data.extra_data || {}),
       info: JSON.stringify(data.info || {}),
       image: imageFile,
@@ -294,10 +301,10 @@ const EditItem = ({
                       <Text
                         fontSize="xs"
                         color={
-                          description.length > 1600 ? "red.500" : "inherit"
+                          description.length > 2000 ? "red.500" : "inherit"
                         }
                       >
-                        {description.length}/1600
+                        {description.length}/2000
                       </Text>
                     </HStack>
                   }
@@ -306,8 +313,8 @@ const EditItem = ({
                     id="edit_description"
                     {...register("description", {
                       maxLength: {
-                        value: 1600,
-                        message: "Maximum 1600 characters",
+                        value: 2000,
+                        message: "Maximum 2000 characters",
                       },
                     })}
                     placeholder="Description"
@@ -348,14 +355,14 @@ const EditItem = ({
                   <Input
                     id="edit_isbn"
                     placeholder="ISBN"
-                    {...register("extra_data.isbn")}
+                    {...register("isbn")}
                   />
                 </Field>
                 <HStack width="full" gap={4}>
                   <Field label="Category" flex={1}>
                     <select
                       id="edit_category"
-                      {...register("extra_data.category")}
+                      {...register("category")}
                       style={selectStyle}
                     >
                       <option value="" style={{ backgroundColor: selectBg }}>
@@ -375,7 +382,7 @@ const EditItem = ({
                   <Field label="Genre" flex={1}>
                     <select
                       id="edit_genre"
-                      {...register("extra_data.genre")}
+                      {...register("genre")}
                       style={selectStyle}
                       disabled={!selectedCategory}
                     >
@@ -444,11 +451,6 @@ const EditItem = ({
                     gap={4}
                     animation="fade-in 0.2s"
                     width="full"
-                    mt={2}
-                    p={2}
-                    borderWidth="1px"
-                    borderRadius="md"
-                    borderColor={selectBorder}
                   >
                     <Flex justify="space-between" align="center">
                       <Text fontWeight="bold" fontSize="sm" color="ui.hover">
@@ -540,7 +542,7 @@ const EditItem = ({
             form="edit-item-form"
             colorPalette="accent"
             loading={isSubmitting}
-            disabled={description.length > 1600}
+            disabled={description.length > 2000}
           >
             Save Changes
           </Button>

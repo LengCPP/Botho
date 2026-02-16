@@ -1,14 +1,33 @@
-import asyncio, json, logging, random, uuid
+import asyncio
+import json
+import logging
+import random
+import uuid
 from typing import Any
+
 from fastapi import APIRouter, BackgroundTasks, HTTPException
-from sqlmodel import func, select, Session
+from sqlmodel import Session, func, select
+
 from app.api.deps import CurrentUser, SessionDep
-from app.api.utils import ensure_work_metadata, fetch_external_book_metadata, map_book_classification
-from app.models import Item, ItemType, Message, StagedItem, StagedItemPublic, StagedItemsPublic, StagedItemStatus, Contribution, WorkMetadata
-from app.search import sync_item_to_search
-from app.storage import upload_image_from_url
+from app.api.utils import (
+    ensure_work_metadata,
+    fetch_external_book_metadata,
+    map_book_classification,
+)
 from app.api.websocket_manager import notification_manager
 from app.core.db import engine
+from app.models import (
+    Contribution,
+    Item,
+    ItemType,
+    Message,
+    StagedItem,
+    StagedItemPublic,
+    StagedItemsPublic,
+    StagedItemStatus,
+    WorkMetadata,
+)
+from app.storage import upload_image_from_url
 
 router = APIRouter(prefix="/imports", tags=["imports"])
 logger = logging.getLogger(__name__)
@@ -111,7 +130,7 @@ async def enrich_and_import_to_archive(staged_id: uuid.UUID, owner_id: uuid.UUID
                 img = await upload_image_from_url(d["image_url"], "items") if d.get("image_url") else None
                 g, ol = await fetch_external_book_metadata(a, t, i)
                 desc, cat, gen, tags = str(d.get("description", "")).strip() or None, None, None, []
-                
+
                 # Check staged data for explicit classification first
                 raw_cat, raw_gen = d.get("category"), d.get("genre")
                 if raw_cat or raw_gen:
@@ -119,7 +138,7 @@ async def enrich_and_import_to_archive(staged_id: uuid.UUID, owner_id: uuid.UUID
                     cat, gen = c, gn
                     if sj: tags.append(sj)
 
-                if m: 
+                if m:
                     t, a, desc, img, cat, gen, i = m.title, m.author, m.description or desc, m.image_url or img, m.category or cat, m.genre or gen, m.isbn or i
                     tags = list(set(tags) | set(m.tags or []))
                 elif g:
@@ -170,7 +189,7 @@ async def enrich_and_import_item(staged_id: uuid.UUID, owner_id: uuid.UUID, comm
                 img = await upload_image_from_url(d["image_url"], "items") if d.get("image_url") else None
                 g, ol = await fetch_external_book_metadata(a, t, i)
                 desc, extra = str(d.get("description", "")).strip() or None, {}
-                
+
                 # Classification variables
                 cat, gen, subjects = None, None, []
 
@@ -181,7 +200,7 @@ async def enrich_and_import_item(staged_id: uuid.UUID, owner_id: uuid.UUID, comm
                     cat, gen = c, gn
                     if sj: subjects.append(sj)
 
-                if m: 
+                if m:
                     t, a, desc, img = m.title, m.author, m.description or desc, m.image_url or img
                     cat, gen = m.category or cat, m.genre or gen
                     subjects = list(set(subjects) | set(m.tags or []))
@@ -212,16 +231,26 @@ async def enrich_and_import_item(staged_id: uuid.UUID, owner_id: uuid.UUID, comm
                     elif ol.get("subject"):
                         subjects = list(set(subjects) | set(ol["subject"]))
                     extra = {"isbn": i}
-                
-                # Assemble extra_data with classification
-                if cat: extra["category"] = cat
-                if gen: extra["genre"] = gen
-                if subjects: extra["subject"] = ", ".join(subjects)
 
-                item = Item(title=t, author=a, description=desc, image_url=img, owner_id=comm_id or owner_id, item_type=ItemType.book, extra_data=extra)
+                # Final classification string for subject
+                subject_str = ", ".join(subjects) if subjects else None
+
+                item = Item(
+                    title=t,
+                    author=a,
+                    description=desc,
+                    image_url=img,
+                    owner_id=comm_id or owner_id,
+                    item_type=ItemType.book,
+                    isbn=i,
+                    category=cat,
+                    genre=gen,
+                    subject=subject_str,
+                    extra_data={}
+                )
                 session.add(item); session.flush()
                 session.add(Contribution(user_id=owner_id, item_id=item.id, work_author=a, work_title=t, description=f"Imported: {t}"))
-                if a and t: ensure_work_metadata(session, a, t, isbn=extra.get("isbn") or i, description=desc, category=cat, genre=gen, tags=subjects, image_url=img)
+                if a and t: ensure_work_metadata(session, a, t, isbn_val=i, description=desc, category=cat, genre=gen, tags=subjects, image_url=img)
                 s.status = StagedItemStatus.COMPLETED; session.add(s); session.commit()
                 session.refresh(item)
                 await notification_manager.send_personal_message({"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "COMPLETED"}, owner_id)

@@ -99,7 +99,7 @@ export const groupItems = (items: any[], byOwner = true): any[][] => {
   const groups: { [key: string]: any[] } = {}
   for (const item of items) {
     const title = (item.title || "").toLowerCase().trim()
-    const author = (item.author || item.extra_data?.author || "")
+    const author = (item.author || "")
       .toLowerCase()
       .trim()
     const owner = byOwner ? item.owner_id || "" : ""

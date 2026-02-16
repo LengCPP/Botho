@@ -74,7 +74,7 @@ def search(
         CommunityMember.status == CommunityMemberStatus.ACCEPTED
     )
     user_comm_ids = session.exec(comm_stmt).all()
-    
+
     # Also include items from public communities
     public_comm_stmt = select(Community.id).where(Community.is_private == False)
     public_comm_ids = session.exec(public_comm_stmt).all()
@@ -139,7 +139,11 @@ def search(
 
     # Convert raw items to ItemPublic
     items_public = []
-    from app.api.utils import check_item_availability, check_possession, get_work_metadata
+    from app.api.utils import (
+        check_item_availability,
+        check_possession,
+        get_work_metadata,
+    )
     for item in items_raw:
         is_avail = check_item_availability(session, item.id)
         if not is_avail:
@@ -175,9 +179,9 @@ def search(
             is_available=is_avail,
             work_metadata=get_work_metadata(session, item.author, item.title),
             had_possession=check_possession(session, current_user.id, item.id),
-            category=item.extra_data.get("category") if item.extra_data else None,
-            genre=item.extra_data.get("genre") if item.extra_data else None,
-            subject=item.extra_data.get("subject") if item.extra_data else None
+            category=item.category,
+            genre=item.genre,
+            subject=item.subject
         )
         items_public.append(item_pub)
 

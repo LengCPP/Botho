@@ -2035,7 +2035,9 @@ function DonationManagement({
       }),
     onSuccess: () => {
       showSuccessToast("Donation ratified!")
-      queryClient.invalidateQueries({ queryKey: ["communityItems", communityId] })
+      queryClient.invalidateQueries({
+        queryKey: ["communityItems", communityId],
+      })
       queryClient.invalidateQueries({ queryKey: ["community", communityId] })
     },
     onError: () => showErrorToast("Failed to ratify donation"),
@@ -2044,7 +2046,13 @@ function DonationManagement({
   if (!pendingDonations.length) return null
 
   return (
-    <Box p={4} borderWidth="1px" borderColor="ui.hover" rounded="md" bg="bg.panel">
+    <Box
+      p={4}
+      borderWidth="1px"
+      borderColor="ui.hover"
+      rounded="md"
+      bg="bg.panel"
+    >
       <Heading size="md" mb={4}>
         Pending Donations
       </Heading>
@@ -2070,7 +2078,9 @@ function DonationManagement({
                 onClick={() => ratifyDonationMutation.mutate(item.id)}
                 loading={ratifyDonationMutation.isPending}
                 disabled={!canRatify}
-                title={!canRatify ? "Another admin must ratify your donation" : ""}
+                title={
+                  !canRatify ? "Another admin must ratify your donation" : ""
+                }
               >
                 Ratify
               </Button>
