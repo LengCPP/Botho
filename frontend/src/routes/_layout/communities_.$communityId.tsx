@@ -11,6 +11,7 @@ import {
   GridItem,
   HStack,
   Heading,
+  Image,
   Input,
   Separator,
   SimpleGrid,
@@ -669,13 +670,13 @@ function CommunityBoard() {
     </SimpleGrid>
   )
 
-  const handleAction = (loan: any, action: any, params?: any) => {
+  const handleAction = (loan: any, action: string, params?: any) => {
     if (action === "forgive") {
       setSelectedLoanForForgive(loan)
       return
     }
 
-    const config = {
+    const configs: Record<string, { title: string; message: string }> = {
       cancel: {
         title: "Cancel Request",
         message: `Cancel request for '${loan.item.title}'?`,
@@ -711,7 +712,9 @@ function CommunityBoard() {
         title: "Mark Unrecoverable",
         message: `Mark '${loan.item.title}' as lost? This will penalize the borrower's honor score significantly.`,
       },
-    }[action as keyof typeof config]
+    }
+
+    const config = configs[action]
 
     if (!config) return
 

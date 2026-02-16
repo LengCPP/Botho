@@ -4,8 +4,6 @@ import { type SubmitHandler, useForm } from "react-hook-form"
 import {
   Box,
   Button,
-  DialogActionTrigger,
-  DialogTitle,
   Flex,
   HStack,
   IconButton,
@@ -25,6 +23,7 @@ import {
   type Body_items_create_item,
   CommunitiesService,
   ItemsService,
+  UtilsService,
 } from "@/client"
 import type { ApiError } from "@/client/core/ApiError"
 import { BookSearchInput } from "@/components/BookSearchInput"
@@ -36,11 +35,13 @@ import { type BookResult, useIsbnSearch } from "@/hooks/useBookSearch"
 import useCustomToast from "@/hooks/useCustomToast"
 import { handleError } from "@/utils"
 import {
+  DialogActionTrigger,
   DialogBody,
   DialogCloseTrigger,
   DialogContent,
   DialogHeader,
   DialogRoot,
+  DialogTitle,
   DialogTrigger,
 } from "../ui/dialog"
 import { Field } from "../ui/field"
@@ -161,7 +162,7 @@ const AddItem = ({
     onError: () => showErrorToast("Failed to add item"),
   })
 
-  const handleBookSelect = (book: BookResult) => {
+  const handleBookSelect = async (book: BookResult) => {
     setValue("title", book.title, { shouldValidate: true })
     setValue("description", book.description.substring(0, 1600))
     setValue("extra_data.author", book.authors.join(", "))
@@ -169,20 +170,27 @@ const AddItem = ({
     setValue("image_url", book.thumbnail)
     setValue("item_type", "book")
 
+    // Map classification via backend
     if (book.categories && book.categories.length > 0) {
-      const gCategory = book.categories[0]
-      for (const [cat, genres] of Object.entries(BOOK_CLASSIFICATION)) {
-        if (
-          genres.some((g) => gCategory.includes(g)) ||
-          gCategory.includes(cat)
-        ) {
-          setValue("extra_data.category", cat)
-          const matchedGenre = genres.find((g) => gCategory.includes(g))
-          if (matchedGenre) {
-            setValue("extra_data.genre", matchedGenre)
+      try {
+        const mapping = (await UtilsService.mapClassification({
+          q: book.categories[0],
+        })) as { category?: string; genre?: string; subject?: string }
+
+        if (mapping.category) {
+          setValue("extra_data.category", mapping.category)
+          if (mapping.genre) {
+            setValue("extra_data.genre", mapping.genre)
           }
-          break
+        } else if (mapping.subject) {
+          const currentTags = watch("work_info.tags")
+          const newTags = currentTags
+            ? `${currentTags}, ${mapping.subject}`
+            : mapping.subject
+          setValue("work_info.tags", newTags)
         }
+      } catch (e) {
+        console.error("Failed to map classification:", e)
       }
     }
   }
@@ -240,6 +248,7 @@ const AddItem = ({
     const itemData: Body_items_create_item = {
       title: data.title,
       description: data.description,
+      author: data.extra_data?.author,
       item_type: data.item_type as any,
       extra_data: JSON.stringify(data.extra_data || {}),
       info: JSON.stringify(data.info || {}),
@@ -541,7 +550,7 @@ const AddItem = ({
           />
         </Field>
 
-        <Flex width="full" justify="flex-end" gap={2} mt={4}>
+        <Flex width="full" justify="flex-end" gap={3} mt={4}>
           <DialogActionTrigger asChild>
             <Button
               variant="subtle"
@@ -554,10 +563,11 @@ const AddItem = ({
           <Button
             variant="solid"
             type="submit"
+            colorPalette="accent"
             disabled={!isValid || description.length > 1600}
             loading={isSubmitting}
           >
-            Save
+            Add Item
           </Button>
         </Flex>
       </VStack>

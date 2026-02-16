@@ -85,9 +85,10 @@ const ForgiveModal = ({ loan, isOpen, onClose }: ForgiveModalProps) => {
             </Field>
           </VStack>
         </DialogBody>
-        <DialogFooter>
+        <DialogFooter gap={3}>
           <Button
-            variant="outline"
+            variant="subtle"
+            colorPalette="gray"
             onClick={onClose}
             disabled={forgiveMutation.isPending}
           >

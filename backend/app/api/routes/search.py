@@ -174,7 +174,10 @@ def search(
             community_owner=community_pub,
             is_available=is_avail,
             work_metadata=get_work_metadata(session, item.author, item.title),
-            had_possession=check_possession(session, current_user.id, item.id)
+            had_possession=check_possession(session, current_user.id, item.id),
+            category=item.extra_data.get("category") if item.extra_data else None,
+            genre=item.extra_data.get("genre") if item.extra_data else None,
+            subject=item.extra_data.get("subject") if item.extra_data else None
         )
         items_public.append(item_pub)
 

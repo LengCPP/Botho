@@ -44,6 +44,7 @@ import * as XLSX from "xlsx"
 interface ImportItemsProps {
   communityId?: string
   isArchiveImport?: boolean
+  onBack?: () => void
 }
 
 interface EditableCellProps {
@@ -193,6 +194,7 @@ const validateItem = (item: StagedItemPublic, pendingData?: any) => {
 export const ImportItems = ({
   communityId,
   isArchiveImport = false,
+  onBack,
 }: ImportItemsProps) => {
   const [isMappingOpen, setIsMappingOpen] = useState(false)
   const [parsedData, setParsedData] = useState<any[]>([])
@@ -203,6 +205,8 @@ export const ImportItems = ({
     isbn: "",
     description: "",
     image_url: "",
+    category: "",
+    genre: "",
   })
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [pendingEdits, setPendingEdits] = useState<Record<string, any>>({})
@@ -256,7 +260,7 @@ export const ImportItems = ({
   const totalCount = stagedItems?.count || 0
   const totalPages = Math.ceil(totalCount / limit)
 
-  const columns = ["title", "author", "isbn", "description"]
+  const columns = ["title", "author", "isbn", "category", "genre", "description"]
 
   const handlePageChange = (newPage: number) => {
     setFocusedCell(null)
@@ -372,6 +376,11 @@ export const ImportItems = ({
   return (
     <Box width="full" mt={4} onKeyDown={handleTableKeyDown}>
       <VStack align="start" gap={6} width="full">
+        {onBack && (
+          <Button size="xs" variant="ghost" onClick={onBack} alignSelf="start">
+            <FaChevronLeft /> Back to Catalogue
+          </Button>
+        )}
         <HStack justify="space-between" width="full">
           <VStack align="start" gap={1}>
             <Heading size="md">
@@ -384,7 +393,7 @@ export const ImportItems = ({
           <HStack>
             {hasPendingEdits && (
               <Button
-                bg="green.600"
+                colorPalette="green"
                 size="sm"
                 onClick={() => bulkUpdateMutation.mutate(pendingEdits)}
                 loading={bulkUpdateMutation.isPending}
@@ -395,7 +404,7 @@ export const ImportItems = ({
             <Button
               as="label"
               variant="solid"
-              bg="ui.hover"
+              colorPalette="accent"
               size="sm"
               cursor="pointer"
             >

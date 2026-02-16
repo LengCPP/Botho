@@ -1065,7 +1065,10 @@ def read_community_items(
             community_owner=community_pub,
             is_available=is_avail,
             work_metadata=work_meta_map.get((item.author, item.title)) if item.author else None,
-            had_possession=item.owner_id == current_user.id # Simplified
+            had_possession=item.owner_id == current_user.id, # Simplified
+            category=item.extra_data.get("category") if item.extra_data else None,
+            genre=item.extra_data.get("genre") if item.extra_data else None,
+            subject=item.extra_data.get("subject") if item.extra_data else None
         )
 
         # Add pooling metadata if applicable

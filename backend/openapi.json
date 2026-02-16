@@ -1110,6 +1110,56 @@
         }
       }
     },
+    "/api/v1/utils/map-classification": {
+      "get": {
+        "tags": [
+          "utils"
+        ],
+        "summary": "Map Classification",
+        "description": "Maps a raw category/genre string to the internal classification system.",
+        "operationId": "utils-map_classification",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Utils-Map Classification"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/items/maintenance/rebuild-indexes": {
       "post": {
         "tags": [
@@ -1172,6 +1222,53 @@
         "summary": "Trigger Enrich Books",
         "description": "Trigger a background task to enrich specific books in the registry.\nSuperuser only.",
         "operationId": "items-trigger_enrich_books",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookEnrichmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/items/book-registry/ai-classify": {
+      "post": {
+        "tags": [
+          "items"
+        ],
+        "summary": "Trigger Ai Classify Books",
+        "description": "Trigger a background task to AI-classify specific books in the registry.\nSuperuser only. Strictly for administrative maintenance of the Book Archive.",
+        "operationId": "items-trigger_ai_classify_books",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8429,6 +8526,17 @@
               }
             ],
             "title": "Genre"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
           }
         },
         "type": "object",
@@ -8650,6 +8758,39 @@
             "type": "boolean",
             "title": "Had Possession",
             "default": false
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "genre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Genre"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
           }
         },
         "type": "object",

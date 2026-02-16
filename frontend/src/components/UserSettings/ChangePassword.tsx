@@ -91,12 +91,13 @@ const ChangePassword = () => {
         </VStack>
         <Button
           variant="solid"
+          colorPalette="accent"
           mt={4}
           type="submit"
           loading={isSubmitting}
           disabled={!isValid}
         >
-          Save
+          {hasSetPassword ? "Update Password" : "Set Password"}
         </Button>
       </Box>
     </Box>

@@ -160,8 +160,8 @@ export function LoanRequestModal({
             </Field>
           </VStack>
         </DialogBody>
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>
+        <DialogFooter gap={3}>
+          <Button variant="subtle" colorPalette="gray" onClick={onClose}>
             Cancel
           </Button>
           <Button

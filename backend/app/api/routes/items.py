@@ -21,6 +21,7 @@ from app.api.utils import (
     update_collection_index,
     rebuild_collection_index_task,
     invalidate_item_caches,
+    map_book_classification,
 )
 from app.core.config import settings
 from app.models import (
@@ -536,7 +537,10 @@ def recommend_items(
                 community_owner=community_pub,
                 is_available=is_avail,
                 work_metadata=get_work_metadata(session, item.author, item.title),
-                had_possession=had_possession
+                had_possession=had_possession,
+                category=item.extra_data.get("category") if item.extra_data else None,
+                genre=item.extra_data.get("genre") if item.extra_data else None,
+                subject=item.extra_data.get("subject") if item.extra_data else None
             )
             ordered_items.append(item_pub)
             
@@ -982,7 +986,8 @@ def read_items(
                         is_donation_pending=item.id in pending_donation_item_ids,
                         owner_name=owner_name,
                         category=item.extra_data.get("category") if item.extra_data else None,
-                        genre=item.extra_data.get("genre") if item.extra_data else None
+                        genre=item.extra_data.get("genre") if item.extra_data else None,
+                        subject=item.extra_data.get("subject") if item.extra_data else None
                     ))
                 return ItemsMinimalPublic(data=minimal_items, count=count, facets=facets)
 
@@ -1048,7 +1053,10 @@ def read_items(
                     is_available=is_avail,
                     work_metadata=get_work_metadata(session, item.author, item.title),
                     had_possession=item.owner_id == current_user.id or item.id in possession_loan_item_ids,
-                    is_donation_pending=item.id in pending_donation_item_ids
+                    is_donation_pending=item.id in pending_donation_item_ids,
+                    category=item.extra_data.get("category") if item.extra_data else None,
+                    genre=item.extra_data.get("genre") if item.extra_data else None,
+                    subject=item.extra_data.get("subject") if item.extra_data else None
                 ))
             
             return ItemsPublic(data=items_public_data, count=count, facets=facets, facet_stats=facet_stats)
@@ -1201,7 +1209,8 @@ def read_items(
                 is_donation_pending=item.id in pending_donation_item_ids,
                 owner_name=owner_name,
                 category=item.extra_data.get("category") if item.extra_data else None,
-                genre=item.extra_data.get("genre") if item.extra_data else None
+                genre=item.extra_data.get("genre") if item.extra_data else None,
+                subject=item.extra_data.get("subject") if item.extra_data else None
             ))
         return ItemsMinimalPublic(data=minimal_items, count=count, facets=facets)
 
@@ -1256,7 +1265,10 @@ def read_items(
             is_available=is_avail,
             is_donation_pending=item.id in pending_donation_item_ids,
             work_metadata=work_meta_map.get((item.author, item.title)),
-            had_possession=had_possession
+            had_possession=had_possession,
+            category=item.extra_data.get("category") if item.extra_data else None,
+            genre=item.extra_data.get("genre") if item.extra_data else None,
+            subject=item.extra_data.get("subject") if item.extra_data else None
         ))
 
     return ItemsPublic(data=public_items, count=count, facets=facets, facet_stats=facet_stats)
@@ -1328,7 +1340,10 @@ def read_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> 
         community_owner=community_pub,
         is_available=is_avail,
         work_metadata=get_work_metadata(session, item.author, item.title),
-        had_possession=had_possession
+        had_possession=had_possession,
+        category=item.extra_data.get("category") if item.extra_data else None,
+        genre=item.extra_data.get("genre") if item.extra_data else None,
+        subject=item.extra_data.get("subject") if item.extra_data else None
     )
     return item_pub
 
@@ -1421,6 +1436,17 @@ async def create_item(
         if not target_owner_id:
             raise HTTPException(status_code=400, detail="Owner ID could not be determined")
 
+        # Book classification cleanup
+        if item_type == ItemType.book:
+            raw_c = parsed_extra.get("category")
+            raw_g = parsed_extra.get("genre")
+            c, g, s = map_book_classification(raw_g or raw_c)
+            parsed_extra["category"] = c
+            parsed_extra["genre"] = g
+            if s:
+                existing_s = parsed_extra.get("subject", "")
+                parsed_extra["subject"] = f"{existing_s}, {s}" if existing_s else s
+
         db_item = Item(
             title=title,
             description=description,
@@ -1456,9 +1482,10 @@ async def create_item(
                 title,
                 isbn=parsed_extra.get("isbn"),
                 description=description,
-                category=parsed_extra.get("category") or (", ".join(parsed_extra.get("categories")) if isinstance(parsed_extra.get("categories"), list) else parsed_extra.get("categories")),
+                category=parsed_extra.get("category"),
+                genre=parsed_extra.get("genre"),
                 image_url=final_image_url,
-                tags=None
+                tags=parsed_extra.get("subject", "").split(",") if parsed_extra.get("subject") else None
             )
 
         session.commit()
@@ -1492,7 +1519,10 @@ async def create_item(
             community_owner=community_pub,
             is_available=True,
             work_metadata=get_work_metadata(session, db_item.author, db_item.title),
-            had_possession=True
+            had_possession=True,
+            category=db_item.extra_data.get("category") if db_item.extra_data else None,
+            genre=db_item.extra_data.get("genre") if db_item.extra_data else None,
+            subject=db_item.extra_data.get("subject") if db_item.extra_data else None
         )
         return item_pub
     except HTTPException:
@@ -1562,7 +1592,20 @@ async def update_item(
                 db_item.image_url = image_url
         if extra_data is not None:
             try:
-                db_item.extra_data = json.loads(extra_data)
+                parsed_extra = json.loads(extra_data)
+
+                # Book classification cleanup for update
+                if (item_type or db_item.item_type) == ItemType.book:
+                    raw_c = parsed_extra.get("category")
+                    raw_g = parsed_extra.get("genre")
+                    c, g, s = map_book_classification(raw_g or raw_c)
+                    parsed_extra["category"] = c
+                    parsed_extra["genre"] = g
+                    if s:
+                        existing_s = parsed_extra.get("subject", "")
+                        parsed_extra["subject"] = f"{existing_s}, {s}" if existing_s else s
+
+                db_item.extra_data = parsed_extra
             except json.JSONDecodeError:
                 raise HTTPException(status_code=400, detail="Invalid JSON in extra_data")
         
@@ -1596,6 +1639,20 @@ async def update_item(
         )
         session.add(contribution)
 
+        # Ensure WorkMetadata exists and is updated
+        if db_item.author:
+            ensure_work_metadata(
+                session,
+                db_item.author,
+                db_item.title,
+                isbn=db_item.extra_data.get("isbn") if db_item.extra_data else None,
+                description=db_item.description,
+                category=db_item.extra_data.get("category") if db_item.extra_data else None,
+                genre=db_item.extra_data.get("genre") if db_item.extra_data else None,
+                image_url=db_item.image_url,
+                tags=db_item.extra_data.get("subject", "").split(",") if db_item.extra_data and db_item.extra_data.get("subject") else None
+            )
+
         session.add(db_item)
         session.commit()
         session.refresh(db_item)
@@ -1613,7 +1670,7 @@ async def update_item(
         owner_pub = None
         community_pub = None
         if db_item.user_owner:
-            owner_pub = filter_owner_privacy(item.user_owner, current_user.id, is_admin=current_user.is_superuser, session=session)
+            owner_pub = filter_owner_privacy(db_item.user_owner, current_user.id, is_admin=current_user.is_superuser, session=session)
             owner_pub.is_available = is_avail
         elif db_item.community_owner:
             community_pub = db_item.community_owner
@@ -1640,7 +1697,10 @@ async def update_item(
             community_owner=community_pub,
             is_available=is_avail,
             work_metadata=get_work_metadata(session, db_item.author, db_item.title),
-            had_possession=check_possession(session, current_user.id, db_item.id)
+            had_possession=check_possession(session, current_user.id, db_item.id),
+            category=db_item.extra_data.get("category") if db_item.extra_data else None,
+            genre=db_item.extra_data.get("genre") if db_item.extra_data else None,
+            subject=db_item.extra_data.get("subject") if db_item.extra_data else None
         )
         return item_pub
     except HTTPException:
@@ -1748,7 +1808,10 @@ def duplicate_item(
         owner=owner_pub,
         is_available=True,
         work_metadata=get_work_metadata(session, new_item.author, new_item.title),
-        had_possession=True
+        had_possession=True,
+        category=new_item.extra_data.get("category") if new_item.extra_data else None,
+        genre=new_item.extra_data.get("genre") if new_item.extra_data else None,
+        subject=new_item.extra_data.get("subject") if new_item.extra_data else None
     )
 
 
@@ -1777,27 +1840,29 @@ async def update_work_metadata(
     *, session: SessionDep, current_user: CurrentUser, author: str, title: str, meta_in: WorkMetadataUpdate
 ) -> Any:
     """
-    Update metadata for a work (Tags).
+    Update metadata for a work (Tags, Category, Genre).
     """
-    meta = session.get(WorkMetadata, (author, title))
-    if not meta:
-        meta = WorkMetadata(author=author, title=title)
-        session.add(meta)
-
-    update_data = meta_in.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(meta, key, value)
+    # Use ensure_work_metadata which already handles the classification mapping logic
+    meta = ensure_work_metadata(
+        session,
+        author,
+        title,
+        category=meta_in.category,
+        genre=meta_in.genre,
+        tags=meta_in.tags,
+        description=meta_in.description,
+        image_url=meta_in.image_url,
+        overwrite=True
+    )
 
     # Record contribution
     contribution = Contribution(
         user_id=current_user.id,
         work_author=author,
         work_title=title,
-        description="Updated work metadata (tags)"
+        description="Updated work metadata"
     )
     session.add(contribution)
-
-    session.add(meta)
     session.commit()
     session.refresh(meta)
 

@@ -484,9 +484,9 @@ async def enrich_specific_books(
                         if id_obj["type"] == "ISBN_13": break
                 
                 if google_data.get("categories"):
-                    new_cat = google_data["categories"][0]
-                    if len(google_data["categories"]) > 1:
-                        new_genre = google_data["categories"][1]
+                    c, gn, sj = map_book_classification(google_data["categories"])
+                    new_cat, new_genre = c, gn
+                    if sj: new_tags.append(sj)
 
                 img_links = google_data.get("imageLinks", {})
                 thumb = (img_links.get("medium") or img_links.get("small") or img_links.get("thumbnail") or "").replace("http://", "https://")
@@ -501,11 +501,13 @@ async def enrich_specific_books(
                 if thumb:
                     try: new_img = await upload_image_from_url(thumb, folder="items")
                     except Exception: pass
-                new_tags = (ol_data.get("subject") or ol_data.get("subject_name", []))[:5]
-                if new_tags:
-                    new_cat = new_tags[0]
-                    if len(new_tags) > 1:
-                        new_genre = new_tags[1]
+                
+                ol_subjects = ol_data.get("subject") or ol_data.get("subject_name", [])
+                if ol_subjects:
+                    c, gn, sj = map_book_classification(ol_subjects)
+                    new_cat, new_genre = c, gn
+                    if sj: new_tags.append(sj)
+                new_tags = list(set(new_tags) | set(ol_subjects[:5]))
 
             # Determine final values. If field in fields_to_update, use new value (if found).
             # Otherwise keep existing value from WorkMetadata.
@@ -609,6 +611,15 @@ def ensure_work_metadata(
     if not author:
         return None
     meta = session.get(WorkMetadata, (author, title))
+    
+    # If category/genre are missing but we have tags/subjects, try to map them
+    if (not category or not genre) and tags:
+        c, g, s = map_book_classification(tags)
+        if c: category = category or c
+        if g: genre = genre or g
+        if s and s not in (tags or []):
+            tags = (tags or []) + [s]
+
     if not meta:
         meta = WorkMetadata(
             author=author,
@@ -731,6 +742,13 @@ def filter_loan_privacy(loan: Loan, current_user_id: Any = None, is_admin: bool 
     Reveals details if they are friends or share a private community.
     """
     loan_public = LoanPublic.model_validate(loan)
+
+    # Populate convenience fields for the item
+    if loan.item:
+        extra = loan.item.extra_data or {}
+        loan_public.item.category = extra.get("category")
+        loan_public.item.genre = extra.get("genre")
+        loan_public.item.subject = extra.get("subject")
 
     reveal_requester = is_admin
     reveal_owner = is_admin
@@ -884,3 +902,49 @@ def get_item_condition_data(session: Session, item_id: uuid.UUID) -> dict[str, A
     ]
 
     return {"average_grade": avg_grade, "notes": notes}
+
+
+def map_book_classification(raw_values: str | list[str] | None) -> tuple[str | None, str | None, str | None]:
+    """
+    Maps raw genre/category strings to the app's BOOK_CLASSIFICATION.
+    Returns (category, genre, subject).
+    """
+    if not raw_values:
+        return None, None, None
+
+    from app.constants import BOOK_CLASSIFICATION
+    
+    # Normalize inputs to a list of strings
+    if isinstance(raw_values, str):
+        candidates = [raw_values]
+    else:
+        candidates = raw_values
+
+    # We only process the first meaningful candidate for category/genre mapping
+    # to avoid ambiguous multiple classifications.
+    for val in candidates:
+        if not val or not isinstance(val, str): continue
+        val_strip = val.strip()
+        if not val_strip: continue
+        val_lower = val_strip.lower()
+
+        # 1. Exact Category Match
+        for cat in BOOK_CLASSIFICATION.keys():
+            if cat.lower() == val_lower:
+                return cat, None, None
+
+        # 2. Exact Genre Match
+        for cat, genres in BOOK_CLASSIFICATION.items():
+            for genre in genres:
+                if genre.lower() == val_lower:
+                    return cat, genre, None
+
+        # 3. Partial Genre Match (e.g., "religion" -> "Non-Fiction", "Religion & Spirituality")
+        for cat, genres in BOOK_CLASSIFICATION.items():
+            for genre in genres:
+                if val_lower in genre.lower():
+                    return cat, genre, None
+
+    # 4. No Match -> Use first candidate as subject
+    first_val = candidates[0] if candidates else None
+    return None, None, first_val if isinstance(first_val, str) else str(first_val) if first_val else None

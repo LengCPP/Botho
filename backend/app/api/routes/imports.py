@@ -3,7 +3,7 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from sqlmodel import func, select, Session
 from app.api.deps import CurrentUser, SessionDep
-from app.api.utils import ensure_work_metadata, fetch_external_book_metadata
+from app.api.utils import ensure_work_metadata, fetch_external_book_metadata, map_book_classification
 from app.models import Item, ItemType, Message, StagedItem, StagedItemPublic, StagedItemsPublic, StagedItemStatus, Contribution, WorkMetadata
 from app.search import sync_item_to_search
 from app.storage import upload_image_from_url
@@ -110,21 +110,44 @@ async def enrich_and_import_to_archive(staged_id: uuid.UUID, owner_id: uuid.UUID
                 if not m: m = session.get(WorkMetadata, (a, t))
                 img = await upload_image_from_url(d["image_url"], "items") if d.get("image_url") else None
                 g, ol = await fetch_external_book_metadata(a, t, i)
-                desc, cat = str(d.get("description", "")).strip() or None, None
-                if m: t, a, desc, img, cat, i = m.title, m.author, m.description or desc, m.image_url or img, m.category, m.isbn or i
+                desc, cat, gen, tags = str(d.get("description", "")).strip() or None, None, None, []
+                
+                # Check staged data for explicit classification first
+                raw_cat, raw_gen = d.get("category"), d.get("genre")
+                if raw_cat or raw_gen:
+                    c, gn, sj = map_book_classification(raw_gen or raw_cat)
+                    cat, gen = c, gn
+                    if sj: tags.append(sj)
+
+                if m: 
+                    t, a, desc, img, cat, gen, i = m.title, m.author, m.description or desc, m.image_url or img, m.category or cat, m.genre or gen, m.isbn or i
+                    tags = list(set(tags) | set(m.tags or []))
                 elif g:
-                    t, desc, cat = g.get("title", t), g.get("description", desc), (g.get("categories") or [None])[0]
+                    t, desc = g.get("title", t), g.get("description", desc)
                     a, i = ", ".join(g.get("authors", [])) or a, next((x["identifier"] for x in g.get("industryIdentifiers", []) if x["type"] in ["ISBN_13", "ISBN_10"]), i)
                     if not img and g.get("imageLinks"):
                         try: img = await upload_image_from_url(g["imageLinks"].get("medium") or g["imageLinks"].get("thumbnail"), "items")
                         except: pass
+                    # Map category/genre from Google if not already set
+                    if not cat and g.get("categories"):
+                        c, gn, sj = map_book_classification(g["categories"])
+                        cat, gen = c, gn
+                        if sj: tags.append(sj)
                 elif ol:
                     t, desc = ol.get("title", t), ol.get("description") or desc
                     a = ", ".join([x["name"] if isinstance(x, dict) else x for x in ol.get("authors", [])] or ol.get("author_name", [])) or a
                     if not img:
                         try: img = await upload_image_from_url(ol.get("cover_url") or f"https://covers.openlibrary.org/b/id/{ol.get('cover_i')}-L.jpg", "items")
                         except: pass
-                ensure_work_metadata(session, a, t, isbn=i, description=desc, category=cat, image_url=img)
+                    # Map category/genre from OpenLibrary subjects if not already set
+                    if not cat and ol.get("subject"):
+                        c, gn, sj = map_book_classification(ol["subject"])
+                        cat, gen = c, gn
+                        if sj: tags.append(sj)
+                    elif ol.get("subject"):
+                        tags = list(set(tags) | set(ol["subject"]))
+
+                ensure_work_metadata(session, a, t, isbn=i, description=desc, category=cat, genre=gen, tags=tags, image_url=img)
                 s.status = StagedItemStatus.COMPLETED; session.add(s); session.commit()
                 await notification_manager.send_personal_message({"type": "BOOK_ARCHIVE_UPDATED", "staged_id": str(staged_id), "status": "COMPLETED"}, owner_id)
             except Exception as e:
@@ -147,28 +170,60 @@ async def enrich_and_import_item(staged_id: uuid.UUID, owner_id: uuid.UUID, comm
                 img = await upload_image_from_url(d["image_url"], "items") if d.get("image_url") else None
                 g, ol = await fetch_external_book_metadata(a, t, i)
                 desc, extra = str(d.get("description", "")).strip() or None, {}
-                if m: t, a, desc, img, extra = m.title, m.author, m.description or desc, m.image_url or img, {"cat": m.category, "isbn": m.isbn, "tags": m.tags}
+                
+                # Classification variables
+                cat, gen, subjects = None, None, []
+
+                # Check staged data for explicit classification first
+                raw_cat, raw_gen = d.get("category"), d.get("genre")
+                if raw_cat or raw_gen:
+                    c, gn, sj = map_book_classification(raw_gen or raw_cat)
+                    cat, gen = c, gn
+                    if sj: subjects.append(sj)
+
+                if m: 
+                    t, a, desc, img = m.title, m.author, m.description or desc, m.image_url or img
+                    cat, gen = m.category or cat, m.genre or gen
+                    subjects = list(set(subjects) | set(m.tags or []))
+                    extra = {"isbn": m.isbn or i}
                 elif g:
                     t, desc = g.get("title", t), g.get("description", desc)
                     a, i = ", ".join(g.get("authors", [])) or a, next((x["identifier"] for x in g.get("industryIdentifiers", []) if x["type"] in ["ISBN_13", "ISBN_10"]), i)
                     if not img and g.get("imageLinks"):
                         try: img = await upload_image_from_url(g["imageLinks"].get("medium") or g["imageLinks"].get("thumbnail"), "items")
                         except: pass
-                    extra = {"isbn": i, "cat": (g.get("categories") or [None])[0]}
+                    # Map classification from Google if not already set
+                    if not cat and g.get("categories"):
+                        c, gn, sj = map_book_classification(g["categories"])
+                        cat, gen = c, gn
+                        if sj: subjects.append(sj)
+                    extra = {"isbn": i}
                 elif ol:
                     t, desc = ol.get("title", t), ol.get("description") or desc
                     a = ", ".join([x["name"] if isinstance(x, dict) else x for x in ol.get("authors", [])] or ol.get("author_name", [])) or a
                     if not img:
                         try: img = await upload_image_from_url(ol.get("cover_url") or f"https://covers.openlibrary.org/b/id/{ol.get('cover_i')}-L.jpg", "items")
                         except: pass
-                    extra = {"isbn": i, "subjects": ol.get("subject", [])}
+                    # Map classification from OpenLibrary if not already set
+                    if not cat and ol.get("subject"):
+                        c, gn, sj = map_book_classification(ol["subject"])
+                        cat, gen = c, gn
+                        if sj: subjects.append(sj)
+                    elif ol.get("subject"):
+                        subjects = list(set(subjects) | set(ol["subject"]))
+                    extra = {"isbn": i}
+                
+                # Assemble extra_data with classification
+                if cat: extra["category"] = cat
+                if gen: extra["genre"] = gen
+                if subjects: extra["subject"] = ", ".join(subjects)
+
                 item = Item(title=t, author=a, description=desc, image_url=img, owner_id=comm_id or owner_id, item_type=ItemType.book, extra_data=extra)
                 session.add(item); session.flush()
                 session.add(Contribution(user_id=owner_id, item_id=item.id, work_author=a, work_title=t, description=f"Imported: {t}"))
-                if a and t: ensure_work_metadata(session, a, t, isbn=extra.get("isbn") or i, description=desc, category=extra.get("cat"), image_url=img)
+                if a and t: ensure_work_metadata(session, a, t, isbn=extra.get("isbn") or i, description=desc, category=cat, genre=gen, tags=subjects, image_url=img)
                 s.status = StagedItemStatus.COMPLETED; session.add(s); session.commit()
                 session.refresh(item)
-                # sync_item_to_search(item) - REMOVED: Batch sync moved to notify_import_finished
                 await notification_manager.send_personal_message({"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "COMPLETED"}, owner_id)
             except Exception as e:
                 s.status, s.error_log = StagedItemStatus.FAILED, str(e); session.add(s); session.commit()

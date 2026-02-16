@@ -544,22 +544,27 @@ const ItemCard = ({
                     Copy Info
                   </Badge>
                 ) : (
-                  <HStack gap={1}>
-                    {item.work_metadata?.category || (item as any).category ? (
-                      <Badge variant="solid" colorPalette="blue" size="sm">
-                        {item.work_metadata?.category || (item as any).category}
-                      </Badge>
-                    ) : (
-                      <Badge colorPalette="teal" variant="solid" size="sm">
-                        {String(item.item_type || "General")}
-                      </Badge>
-                    )}
-                    {(item.work_metadata?.genre || (item as any).genre) && (
-                      <Badge variant="outline" colorPalette="teal" size="sm">
-                        {item.work_metadata?.genre || (item as any).genre}
-                      </Badge>
-                    )}
-                  </HStack>
+                                      <HStack gap={1}>
+                                      {item.work_metadata?.category || item.category ? (
+                                        <Badge variant="solid" colorPalette="blue" size="sm">
+                                          {item.work_metadata?.category || item.category}
+                                        </Badge>
+                                      ) : item.subject ? (
+                                        <Badge variant="solid" colorPalette="purple" size="sm">
+                                          {item.subject}
+                                        </Badge>
+                                      ) : (
+                                        <Badge colorPalette="teal" variant="solid" size="sm">
+                                          {String(item.item_type || "General")}
+                                        </Badge>
+                                      )}
+                                      {(item.work_metadata?.genre || item.genre) && (
+                                        <Badge variant="outline" colorPalette="teal" size="sm">
+                                          {item.work_metadata?.genre || item.genre}
+                                        </Badge>
+                                      )}
+                                    </HStack>
+                  
                 )}
 
                 <HStack gap={1} onClick={(e) => e.stopPropagation()}>

@@ -247,7 +247,10 @@ def get_recent_activity(
             community_owner=community_pub,
             is_available=is_avail,
             work_metadata=work_meta_map.get((item.author, item.title)),
-            had_possession=had_possession
+            had_possession=had_possession,
+            category=item.extra_data.get("category") if item.extra_data else None,
+            genre=item.extra_data.get("genre") if item.extra_data else None,
+            subject=item.extra_data.get("subject") if item.extra_data else None
         )
         public_items.append(item_pub)
         

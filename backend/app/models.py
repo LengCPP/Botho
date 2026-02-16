@@ -750,8 +750,11 @@ class WorkMetadataPublic(SQLModel):
 
 
 class WorkMetadataUpdate(SQLModel):
+    category: str | None = None
     genre: str | None = None
     tags: list[str] | None = None
+    description: str | None = None
+    image_url: str | None = None
 
 
 class BookEnrichmentRequest(SQLModel):
@@ -789,6 +792,10 @@ class ItemPublic(ItemBase):
     is_donation_pending: bool = False
     work_metadata: WorkMetadataPublic | None = None
     had_possession: bool = False
+    # Convenient classification fields (mirrored from extra_data or work_metadata)
+    category: str | None = None
+    genre: str | None = None
+    subject: str | None = None
 
 
 class ItemMinimal(SQLModel):
@@ -811,6 +818,7 @@ class ItemMinimal(SQLModel):
     # Minimal metadata for classification in grid
     category: str | None = None
     genre: str | None = None
+    subject: str | None = None
 
 
 class BookPublic(ItemPublic):

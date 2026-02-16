@@ -179,13 +179,18 @@ const EditProfileModal = ({ user, isOpen, onClose }: EditProfileModalProps) => {
             />
           </VStack>
         </DialogBody>
-        <DialogFooter>
+        <DialogFooter gap={3}>
           <DialogActionTrigger asChild>
             <Button variant="subtle" colorPalette="gray" onClick={onClose}>
               Cancel
             </Button>
           </DialogActionTrigger>
-          <Button type="submit" form="edit-profile-form" loading={isSubmitting}>
+          <Button
+            type="submit"
+            form="edit-profile-form"
+            colorPalette="accent"
+            loading={isSubmitting}
+          >
             Save Changes
           </Button>
         </DialogFooter>

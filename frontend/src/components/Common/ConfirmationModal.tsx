@@ -44,9 +44,14 @@ const ConfirmationModal = ({
         <DialogBody>
           <Text>{message}</Text>
         </DialogBody>
-        <DialogFooter>
+        <DialogFooter gap={3}>
           <DialogActionTrigger asChild>
-            <Button variant="outline" disabled={isLoading} onClick={onClose}>
+            <Button
+              variant="subtle"
+              colorPalette="gray"
+              disabled={isLoading}
+              onClick={onClose}
+            >
               Cancel
             </Button>
           </DialogActionTrigger>

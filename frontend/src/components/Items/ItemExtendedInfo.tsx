@@ -80,6 +80,11 @@ const ItemExtendedInfo = ({
   )
   const physicalNotes = itemInfo.physical_notes || []
 
+  const subjects = item.work_metadata?.tags || 
+    item.subject?.split(",").map((s: string) => s.trim()).filter(Boolean) || 
+    (item.extra_data as any)?.subject?.split(",").map((s: string) => s.trim()).filter(Boolean) || 
+    []
+
   return (
     <VStack
       align="stretch"
@@ -96,8 +101,8 @@ const ItemExtendedInfo = ({
       {/* 1. Classification */}
       {(item.work_metadata?.category ||
         item.work_metadata?.genre ||
-        (item as any).category ||
-        (item as any).genre) && (
+        item.category ||
+        item.genre) && (
         <Box>
           <Text
             fontSize="xs"
@@ -109,14 +114,14 @@ const ItemExtendedInfo = ({
             Classification
           </Text>
           <HStack gap={2} mb={3}>
-            {(item.work_metadata?.category || (item as any).category) && (
+            {(item.work_metadata?.category || item.category) && (
               <Badge variant="solid" colorPalette="blue" size="sm">
-                {item.work_metadata?.category || (item as any).category}
+                {item.work_metadata?.category || item.category}
               </Badge>
             )}
-            {(item.work_metadata?.genre || (item as any).genre) && (
+            {(item.work_metadata?.genre || item.genre) && (
               <Badge variant="outline" colorPalette="teal" size="sm">
-                {item.work_metadata?.genre || (item as any).genre}
+                {item.work_metadata?.genre || item.genre}
               </Badge>
             )}
           </HStack>
@@ -149,7 +154,7 @@ const ItemExtendedInfo = ({
       )}
 
       {/* 3. Subject */}
-      {(item.work_metadata?.tags?.length || item.author) && (
+      {(subjects.length > 0 || item.author) && (
         <Box>
           <HStack justify="space-between" mb={1}>
             <Text
@@ -163,13 +168,12 @@ const ItemExtendedInfo = ({
             {item.author && <EditTags item={item} />}
           </HStack>
           <Flex wrap="wrap" gap={1}>
-            {item.work_metadata?.tags?.map((tag) => (
+            {subjects.map((tag: string) => (
               <Badge key={tag} variant="subtle" colorPalette="cyan" size="sm">
                 {tag}
               </Badge>
             ))}
-            {(!item.work_metadata?.tags ||
-              item.work_metadata.tags.length === 0) && (
+            {subjects.length === 0 && (
               <Text fontSize="xs" color="fg.muted" fontStyle="italic">
                 No subject tags.
               </Text>

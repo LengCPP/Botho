@@ -206,6 +206,7 @@ export type ItemMinimal = {
     owner_name?: (string | null);
     category?: (string | null);
     genre?: (string | null);
+    subject?: (string | null);
 };
 
 export type ItemOwnerPublic = {
@@ -242,6 +243,9 @@ export type ItemPublic = {
     is_donation_pending?: boolean;
     work_metadata?: (WorkMetadataPublic | null);
     had_possession?: boolean;
+    category?: (string | null);
+    genre?: (string | null);
+    subject?: (string | null);
 };
 
 export type ItemReviewCreate = {
@@ -923,6 +927,12 @@ export type ItemsTriggerEnrichBooksData = {
 
 export type ItemsTriggerEnrichBooksResponse = (Message);
 
+export type ItemsTriggerAiClassifyBooksData = {
+    requestBody: BookEnrichmentRequest;
+};
+
+export type ItemsTriggerAiClassifyBooksResponse = (Message);
+
 export type ItemsTriggerSyncToArchiveData = {
     id: string;
 };
@@ -1449,3 +1459,9 @@ export type UtilsTestEmailData = {
 export type UtilsTestEmailResponse = (Message);
 
 export type UtilsHealthCheckResponse = (boolean);
+
+export type UtilsMapClassificationData = {
+    q?: (string | null);
+};
+
+export type UtilsMapClassificationResponse = (unknown);

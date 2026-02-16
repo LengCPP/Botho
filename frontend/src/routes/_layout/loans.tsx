@@ -283,7 +283,7 @@ function LoansPage() {
     },
   })
 
-  const handleAction = (loan: LoanPublic, action: any, params?: any) => {
+  const handleAction = (loan: LoanPublic, action: string, params?: any) => {
     if (action === "forgive") {
       setSelectedLoanForForgive(loan)
       return
@@ -294,7 +294,7 @@ function LoansPage() {
       return
     }
 
-    const config = {
+    const configs: Record<string, { title: string; message: string }> = {
       cancel: {
         title: "Cancel Request",
         message: `Cancel request for '${loan.item.title}'?`,
@@ -334,7 +334,9 @@ function LoansPage() {
         title: "Signal Return",
         message: `Signal that you are returning '${loan.item.title}'? The owner will need to confirm receipt.`,
       },
-    }[action as keyof typeof config]
+    }
+
+    const config = configs[action]
 
     if (!config) return
 
