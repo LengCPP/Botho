@@ -367,16 +367,14 @@ function BookArchive() {
   const totalCount = firstPage?.count || 0
 
   // Enrichment Options State
-  const [enrichFields, setEnrichFields] = useState<string[]>([
+  const [fieldsToOverwrite, setFieldsToOverwrite] = useState<string[]>([
     "description",
-    "isbn",
     "image_url",
     "category",
     "genre",
     "tags",
   ])
   const [enrichSource, setEnrichSource] = useState("auto")
-  const [overwriteExisting, setOverwriteExisting] = useState(false)
   const [isEnrichDialogOpen, setIsEnrichDialogOpen] = useState(false)
 
   const { showSuccessToast, showErrorToast } = useCustomToast()
@@ -384,10 +382,9 @@ function BookArchive() {
   const enrichMutation = useMutation({
     mutationFn: (data: {
       books: { author: string; title: string }[]
-      fields_to_update: string[]
+      fields_to_overwrite: string[]
       source_api: string
-      overwrite: boolean
-    }) => ItemsService.triggerEnrichBooks({ requestBody: data as any }),
+    }) => ItemsService.triggerEnrichBooks({ requestBody: data }),
     onSuccess: () => {
       showSuccessToast(`Enrichment started for ${selectedKeys.size} books`)
       setSelectedKeys(new Set())
@@ -446,7 +443,7 @@ function BookArchive() {
   ]
 
   const handleFieldChange = (field: string, isChecked: boolean) => {
-    setEnrichFields((prev) => {
+    setFieldsToOverwrite((prev) => {
       if (isChecked) {
         return prev.includes(field) ? prev : [...prev, field]
       }
@@ -461,9 +458,8 @@ function BookArchive() {
     })
     enrichMutation.mutate({
       books,
-      fields_to_update: enrichFields,
+      fields_to_overwrite: fieldsToOverwrite,
       source_api: enrichSource,
-      overwrite: overwriteExisting,
     })
   }
 
@@ -525,14 +521,17 @@ function BookArchive() {
 
                         <VStack align="start" gap={2} width="full">
                           <Text fontWeight="medium" fontSize="sm">
-                            Fields to Fetch
+                            Fields to Overwrite
+                          </Text>
+                          <Text fontSize="xs" color="fg.muted">
+                            Selected fields will be updated even if they already have data. 
+                            Unselected fields will only be filled if current data is missing.
                           </Text>
                           <Stack gap={2}>
                             {ENRICH_OPTIONS.map((opt) => (
                               <Checkbox
                                 key={opt.value}
-                                inputProps={{ id: `enrich-field-${opt.value}` }}
-                                checked={enrichFields.includes(opt.value)}
+                                checked={fieldsToOverwrite.includes(opt.value)}
                                 onCheckedChange={(e) =>
                                   handleFieldChange(opt.value, !!e.checked)
                                 }
@@ -541,26 +540,6 @@ function BookArchive() {
                               </Checkbox>
                             ))}
                           </Stack>
-                        </VStack>
-
-                        <VStack align="start" gap={2} width="full">
-                          <Text fontWeight="medium" fontSize="sm">
-                            Overwrite Options
-                          </Text>
-                          <Checkbox
-                            inputProps={{ id: "enrich-overwrite" }}
-                            checked={overwriteExisting}
-                            onCheckedChange={(e) =>
-                              setOverwriteExisting(!!e.checked)
-                            }
-                          >
-                            Overwrite existing data if found
-                          </Checkbox>
-                          <Text fontSize="xs" color="fg.muted">
-                            If checked, fetched data will replace current
-                            values. If unchecked, we only fill missing
-                            (null/empty) fields.
-                          </Text>
                         </VStack>
                       </Stack>
                     </DialogBody>

@@ -148,9 +148,8 @@ def trigger_enrich_books(
         enrich_specific_books,
         request.books,
         current_user.id,
-        request.fields_to_update,
-        request.source_api,
-        request.overwrite,
+        fields_to_overwrite=request.fields_to_overwrite,
+        source_api=request.source_api,
     )
     return Message(message=f"Enrichment task started for {len(request.books)} books.")
 
@@ -2530,9 +2529,8 @@ def batch_enrich_metadata(
         enrich_specific_books,
         books_to_enrich,
         current_user.id,
-        action.fields_to_update,
-        "auto",
-        action.overwrite,
+        fields_to_overwrite=action.fields_to_overwrite,
+        source_api="auto",
     )
     return Message(
         message=f"Started enrichment for {len(books_to_enrich)} books in background."

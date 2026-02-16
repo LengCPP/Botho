@@ -166,7 +166,7 @@ async def enrich_and_import_to_archive(staged_id: uuid.UUID, owner_id: uuid.UUID
                     elif ol.get("subject"):
                         tags = list(set(tags) | set(ol["subject"]))
 
-                ensure_work_metadata(session, a, t, isbn=i, description=desc, category=cat, genre=gen, tags=tags, image_url=img)
+                ensure_work_metadata(session, a, t, isbn_val=i, description=desc, category=cat, genre=gen, tags=tags, image_url=img)
                 s.status = StagedItemStatus.COMPLETED; session.add(s); session.commit()
                 await notification_manager.send_personal_message({"type": "BOOK_ARCHIVE_UPDATED", "staged_id": str(staged_id), "status": "COMPLETED"}, owner_id)
             except Exception as e:

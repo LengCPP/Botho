@@ -182,7 +182,6 @@ async def maintenance_bulk_classify(user_id: uuid.UUID):
 
     logger = logging.getLogger(__name__)
     logger.info("Starting maintenance bulk classification and cleanup...")
-    print("DEBUG: Starting maintenance bulk classification and cleanup...")
 
     with Session(engine) as session:
         # 1. Clean up polluted ISBNs in Item and WorkMetadata
@@ -204,7 +203,6 @@ async def maintenance_bulk_classify(user_id: uuid.UUID):
 
         session.flush()
         logger.info(f"ISBN Cleanup: Fixed {fixed_items} items and {fixed_works} work metadata entries.")
-        print(f"DEBUG: ISBN Cleanup: Fixed {fixed_items} items and {fixed_works} work metadata entries.")
 
         # 2. Bulk Classify
         statement = select(Item).where(Item.item_type == ItemType.book)
@@ -235,7 +233,6 @@ async def maintenance_bulk_classify(user_id: uuid.UUID):
             chunk_objs = books_objects[i:i + CHUNK_SIZE]
 
             logger.info(f"Classifying chunk {i//CHUNK_SIZE + 1} ({len(chunk)} books)...")
-            print(f"DEBUG: Classifying chunk {i//CHUNK_SIZE + 1} ({len(chunk)} books)...")
 
             results = await classify_books(chunk)
 
@@ -261,7 +258,6 @@ async def maintenance_bulk_classify(user_id: uuid.UUID):
 
         session.commit()
         logger.info(f"Maintenance complete: Classified {classified_count} books.")
-        print(f"DEBUG: Maintenance complete: Classified {classified_count} books.")
 
         # Notify user
         await notification_manager.send_personal_message(
@@ -421,9 +417,8 @@ async def fetch_external_book_metadata(
 async def enrich_specific_books(
     books_to_enrich: list[dict[str, str]],
     user_id: uuid.UUID,
-    fields_to_update: list[str] | None = None,
-    source_api: str = "auto",
-    overwrite: bool = False
+    fields_to_overwrite: list[str] | None = None,
+    source_api: str = "auto"
 ):
     """Background task to enrich specific books using external APIs and syncing with WorkMetadata (no AI)."""
     from app.api.websocket_manager import notification_manager
@@ -431,9 +426,9 @@ async def enrich_specific_books(
     from app.search import sync_item_to_search
     from app.storage import upload_image_from_url
 
-    # Defaults if not specified
-    if not fields_to_update:
-        fields_to_update = ["description", "isbn", "image_url", "category", "genre", "tags"]
+    # Default to NO fields overwritten if not specified (safe default)
+    if fields_to_overwrite is None:
+        fields_to_overwrite = []
 
     semaphore = asyncio.Semaphore(3)
 
@@ -441,7 +436,8 @@ async def enrich_specific_books(
         count = 0
         for book_info in books_to_enrich:
             author, title, isbn = book_info.get("author"), book_info.get("title"), book_info.get("isbn")
-            if not author or not title: continue
+            if not author or not title: 
+                continue
 
             # Attempt to find ISBN if not provided
             items = session.exec(select(Item).where(Item.author == author, Item.title == title)).all()
@@ -488,53 +484,67 @@ async def enrich_specific_books(
                     if sj: new_tags.append(sj)
                 new_tags = list(set(new_tags) | set(ol_subjects[:5]))
 
-            # Determine final values. If field in fields_to_update, use new value (if found).
-            # Otherwise keep existing value from WorkMetadata.
-            final_isbn = new_isbn if "isbn" in fields_to_update and new_isbn else (meta.isbn if meta else None)
-            final_desc = new_desc if "description" in fields_to_update and new_desc else (meta.description if meta else None)
-            final_img = new_img if "image_url" in fields_to_update and new_img else (meta.image_url if meta else None)
-            final_cat = new_cat if "category" in fields_to_update and new_cat else (meta.category if meta else None)
-            final_genre = new_genre if "genre" in fields_to_update and new_genre else (meta.genre if meta else None)
+            # Determine final values. 
+            def get_final_val(field_name: str, new_val: Any, current_val: Any):
+                if field_name in fields_to_overwrite:
+                    return new_val if new_val is not None else current_val
+                return current_val if current_val else new_val
+
+            final_isbn = get_final_val("isbn", new_isbn, meta.isbn if meta else None)
+            final_desc = get_final_val("description", new_desc, meta.description if meta else None)
+            final_img = get_final_val("image_url", new_img, meta.image_url if meta else None)
+            final_cat = get_final_val("category", new_cat, meta.category if meta else None)
+            final_genre = get_final_val("genre", new_genre, meta.genre if meta else None)
 
             final_tags = meta.tags if meta else []
-            if "tags" in fields_to_update and new_tags:
-                final_tags = list(set(final_tags) | set(new_tags))
+            if new_tags:
+                if "tags" in fields_to_overwrite:
+                    final_tags = list(set(new_tags)) # Complete replacement
+                else:
+                    final_tags = list(set(final_tags) | set(new_tags)) # Merge
 
             if final_isbn or final_desc or final_img or final_cat or final_genre or final_tags:
                 meta = ensure_work_metadata(
                     session,
                     author,
                     title,
-                    isbn=final_isbn,
+                    isbn_val=final_isbn,
                     description=final_desc,
                     image_url=final_img,
                     category=final_cat,
                     genre=final_genre,
                     tags=final_tags,
-                    overwrite=overwrite
+                    overwrite=True
                 )
                 count += 1
 
             for item in items:
                 updated = False
+                if not meta: continue
 
-                # Update Item fields from WorkMetadata (the Archive)
-                if meta:
-                    if "isbn" in fields_to_update and (overwrite or not item.isbn) and meta.isbn:
-                        item.isbn, updated = meta.isbn, True
-                    if "description" in fields_to_update and (overwrite or not item.description) and meta.description:
-                        item.description, updated = meta.description, True
-                    if "image_url" in fields_to_update and (overwrite or not item.image_url) and meta.image_url:
-                        item.image_url, updated = meta.image_url, True
-                    if "category" in fields_to_update and (overwrite or not item.category) and meta.category:
-                        item.category, updated = meta.category, True
-                    if "genre" in fields_to_update and (overwrite or not item.genre) and meta.genre:
-                        item.genre, updated = meta.genre, True
-
-                    if "tags" in fields_to_update and meta.tags:
-                        existing_tags = item.subject.split(",") if item.subject else []
-                        merged_tags = list(set([t.strip() for t in existing_tags if t.strip()]) | set(meta.tags))
-                        item.subject, updated = ", ".join(merged_tags), True
+                # Overwrite item fields if field is in overwrite list OR if item field is missing
+                if ( "isbn" in fields_to_overwrite or not item.isbn) and meta.isbn:
+                    item.isbn, updated = meta.isbn, True
+                if ("description" in fields_to_overwrite or not item.description) and meta.description:
+                    item.description, updated = meta.description, True
+                if ("image_url" in fields_to_overwrite or not item.image_url) and meta.image_url:
+                    item.image_url, updated = meta.image_url, True
+                if ("category" in fields_to_overwrite or not item.category) and meta.category:
+                    item.category, updated = meta.category, True
+                if ("genre" in fields_to_overwrite or not item.genre) and meta.genre:
+                    item.genre, updated = meta.genre, True
+                
+                if meta.tags:
+                    existing_tags = [t.strip() for t in (item.subject.split(",") if item.subject else []) if t.strip()]
+                    if "tags" in fields_to_overwrite:
+                        new_subject = ", ".join(meta.tags)
+                        if item.subject != new_subject:
+                            item.subject, updated = new_subject, True
+                    else:
+                        merged_tags = list(set(existing_tags) | set(meta.tags))
+                        new_subject = ", ".join(merged_tags)
+                        if item.subject != new_subject:
+                            item.subject, updated = new_subject, True
 
                 if updated:
                     session.add(item)

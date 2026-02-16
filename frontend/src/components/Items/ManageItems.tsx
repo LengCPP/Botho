@@ -273,7 +273,7 @@ export const ManageItems: React.FC<ManageItemsProps> = ({
 
   const batchEnrichMutation = useMutation({
     mutationFn: (ids: string[]) =>
-      ItemsService.batchEnrichMetadata({ requestBody: { item_ids: ids } }),
+      ItemsService.batchEnrichMetadata({ requestBody: { item_ids: ids, fields_to_overwrite: ["description", "isbn", "image_url", "category", "genre", "tags"] } as any }),
     onSuccess: () => {
       showSuccessToast("Enrichment task started in background")
       setSelectedIds([])

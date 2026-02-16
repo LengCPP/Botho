@@ -2297,7 +2297,7 @@
           "items"
         ],
         "summary": "Update Work Metadata",
-        "description": "Update metadata for a work (Tags).",
+        "description": "Update metadata for a work (Tags, Category, Genre).",
         "operationId": "items-update_work_metadata",
         "security": [
           {
@@ -2601,7 +2601,7 @@
           "items"
         ],
         "summary": "Create Condition Rating",
-        "description": "Add or update condition rating for a physical item. \nUser must have had possession of the item.",
+        "description": "Add or update condition rating for a physical item.\nUser must have had possession of the item.",
         "operationId": "items-create_condition_rating",
         "requestBody": {
           "content": {
@@ -7413,6 +7413,50 @@
             "$ref": "#/components/schemas/ItemType",
             "default": "general"
           },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "genre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Genre"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "isbn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isbn"
+          },
           "extra_data": {
             "anyOf": [
               {
@@ -7521,6 +7565,50 @@
                 "type": "null"
               }
             ]
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "genre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Genre"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "isbn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isbn"
           },
           "extra_data": {
             "anyOf": [
@@ -7670,12 +7758,12 @@
             "type": "array",
             "title": "Books"
           },
-          "fields_to_update": {
+          "fields_to_overwrite": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Fields To Update",
+            "title": "Fields To Overwrite",
             "default": [
               "description",
               "isbn",
@@ -7689,11 +7777,6 @@
             "type": "string",
             "title": "Source Api",
             "default": "auto"
-          },
-          "overwrite": {
-            "type": "boolean",
-            "title": "Overwrite",
-            "default": false
           }
         },
         "type": "object",
@@ -8290,12 +8373,12 @@
             "type": "array",
             "title": "Item Ids"
           },
-          "fields_to_update": {
+          "fields_to_overwrite": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Fields To Update",
+            "title": "Fields To Overwrite",
             "default": [
               "description",
               "isbn",
@@ -8304,11 +8387,6 @@
               "genre",
               "tags"
             ]
-          },
-          "overwrite": {
-            "type": "boolean",
-            "title": "Overwrite",
-            "default": false
           }
         },
         "type": "object",
@@ -8455,6 +8533,39 @@
             ],
             "title": "Image Url"
           },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "genre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Genre"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
           "count": {
             "type": "integer",
             "title": "Count"
@@ -8504,39 +8615,6 @@
               }
             ],
             "title": "Owner Name"
-          },
-          "category": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Category"
-          },
-          "genre": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Genre"
-          },
-          "subject": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Subject"
           }
         },
         "type": "object",
@@ -8638,6 +8716,54 @@
               }
             ],
             "title": "Image Url"
+          },
+          "isbn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isbn"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "genre": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Genre"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
           },
           "extra_data": {
             "anyOf": [
@@ -8758,39 +8884,6 @@
             "type": "boolean",
             "title": "Had Possession",
             "default": false
-          },
-          "category": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Category"
-          },
-          "genre": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Genre"
-          },
-          "subject": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Subject"
           }
         },
         "type": "object",
@@ -10683,6 +10776,17 @@
       },
       "WorkMetadataUpdate": {
         "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
           "genre": {
             "anyOf": [
               {
@@ -10707,6 +10811,28 @@
               }
             ],
             "title": "Tags"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
           }
         },
         "type": "object",
