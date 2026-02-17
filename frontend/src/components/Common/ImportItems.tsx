@@ -317,25 +317,6 @@ export const ImportItems = ({
     },
   })
 
-  const classifyMutation = useMutation({
-    mutationFn: (ids: string[]) => {
-      const books = items
-        .filter((i) => ids.includes(i.id))
-        .map((i) => {
-          const raw = pendingEdits[i.id] || i.raw_data
-          return { author: raw.author, title: raw.title }
-        })
-      return ItemsService.triggerAiClassifyBooks({
-        requestBody: { books } as any,
-      })
-    },
-    onSuccess: () => {
-      showSuccessToast("AI Classification task started in background.")
-      setSelectedIds([])
-    },
-    onError: () => showErrorToast("Failed to start AI classification."),
-  })
-
   const deleteSelectedMutation = useMutation({
     mutationFn: async () => {
       await Promise.all(
@@ -528,18 +509,6 @@ export const ImportItems = ({
                 </HStack>
               </HStack>
               <HStack gap={2}>
-                {user?.is_superuser && (
-                  <Button
-                    colorPalette="orange"
-                    size="sm"
-                    variant="surface"
-                    disabled={selectedIds.length === 0 || hasPendingEdits}
-                    onClick={() => classifyMutation.mutate(selectedIds)}
-                    loading={classifyMutation.isPending}
-                  >
-                    <Icon as={FaRobot} mr={1} /> AI Classify
-                  </Button>
-                )}
                 <Button
                   bg="ui.hover"
                   size="sm"

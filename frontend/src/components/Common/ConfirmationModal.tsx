@@ -1,3 +1,4 @@
+import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import {
   DialogActionTrigger,
@@ -9,15 +10,19 @@ import {
   DialogRoot,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Text } from "@chakra-ui/react"
+import { Text, VStack } from "@chakra-ui/react"
+import { useState } from "react"
 
 interface ConfirmationModalProps {
   isOpen: boolean
   onClose: () => void
-  onConfirm: () => void
+  onConfirm: (dontShowAgain?: boolean) => void
   title: string
   message: string
   isLoading?: boolean
+  showCheckbox?: boolean
+  confirmButtonText?: string
+  colorPalette?: string
 }
 
 const ConfirmationModal = ({
@@ -27,7 +32,16 @@ const ConfirmationModal = ({
   title,
   message,
   isLoading = false,
+  showCheckbox = true,
+  confirmButtonText = "Confirm",
+  colorPalette = "red",
 }: ConfirmationModalProps) => {
+  const [dontShowAgain, setDontShowAgain] = useState(false)
+
+  const handleConfirm = () => {
+    onConfirm(dontShowAgain)
+  }
+
   return (
     <DialogRoot
       open={isOpen}
@@ -42,7 +56,17 @@ const ConfirmationModal = ({
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <DialogBody>
-          <Text>{message}</Text>
+          <VStack align="stretch" gap={4}>
+            <Text color="fg.muted">{message}</Text>
+            {showCheckbox && (
+              <Checkbox
+                checked={dontShowAgain}
+                onCheckedChange={(e) => setDontShowAgain(!!e.checked)}
+              >
+                Don't show this again
+              </Checkbox>
+            )}
+          </VStack>
         </DialogBody>
         <DialogFooter gap={3}>
           <DialogActionTrigger asChild>
@@ -55,8 +79,8 @@ const ConfirmationModal = ({
               Cancel
             </Button>
           </DialogActionTrigger>
-          <Button colorPalette="red" onClick={onConfirm} loading={isLoading}>
-            Confirm
+          <Button colorPalette={colorPalette} onClick={handleConfirm} loading={isLoading}>
+            {confirmButtonText}
           </Button>
         </DialogFooter>
         <DialogCloseTrigger onClick={onClose} disabled={isLoading} />

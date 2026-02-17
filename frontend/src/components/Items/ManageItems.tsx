@@ -22,6 +22,7 @@ import {
 import React, { useCallback, useMemo, useState } from "react"
 import {
   FiArchive,
+  FiCheckCircle,
   FiEye,
   FiEyeOff,
   FiFilePlus,
@@ -29,11 +30,11 @@ import {
   FiMaximize2,
   FiRefreshCw,
   FiTrash2,
-  FiZap,
 } from "react-icons/fi"
 
 import { type ItemPublic, ItemsService } from "@/client"
 import { ImportItems } from "@/components/Common/ImportItems"
+import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import useCustomToast from "@/hooks/useCustomToast"
 import { ItemDetailModal } from "./ItemDetailModal"
 
@@ -42,6 +43,8 @@ interface ManageItemsProps {
   communityId?: string
 }
 
+type ActionType = "delete" | "lost" | "found" | "private" | "sync"
+
 const ItemRow = React.memo(
   ({
     item,
@@ -49,6 +52,7 @@ const ItemRow = React.memo(
     onSelect,
     onDelete,
     onMarkLost,
+    onMarkFound,
     onTogglePrivate,
     onView,
     isProcessing,
@@ -58,6 +62,7 @@ const ItemRow = React.memo(
     onSelect: (checked: boolean) => void
     onDelete: (id: string) => void
     onMarkLost: (id: string) => void
+    onMarkFound: (id: string) => void
     onTogglePrivate: (id: string) => void
     onView: (item: ItemPublic) => void
     isProcessing: boolean
@@ -146,7 +151,18 @@ const ItemRow = React.memo(
             >
               <FiTrash2 />
             </IconButton>
-            {!item.is_lost && (
+            {item.is_lost ? (
+              <IconButton
+                size="xs"
+                variant="ghost"
+                colorPalette="green"
+                onClick={() => onMarkFound(item.id)}
+                disabled={isProcessing}
+                title="Mark as Found"
+              >
+                <FiCheckCircle />
+              </IconButton>
+            ) : (
               <IconButton
                 size="xs"
                 variant="ghost"
@@ -182,6 +198,11 @@ export const ManageItems: React.FC<ManageItemsProps> = ({
   const [activeTab, setActiveTab] = useState("catalogue")
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [viewItem, setViewItem] = useState<ItemPublic | null>(null)
+  const [confirmAction, setConfirmAction] = useState<{
+    type: ActionType
+    ids: string[]
+  } | null>(null)
+
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const queryClient = useQueryClient()
 
@@ -259,6 +280,18 @@ export const ManageItems: React.FC<ManageItemsProps> = ({
     onError: () => showErrorToast("Failed to mark items as lost"),
   })
 
+  const batchFoundMutation = useMutation({
+    mutationFn: (ids: string[]) =>
+      (ItemsService as any).batchMarkFound({ requestBody: { item_ids: ids } }),
+    onSuccess: () => {
+      showSuccessToast("Items marked as found")
+      setSelectedIds([])
+      queryClient.invalidateQueries({ queryKey: ["manage-items"] })
+      queryClient.invalidateQueries({ queryKey: ["items"] })
+    },
+    onError: () => showErrorToast("Failed to mark items as found"),
+  })
+
   const batchPrivateMutation = useMutation({
     mutationFn: (ids: string[]) =>
       ItemsService.batchTogglePrivacy({ requestBody: { item_ids: ids } }),
@@ -271,21 +304,89 @@ export const ManageItems: React.FC<ManageItemsProps> = ({
     onError: () => showErrorToast("Failed to toggle privacy"),
   })
 
-  const batchEnrichMutation = useMutation({
+  const batchSyncMutation = useMutation({
     mutationFn: (ids: string[]) =>
-      ItemsService.batchEnrichMetadata({ requestBody: { item_ids: ids, fields_to_overwrite: ["description", "isbn", "image_url", "category", "genre", "tags"] } as any }),
+      ItemsService.batchSyncFromArchive({ requestBody: { item_ids: ids } }),
     onSuccess: () => {
-      showSuccessToast("Enrichment task started in background")
+      showSuccessToast("Sync task started in background")
       setSelectedIds([])
     },
-    onError: () => showErrorToast("Failed to start enrichment"),
+    onError: () => showErrorToast("Failed to start sync"),
   })
+
+  const handleAction = (type: ActionType, ids: string[]) => {
+    const dontShow = localStorage.getItem(`skipConfirm_${type}`) === "true"
+    if (dontShow) {
+      executeAction(type, ids)
+    } else {
+      setConfirmAction({ type, ids })
+    }
+  }
+
+  const executeAction = (type: ActionType, ids: string[]) => {
+    switch (type) {
+      case "delete":
+        batchDeleteMutation.mutate(ids)
+        break
+      case "lost":
+        batchLostMutation.mutate(ids)
+        break
+      case "found":
+        batchFoundMutation.mutate(ids)
+        break
+      case "private":
+        batchPrivateMutation.mutate(ids)
+        break
+      case "sync":
+        batchSyncMutation.mutate(ids)
+        break
+    }
+  }
+
+  const onConfirmAction = (dontShowAgain: boolean) => {
+    if (confirmAction) {
+      if (dontShowAgain) {
+        localStorage.setItem(`skipConfirm_${confirmAction.type}`, "true")
+      }
+      executeAction(confirmAction.type, confirmAction.ids)
+      setConfirmAction(null)
+    }
+  }
+
+  const actionConfig = {
+    delete: {
+      title: "Delete Items",
+      message: `Are you sure you want to delete ${confirmAction?.ids.length} item(s)? This action cannot be undone.`,
+      color: "red",
+    },
+    lost: {
+      title: "Mark as Lost",
+      message: `Mark ${confirmAction?.ids.length} item(s) as lost? They will be moved to the 'Lost Items' tab and hidden from the public catalogue.`,
+      color: "orange",
+    },
+    found: {
+      title: "Mark as Found",
+      message: `Mark ${confirmAction?.ids.length} item(s) as found? They will be moved back to your public catalogue.`,
+      color: "green",
+    },
+    private: {
+      title: "Toggle Privacy",
+      message: `Change the privacy status for ${confirmAction?.ids.length} item(s)? Private items are only visible to you.`,
+      color: "purple",
+    },
+    sync: {
+      title: "Sync from Archive",
+      message: `Sync ${confirmAction?.ids.length} item(s) with the Botho Archive? Existing tags will be merged with archive tags, and other fields will be updated to match the archive.`,
+      color: "teal",
+    },
+  }
 
   const isProcessing =
     batchDeleteMutation.isPending ||
     batchLostMutation.isPending ||
+    batchFoundMutation.isPending ||
     batchPrivateMutation.isPending ||
-    batchEnrichMutation.isPending
+    batchSyncMutation.isPending
 
   return (
     <VStack align="stretch" gap={6} width="full">
@@ -329,19 +430,29 @@ export const ManageItems: React.FC<ManageItemsProps> = ({
                     colorPalette="red"
                     variant="surface"
                     disabled={selectedIds.length === 0 || isProcessing}
-                    onClick={() => batchDeleteMutation.mutate(selectedIds)}
+                    onClick={() => handleAction("delete", selectedIds)}
                   >
                     <FiTrash2 /> Delete ({selectedIds.length})
                   </Button>
-                  {activeTab !== "lost" && (
+                  {activeTab !== "lost" ? (
                     <Button
                       size="sm"
                       colorPalette="orange"
                       variant="surface"
                       disabled={selectedIds.length === 0 || isProcessing}
-                      onClick={() => batchLostMutation.mutate(selectedIds)}
+                      onClick={() => handleAction("lost", selectedIds)}
                     >
                       <FiMapPin /> Mark Lost
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      colorPalette="green"
+                      variant="surface"
+                      disabled={selectedIds.length === 0 || isProcessing}
+                      onClick={() => handleAction("found", selectedIds)}
+                    >
+                      <FiCheckCircle /> Mark Found
                     </Button>
                   )}
                   <Button
@@ -349,21 +460,24 @@ export const ManageItems: React.FC<ManageItemsProps> = ({
                     colorPalette="purple"
                     variant="surface"
                     disabled={selectedIds.length === 0 || isProcessing}
-                    onClick={() => batchPrivateMutation.mutate(selectedIds)}
+                    onClick={() => handleAction("private", selectedIds)}
                   >
                     {activeTab === "private" ? <FiEye /> : <FiEyeOff />}{" "}
                     {activeTab === "private" ? "Make Public" : "Make Private"}
                   </Button>
                   {activeTab === "catalogue" && (
-                    <Button
-                      size="sm"
-                      colorPalette="blue"
-                      variant="surface"
-                      disabled={selectedIds.length === 0 || isProcessing}
-                      onClick={() => batchEnrichMutation.mutate(selectedIds)}
-                    >
-                      <FiZap /> Enrich
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        colorPalette="teal"
+                        variant="surface"
+                        disabled={selectedIds.length === 0 || isProcessing}
+                        onClick={() => handleAction("sync", selectedIds)}
+                        title="Sync metadata from the local Botho Archive"
+                      >
+                        <FiRefreshCw /> Sync
+                      </Button>
+                    </>
                   )}
                 </HStack>
                 <IconButton
@@ -406,11 +520,10 @@ export const ManageItems: React.FC<ManageItemsProps> = ({
                         item={item}
                         isSelected={selectedIds.includes(item.id)}
                         onSelect={(checked) => toggleSelect(item.id, checked)}
-                        onDelete={(id) => batchDeleteMutation.mutate([id])}
-                        onMarkLost={(id) => batchLostMutation.mutate([id])}
-                        onTogglePrivate={(id) =>
-                          batchPrivateMutation.mutate([id])
-                        }
+                        onDelete={(id) => handleAction("delete", [id])}
+                        onMarkLost={(id) => handleAction("lost", [id])}
+                        onMarkFound={(id) => handleAction("found", [id])}
+                        onTogglePrivate={(id) => handleAction("private", [id])}
                         onView={(i) => setViewItem(i)}
                         isProcessing={isProcessing}
                       />
@@ -438,6 +551,18 @@ export const ManageItems: React.FC<ManageItemsProps> = ({
         isOpen={!!viewItem}
         onClose={() => setViewItem(null)}
       />
+
+      {confirmAction && (
+        <ConfirmationModal
+          isOpen={!!confirmAction}
+          onClose={() => setConfirmAction(null)}
+          onConfirm={onConfirmAction}
+          title={actionConfig[confirmAction.type].title}
+          message={actionConfig[confirmAction.type].message}
+          colorPalette={actionConfig[confirmAction.type].color}
+          isLoading={isProcessing}
+        />
+      )}
     </VStack>
   )
 }

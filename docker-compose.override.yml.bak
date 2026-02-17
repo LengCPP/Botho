@@ -1,0 +1,82 @@
+services:
+  backend:
+    volumes:
+      - ./backend:/app
+      - /app/.venv
+    environment:
+      - DOMAIN=localhost
+      - FRONTEND_HOST=http://localhost
+      - ENVIRONMENT=local
+    command: ["fastapi", "run", "--reload", "app/main.py"]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.botho-dev-backend-http.rule=Host(`localhost`) && (PathPrefix(`/api`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`))
+      - traefik.http.routers.botho-dev-backend-http.service=botho-dev-backend
+      - traefik.http.services.botho-dev-backend.loadbalancer.server.port=8000
+      - traefik.http.routers.botho-dev-backend-http.priority=10
+
+  frontend:
+    image: node:20
+    working_dir: /app
+    environment:
+      - VITE_API_URL=http://localhost
+      - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - VITE_GOOGLE_BOOKS_API_KEY=${VITE_GOOGLE_BOOKS_API_KEY}
+      - NODE_ENV=development
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: >
+      sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.botho-dev-frontend-http.rule=Host(`localhost`)
+      - traefik.http.routers.botho-dev-frontend-http.service=botho-dev-frontend
+      - traefik.http.services.botho-dev-frontend.loadbalancer.server.port=5173
+      - traefik.http.routers.botho-dev-frontend-http.priority=5
+
+  db:
+    ports:
+      - "5433:5432"
+
+  adminer:
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.botho-dev-adminer-http.rule=Host(`adminer.localhost`)
+      - traefik.http.routers.botho-dev-adminer-http.service=botho-dev-adminer
+      - traefik.http.services.botho-dev-adminer.loadbalancer.server.port=8080
+
+  minio:
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.botho-dev-minio-api.rule=Host(`minio.localhost`)
+      - traefik.http.routers.botho-dev-minio-api.service=botho-dev-minio
+      - traefik.http.services.botho-dev-minio.loadbalancer.server.port=9000
+      - traefik.http.routers.botho-dev-minio-console.rule=Host(`console.minio.localhost`)
+      - traefik.http.routers.botho-dev-minio-console.service=botho-dev-minio-console
+      - traefik.http.services.botho-dev-minio-console.loadbalancer.server.port=9001
+
+  meilisearch:
+    ports:
+      - "7700:7700"
+
+  traefik:
+    image: traefik:3.6.5
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command:
+      - --providers.docker
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.http.address=:80
+      - --log.level=INFO
+      - --accesslog=true
+    networks:
+      - traefik-public
+      - default

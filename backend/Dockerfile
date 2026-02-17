@@ -4,39 +4,38 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app/
 
+# Create a non-root user
+RUN groupadd -r botho && useradd -m -r -g botho botho && \
+    chown botho:botho /app/
+
 # Install uv
-# Ref: https://docs.astral.sh/uv/guides/integration/docker/#installing-uv
 COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /bin/
 
 # Place executables in the environment at the front of the path
-# Ref: https://docs.astral.sh/uv/guides/integration/docker/#using-the-environment
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Compile bytecode
-# Ref: https://docs.astral.sh/uv/guides/integration/docker/#compiling-bytecode
 ENV UV_COMPILE_BYTECODE=1
 
 # uv Cache
-# Ref: https://docs.astral.sh/uv/guides/integration/docker/#caching
 ENV UV_LINK_MODE=copy
 
+# Switch to non-root user
+USER botho
+
 # Install dependencies
-# Ref: https://docs.astral.sh/uv/guides/integration/docker/#intermediate-layers
-RUN --mount=type=cache,target=/root/.cache/uv \
+RUN --mount=type=cache,target=/home/botho/.cache/uv,uid=999,gid=999 \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --no-install-project
 
 ENV PYTHONPATH=/app
 
-COPY ./scripts /app/scripts
-
-COPY ./pyproject.toml ./alembic.ini /app/
-
-COPY ./app /app/app
+COPY --chown=botho:botho ./scripts /app/scripts
+COPY --chown=botho:botho ./pyproject.toml ./alembic.ini /app/
+COPY --chown=botho:botho ./app /app/app
 
 # Sync the project
-# Ref: https://docs.astral.sh/uv/guides/integration/docker/#intermediate-layers
-RUN --mount=type=cache,target=/root/.cache/uv \
+RUN --mount=type=cache,target=/home/botho/.cache/uv,uid=999,gid=999 \
     uv sync
 
 CMD ["fastapi", "run", "--workers", "4", "app/main.py"]

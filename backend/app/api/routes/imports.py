@@ -13,6 +13,7 @@ from app.api.utils import (
     ensure_work_metadata,
     fetch_external_book_metadata,
     map_book_classification,
+    normalize_isbn,
 )
 from app.api.websocket_manager import notification_manager
 from app.core.db import engine
@@ -40,6 +41,10 @@ async def stage_items(*, session: SessionDep, current_user: CurrentUser, data: l
         for row in data:
             raw = {k: row[v] for k, v in m.items() if v in row}
             if raw.get("title"):
+                # Normalize ISBN during staging if present
+                if raw.get("isbn"):
+                    raw["isbn"] = normalize_isbn(raw["isbn"])
+                
                 session.add(StagedItem(owner_id=current_user.id, community_id=community_id, raw_data=raw, status=StagedItemStatus.PENDING))
                 count += 1
         session.commit()
@@ -60,6 +65,11 @@ def read_staged_items(session: SessionDep, current_user: CurrentUser, community_
 def update_staged_item(*, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, raw_data: dict[str, Any]) -> Any:
     db = session.get(StagedItem, id)
     if not db or db.owner_id != current_user.id: raise HTTPException(404)
+    
+    # Normalize ISBN if updated
+    if raw_data.get("isbn"):
+        raw_data["isbn"] = normalize_isbn(raw_data["isbn"])
+        
     db.raw_data = raw_data
     session.add(db); session.commit(); session.refresh(db)
     return db
@@ -69,6 +79,9 @@ def bulk_update_staged_items(*, session: SessionDep, current_user: CurrentUser, 
     for id, raw_data in items.items():
         db = session.get(StagedItem, id)
         if db and db.owner_id == current_user.id:
+            # Normalize ISBN if present
+            if raw_data.get("isbn"):
+                raw_data["isbn"] = normalize_isbn(raw_data["isbn"])
             db.raw_data = raw_data
             session.add(db)
     session.commit()
@@ -125,18 +138,16 @@ async def enrich_and_import_to_archive(staged_id: uuid.UUID, owner_id: uuid.UUID
             try:
                 d = s.raw_data; t, a, i = str(d.get("title", "")).strip(), str(d.get("author", "")).strip(), str(d.get("isbn", "")).strip() or None
                 if not t or not a: raise ValueError("Title/Author required")
-                m = session.exec(select(WorkMetadata).where(WorkMetadata.isbn == "".join(c for c in i if c.isdigit() or c.upper()=="X").upper())).first() if i else None
+                
+                # Normalize ISBN
+                i = normalize_isbn(i)
+                
+                m = session.exec(select(WorkMetadata).where(WorkMetadata.isbn == i)).first() if i else None
                 if not m: m = session.get(WorkMetadata, (a, t))
+                
                 img = await upload_image_from_url(d["image_url"], "items") if d.get("image_url") else None
                 g, ol = await fetch_external_book_metadata(a, t, i)
                 desc, cat, gen, tags = str(d.get("description", "")).strip() or None, None, None, []
-
-                # Check staged data for explicit classification first
-                raw_cat, raw_gen = d.get("category"), d.get("genre")
-                if raw_cat or raw_gen:
-                    c, gn, sj = map_book_classification(raw_gen or raw_cat)
-                    cat, gen = c, gn
-                    if sj: tags.append(sj)
 
                 if m:
                     t, a, desc, img, cat, gen, i = m.title, m.author, m.description or desc, m.image_url or img, m.category or cat, m.genre or gen, m.isbn or i
@@ -147,8 +158,8 @@ async def enrich_and_import_to_archive(staged_id: uuid.UUID, owner_id: uuid.UUID
                     if not img and g.get("imageLinks"):
                         try: img = await upload_image_from_url(g["imageLinks"].get("medium") or g["imageLinks"].get("thumbnail"), "items")
                         except: pass
-                    # Map category/genre from Google if not already set
-                    if not cat and g.get("categories"):
+                    # Map category/genre from Google
+                    if g.get("categories"):
                         c, gn, sj = map_book_classification(g["categories"])
                         cat, gen = c, gn
                         if sj: tags.append(sj)
@@ -158,16 +169,21 @@ async def enrich_and_import_to_archive(staged_id: uuid.UUID, owner_id: uuid.UUID
                     if not img:
                         try: img = await upload_image_from_url(ol.get("cover_url") or f"https://covers.openlibrary.org/b/id/{ol.get('cover_i')}-L.jpg", "items")
                         except: pass
-                    # Map category/genre from OpenLibrary subjects if not already set
-                    if not cat and ol.get("subject"):
+                    # Map category/genre from OpenLibrary
+                    if ol.get("subject"):
                         c, gn, sj = map_book_classification(ol["subject"])
                         cat, gen = c, gn
                         if sj: tags.append(sj)
                     elif ol.get("subject"):
                         tags = list(set(tags) | set(ol["subject"]))
+                else:
+                    # Not found in archive or APIs
+                    raise ValueError("Book not found in archive or external APIs")
 
                 ensure_work_metadata(session, a, t, isbn_val=i, description=desc, category=cat, genre=gen, tags=tags, image_url=img)
-                s.status = StagedItemStatus.COMPLETED; session.add(s); session.commit()
+                # Success: Delete from staging
+                session.delete(s)
+                session.commit()
                 await notification_manager.send_personal_message({"type": "BOOK_ARCHIVE_UPDATED", "staged_id": str(staged_id), "status": "COMPLETED"}, owner_id)
             except Exception as e:
                 s.status, s.error_log = StagedItemStatus.FAILED, str(e); session.add(s); session.commit()
@@ -184,53 +200,47 @@ async def enrich_and_import_item(staged_id: uuid.UUID, owner_id: uuid.UUID, comm
             try:
                 d = s.raw_data; t, a, i = str(d.get("title", "")).strip(), str(d.get("author", "")).strip(), str(d.get("isbn", "")).strip() or None
                 if not t: raise ValueError("Title required")
-                m = session.exec(select(WorkMetadata).where(WorkMetadata.isbn == "".join(c for c in i if c.isdigit() or c.upper()=="X").upper())).first() if i else None
+                
+                # Normalize ISBN
+                i = normalize_isbn(i)
+                
+                m = session.exec(select(WorkMetadata).where(WorkMetadata.isbn == i)).first() if i else None
                 if not m and a: m = session.get(WorkMetadata, (a, t))
-                img = await upload_image_from_url(d["image_url"], "items") if d.get("image_url") else None
+                
                 g, ol = await fetch_external_book_metadata(a, t, i)
-                desc, extra = str(d.get("description", "")).strip() or None, {}
-
-                # Classification variables
-                cat, gen, subjects = None, None, []
-
-                # Check staged data for explicit classification first
-                raw_cat, raw_gen = d.get("category"), d.get("genre")
-                if raw_cat or raw_gen:
-                    c, gn, sj = map_book_classification(raw_gen or raw_cat)
-                    cat, gen = c, gn
-                    if sj: subjects.append(sj)
+                
+                # These must come from API/Archive, not staging
+                desc, img, cat, gen, subjects = None, None, None, None, []
 
                 if m:
-                    t, a, desc, img = m.title, m.author, m.description or desc, m.image_url or img
-                    cat, gen = m.category or cat, m.genre or gen
-                    subjects = list(set(subjects) | set(m.tags or []))
-                    extra = {"isbn": m.isbn or i}
+                    t, a, desc, img = m.title, m.author, m.description, m.image_url
+                    cat, gen = m.category, m.genre
+                    subjects = m.tags or []
+                    i = m.isbn or i
                 elif g:
-                    t, desc = g.get("title", t), g.get("description", desc)
+                    t, desc = g.get("title", t), g.get("description")
                     a, i = ", ".join(g.get("authors", [])) or a, next((x["identifier"] for x in g.get("industryIdentifiers", []) if x["type"] in ["ISBN_13", "ISBN_10"]), i)
-                    if not img and g.get("imageLinks"):
+                    if g.get("imageLinks"):
                         try: img = await upload_image_from_url(g["imageLinks"].get("medium") or g["imageLinks"].get("thumbnail"), "items")
                         except: pass
-                    # Map classification from Google if not already set
-                    if not cat and g.get("categories"):
+                    if g.get("categories"):
                         c, gn, sj = map_book_classification(g["categories"])
                         cat, gen = c, gn
                         if sj: subjects.append(sj)
-                    extra = {"isbn": i}
                 elif ol:
-                    t, desc = ol.get("title", t), ol.get("description") or desc
+                    t, desc = ol.get("title", t), ol.get("description")
                     a = ", ".join([x["name"] if isinstance(x, dict) else x for x in ol.get("authors", [])] or ol.get("author_name", [])) or a
-                    if not img:
-                        try: img = await upload_image_from_url(ol.get("cover_url") or f"https://covers.openlibrary.org/b/id/{ol.get('cover_i')}-L.jpg", "items")
-                        except: pass
-                    # Map classification from OpenLibrary if not already set
-                    if not cat and ol.get("subject"):
+                    try: img = await upload_image_from_url(ol.get("cover_url") or f"https://covers.openlibrary.org/b/id/{ol.get('cover_i')}-L.jpg", "items")
+                    except: pass
+                    if ol.get("subject"):
                         c, gn, sj = map_book_classification(ol["subject"])
                         cat, gen = c, gn
                         if sj: subjects.append(sj)
                     elif ol.get("subject"):
                         subjects = list(set(subjects) | set(ol["subject"]))
-                    extra = {"isbn": i}
+                else:
+                    # Not found in archive or APIs
+                    raise ValueError("Book not found in archive or external APIs. Please edit and add manually.")
 
                 # Final classification string for subject
                 subject_str = ", ".join(subjects) if subjects else None
@@ -246,12 +256,17 @@ async def enrich_and_import_item(staged_id: uuid.UUID, owner_id: uuid.UUID, comm
                     category=cat,
                     genre=gen,
                     subject=subject_str,
-                    extra_data={}
+                    extra_data={},
+                    # Physical info CAN come from staging as it's user-specific
+                    info=d.get("info", {}) 
                 )
                 session.add(item); session.flush()
                 session.add(Contribution(user_id=owner_id, item_id=item.id, work_author=a, work_title=t, description=f"Imported: {t}"))
                 if a and t: ensure_work_metadata(session, a, t, isbn_val=i, description=desc, category=cat, genre=gen, tags=subjects, image_url=img)
-                s.status = StagedItemStatus.COMPLETED; session.add(s); session.commit()
+                
+                # Success: Delete from staging
+                session.delete(s)
+                session.commit()
                 session.refresh(item)
                 await notification_manager.send_personal_message({"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "COMPLETED"}, owner_id)
             except Exception as e:

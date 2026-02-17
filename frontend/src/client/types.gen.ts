@@ -1122,6 +1122,12 @@ export type ItemsBatchEnrichMetadataData = {
 
 export type ItemsBatchEnrichMetadataResponse = (Message);
 
+export type ItemsBatchSyncFromArchiveData = {
+    requestBody: ItemBatchAction;
+};
+
+export type ItemsBatchSyncFromArchiveResponse = (Message);
+
 export type LoansCreateLoanRequestData = {
     requestBody: LoanCreate;
 };

@@ -397,6 +397,16 @@ function BookArchive() {
     },
   })
 
+  const maintenanceMutation = useMutation({
+    mutationFn: () => ItemsService.triggerBulkClassify(),
+    onSuccess: () => {
+      showSuccessToast("Maintenance task started in background")
+    },
+    onError: () => {
+      showErrorToast("Failed to start maintenance task")
+    },
+  })
+
   const aiClassifyMutation = useMutation({
     mutationFn: (data: { books: { author: string; title: string }[] }) =>
       ItemsService.triggerAiClassifyBooks({ requestBody: data as any }),
@@ -406,16 +416,6 @@ function BookArchive() {
     },
     onError: () => {
       showErrorToast("Failed to start AI classification task")
-    },
-  })
-
-  const maintenanceMutation = useMutation({
-    mutationFn: () => ItemsService.triggerBulkClassify(),
-    onSuccess: () => {
-      showSuccessToast("Maintenance task started in background")
-    },
-    onError: () => {
-      showErrorToast("Failed to start maintenance task")
     },
   })
 
@@ -611,12 +611,13 @@ function BookArchive() {
 
               <Button
                 size="sm"
-                variant="outline"
+                variant="solid"
                 colorPalette="orange"
                 onClick={() => maintenanceMutation.mutate()}
                 loading={maintenanceMutation.isPending}
+                title="Consolidate duplicates and fix common archive data issues using AI"
               >
-                <FiRefreshCw /> Auto-Classify
+                <FiZap /> AI Classify Archive
               </Button>
               <Button
                 size="sm"
@@ -624,9 +625,25 @@ function BookArchive() {
                 colorPalette="blue"
                 onClick={() => syncRegistryMutation.mutate()}
                 loading={syncRegistryMutation.isPending}
+                title="Scan all user items and ensure they are recorded in the archive"
               >
-                <FiRefreshCw /> Sync Registry
+                <FiRefreshCw /> Sync from Items
               </Button>
+              <IconButton
+                variant="ghost"
+                onClick={() => {
+                  queryClient.invalidateQueries({
+                    queryKey: ["book-archive-infinite"],
+                  })
+                  queryClient.invalidateQueries({
+                    queryKey: ["book-archive-count"],
+                  })
+                }}
+                loading={queryClient.isFetching({ queryKey: ["book-archive-infinite"] }) > 0}
+                title="Refresh Archive"
+              >
+                <FiRefreshCw />
+              </IconButton>
             </HStack>
           )}
         </Flex>

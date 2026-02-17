@@ -2486,6 +2486,24 @@ def batch_mark_lost(
     return Message(message=f"Successfully marked {updated_count} items as lost.")
 
 
+@router.post("/batch/mark-found", response_model=Message)
+def batch_mark_found(
+    *, session: SessionDep, current_user: CurrentUser, action: ItemBatchAction
+) -> Any:
+    """Mark multiple lost items as found (move back to catalogue)."""
+    items = session.exec(select(Item).where(Item.id.in_(action.item_ids))).all()
+    updated_count = 0
+    for item in items:
+        if _is_owner_or_admin(item, current_user, session):
+            item.is_lost = False
+            session.add(item)
+            sync_item_to_search(item)
+            updated_count += 1
+
+    session.commit()
+    return Message(message=f"Successfully marked {updated_count} items as found.")
+
+
 @router.post("/batch/toggle-privacy", response_model=Message)
 def batch_toggle_privacy(
     *, session: SessionDep, current_user: CurrentUser, action: ItemBatchAction
@@ -2512,7 +2530,13 @@ def batch_enrich_metadata(
     action: ItemBatchEnrich,
     background_tasks: BackgroundTasks,
 ) -> Any:
-    """Enrich metadata for multiple items in the background."""
+    """
+    Enrich metadata for multiple items in the background.
+    Superuser only to prevent API abuse.
+    """
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+
     items = session.exec(select(Item).where(Item.id.in_(action.item_ids))).all()
     books_to_enrich = []
     for item in items:
@@ -2520,7 +2544,9 @@ def batch_enrich_metadata(
             _is_owner_or_admin(item, current_user, session)
             and item.item_type == ItemType.book
         ):
-            books_to_enrich.append({"author": item.author, "title": item.title})
+            books_to_enrich.append(
+                {"author": item.author, "title": item.title, "isbn": item.isbn}
+            )
 
     if not books_to_enrich:
         return Message(message="No valid books found for enrichment.")
@@ -2534,4 +2560,34 @@ def batch_enrich_metadata(
     )
     return Message(
         message=f"Started enrichment for {len(books_to_enrich)} books in background."
+    )
+
+
+@router.post("/batch/sync-archive", response_model=Message)
+def batch_sync_from_archive(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    action: ItemBatchAction,
+    background_tasks: BackgroundTasks,
+) -> Any:
+    """Sync items with the latest data from the WorkMetadata archive in the background."""
+    from app.api.utils import sync_items_from_archive
+
+    valid_ids = []
+    for item_id in action.item_ids:
+        item = session.get(Item, item_id)
+        if (
+            item
+            and _is_owner_or_admin(item, current_user, session)
+            and item.item_type == ItemType.book
+        ):
+            valid_ids.append(item.id)
+
+    if not valid_ids:
+        return Message(message="No valid books found for sync.")
+
+    background_tasks.add_task(sync_items_from_archive, valid_ids, current_user.id)
+    return Message(
+        message=f"Started sync from archive for {len(valid_ids)} books in background."
     )

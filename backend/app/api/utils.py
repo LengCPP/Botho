@@ -439,6 +439,70 @@ async def fetch_external_book_metadata(
 
     return google_data, open_library_data
 
+async def sync_items_from_archive(
+    item_ids: list[uuid.UUID],
+    user_id: uuid.UUID,
+):
+    """
+    Background task to sync items with the latest data from the WorkMetadata archive.
+    Priority: ISBN first, then Title + Author.
+    Subjects are merged, other fields are replaced.
+    """
+    from app.api.websocket_manager import notification_manager
+    from app.core.db import engine
+    from app.search import sync_item_to_search
+
+    with Session(engine) as session:
+        count = 0
+        for item_id in item_ids:
+            item = session.get(Item, item_id)
+            if not item or item.item_type != ItemType.book:
+                continue
+
+            # 1. Match by ISBN first
+            meta = None
+            if item.isbn:
+                meta = session.exec(select(WorkMetadata).where(WorkMetadata.isbn == item.isbn)).first()
+            
+            # 2. Match by Author/Title
+            if not meta and item.author and item.title:
+                meta = session.get(WorkMetadata, (item.author, item.title))
+
+            if not meta:
+                continue
+
+            updated = False
+            # Replace fields (except subject)
+            if meta.isbn and item.isbn != meta.isbn:
+                item.isbn, updated = meta.isbn, True
+            if meta.description and item.description != meta.description:
+                item.description, updated = meta.description, True
+            if meta.image_url and item.image_url != meta.image_url:
+                item.image_url, updated = meta.image_url, True
+            if meta.category and item.category != meta.category:
+                item.category, updated = meta.category, True
+            if meta.genre and item.genre != meta.genre:
+                item.genre, updated = meta.genre, True
+            
+            # Merge subject
+            if meta.tags:
+                existing_tags = [t.strip() for t in (item.subject.split(",") if item.subject else []) if t.strip()]
+                merged_tags = list(set(existing_tags) | set(meta.tags))
+                new_subject = ", ".join(merged_tags)
+                if item.subject != new_subject:
+                    item.subject, updated = new_subject, True
+
+            if updated:
+                session.add(item)
+                sync_item_to_search(item)
+                count += 1
+
+        session.commit()
+        await notification_manager.send_personal_message(
+            {"type": "BOOK_ARCHIVE_UPDATED", "count": count, "action": "synced"},
+            user_id
+        )
+
 async def enrich_specific_books(
     books_to_enrich: list[dict[str, str]],
     user_id: uuid.UUID,
@@ -466,7 +530,13 @@ async def enrich_specific_books(
 
             # Attempt to find ISBN if not provided
             items = session.exec(select(Item).where(Item.author == author, Item.title == title)).all()
-            meta = session.get(WorkMetadata, (author, title))
+            
+            # Prioritize ISBN for metadata lookup
+            meta = None
+            if isbn:
+                meta = session.exec(select(WorkMetadata).where(WorkMetadata.isbn == isbn)).first()
+            if not meta:
+                meta = session.get(WorkMetadata, (author, title))
 
             if not isbn:
                 isbn = meta.isbn if meta and meta.isbn else next((i.isbn for i in items if i.isbn), None)
@@ -490,7 +560,7 @@ async def enrich_specific_books(
 
                 img_links = google_data.get("imageLinks", {})
                 thumb = (img_links.get("medium") or img_links.get("small") or img_links.get("thumbnail") or "").replace("http://", "https://")
-                if thumb:
+                if thumb and (not meta or not meta.image_url or "image_url" in fields_to_overwrite):
                     try: new_img = await upload_image_from_url(thumb, folder="items")
                     except Exception: pass
 
@@ -498,7 +568,7 @@ async def enrich_specific_books(
                 new_isbn = ol_data.get("isbn", [None])[0]
                 new_desc = ol_data.get("description")
                 thumb = ol_data.get("cover_url") or (f"https://covers.openlibrary.org/b/id/{ol_data['cover_i']}-M.jpg" if ol_data.get("cover_i") else None)
-                if thumb:
+                if thumb and (not meta or not meta.image_url or "image_url" in fields_to_overwrite):
                     try: new_img = await upload_image_from_url(thumb, folder="items")
                     except Exception: pass
 
@@ -523,10 +593,8 @@ async def enrich_specific_books(
 
             final_tags = meta.tags if meta else []
             if new_tags:
-                if "tags" in fields_to_overwrite:
-                    final_tags = list(set(new_tags)) # Complete replacement
-                else:
-                    final_tags = list(set(final_tags) | set(new_tags)) # Merge
+                # Subjects should ONLY be added to and not replaced
+                final_tags = list(set(final_tags) | set(new_tags))
 
             if final_isbn or final_desc or final_img or final_cat or final_genre or final_tags:
                 meta = ensure_work_metadata(
@@ -561,15 +629,11 @@ async def enrich_specific_books(
                 
                 if meta.tags:
                     existing_tags = [t.strip() for t in (item.subject.split(",") if item.subject else []) if t.strip()]
-                    if "tags" in fields_to_overwrite:
-                        new_subject = ", ".join(meta.tags)
-                        if item.subject != new_subject:
-                            item.subject, updated = new_subject, True
-                    else:
-                        merged_tags = list(set(existing_tags) | set(meta.tags))
-                        new_subject = ", ".join(merged_tags)
-                        if item.subject != new_subject:
-                            item.subject, updated = new_subject, True
+                    # Subjects should ONLY be added to and not replaced
+                    merged_tags = list(set(existing_tags) | set(meta.tags))
+                    new_subject = ", ".join(merged_tags)
+                    if item.subject != new_subject:
+                        item.subject, updated = new_subject, True
 
                 if updated:
                     session.add(item)
@@ -928,6 +992,23 @@ def get_item_condition_data(session: Session, item_id: uuid.UUID) -> dict[str, A
 
     return {"average_grade": avg_grade, "notes": notes}
 
+
+def normalize_isbn(isbn: str | None) -> str | None:
+    """
+    Normalizes ISBN by removing non-alphanumeric characters and verifying basic structure.
+    Returns cleaned ISBN (digits + X) or None if invalid.
+    """
+    if not isbn:
+        return None
+    
+    # Remove all characters except digits and 'X'
+    cleaned = "".join(c for c in str(isbn) if c.isdigit() or c.upper() == "X").upper()
+    
+    # Valid ISBNs are usually 10 or 13 characters. 
+    # We'll be slightly lenient but discard obvious garbage (too short or too long)
+    if 9 <= len(cleaned) <= 14:
+        return cleaned
+    return None
 
 def map_book_classification(raw_values: str | list[str] | None) -> tuple[str | None, str | None, str | None]:
     """

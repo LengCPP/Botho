@@ -1,21 +1,11 @@
-import { Button, DialogTitle, Text } from "@chakra-ui/react"
+import { Button } from "@chakra-ui/react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
-import { useForm } from "react-hook-form"
 import { FiTrash2 } from "react-icons/fi"
 
 import { ItemsService } from "@/client"
-import {
-  DialogActionTrigger,
-  DialogBody,
-  DialogCloseTrigger,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogRoot,
-  DialogTrigger,
-} from "@/components/ui/dialog"
 import useCustomToast from "@/hooks/useCustomToast"
+import ConfirmationModal from "../Common/ConfirmationModal"
 
 interface DeleteItemProps {
   id: string
@@ -35,10 +25,6 @@ const DeleteItem = ({
   const [isOpen, setIsOpen] = useState(false)
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
-  const {
-    handleSubmit,
-    formState: { isSubmitting },
-  } = useForm()
 
   const deleteItem = async (id: string) => {
     await ItemsService.deleteItem({ id: id })
@@ -58,65 +44,49 @@ const DeleteItem = ({
     },
   })
 
-  const onSubmit = async () => {
+  const handleDelete = () => {
+    const dontShow = localStorage.getItem("skipConfirm_delete") === "true"
+    if (dontShow) {
+      mutation.mutate(id)
+    } else {
+      setIsOpen(true)
+    }
+  }
+
+  const onConfirm = (dontShowAgain?: boolean) => {
+    if (dontShowAgain) {
+      localStorage.setItem("skipConfirm_delete", "true")
+    }
     mutation.mutate(id)
   }
 
   return (
-    <DialogRoot
-      size={{ base: "xs", md: "md" }}
-      placement="center"
-      role="alertdialog"
-      open={isOpen}
-      onOpenChange={({ open }) => setIsOpen(open)}
-    >
-      <DialogTrigger asChild>
-        <Button
-          variant={(variant || "dangerSecondary") as any}
-          size={size}
-          width={width}
-          justifyContent={justifyContent}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <FiTrash2 fontSize="16px" />
-          Delete Item
-        </Button>
-      </DialogTrigger>
+    <>
+      <Button
+        variant={(variant || "dangerSecondary") as any}
+        size={size}
+        width={width}
+        justifyContent={justifyContent}
+        onClick={(e) => {
+          e.stopPropagation()
+          handleDelete()
+        }}
+        disabled={mutation.isPending}
+      >
+        <FiTrash2 fontSize="16px" />
+        Delete Item
+      </Button>
 
-      <DialogContent onClick={(e) => e.stopPropagation()}>
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <DialogCloseTrigger />
-          <DialogHeader>
-            <DialogTitle>Delete Item</DialogTitle>
-          </DialogHeader>
-          <DialogBody>
-            <Text mb={4}>
-              This item will be permanently deleted. Are you sure? You will not
-              be able to undo this action.
-            </Text>
-          </DialogBody>
-
-          <DialogFooter gap={2}>
-            <DialogActionTrigger asChild>
-              <Button
-                variant="subtle"
-                colorPalette="gray"
-                disabled={isSubmitting}
-              >
-                Cancel
-              </Button>
-            </DialogActionTrigger>
-            <Button
-              variant={"danger" as any}
-              type="submit"
-              loading={isSubmitting}
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </DialogRoot>
+      <ConfirmationModal
+        isOpen={isOpen}
+        onClose={() => setIsOpen(false)}
+        onConfirm={onConfirm}
+        title="Delete Item"
+        message="This item will be permanently deleted. Are you sure? You will not be able to undo this action."
+        isLoading={mutation.isPending}
+        colorPalette="red"
+      />
+    </>
   )
 }
 
