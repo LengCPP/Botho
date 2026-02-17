@@ -194,7 +194,7 @@ function BooksTable({
           filterMissing: filter_missing === "all" ? undefined : filter_missing,
         }),
       getNextPageParam: (lastPage, allPages) => {
-        const loadedCount = allPages.length * PER_PAGE
+        const loadedCount = (allPages?.length || 0) * PER_PAGE
         return loadedCount < lastPage.count ? loadedCount : undefined
       },
       initialPageParam: 0,
@@ -208,6 +208,7 @@ function BooksTable({
         const action = message.action || "enriched"
         showSuccessToast(`Archive updated: ${message.count} books ${action}`)
         queryClient.invalidateQueries({ queryKey: ["book-archive-infinite"] })
+        queryClient.invalidateQueries({ queryKey: ["book-archive-count"] })
       }
     }
 
@@ -221,10 +222,10 @@ function BooksTable({
   }, [queryClient, showSuccessToast])
 
   const allBooks = useMemo(
-    () => data?.pages.flatMap((p) => p.data) || [],
+    () => data?.pages?.flatMap((p) => p.data || []) || [],
     [data],
   )
-  const totalCount = data?.pages[0]?.count || 0
+  const totalCount = data?.pages?.[0]?.count || 0
 
   const deleteMutation = useMutation({
     mutationFn: ({ author, title }: { author: string; title: string }) =>
@@ -232,6 +233,7 @@ function BooksTable({
     onSuccess: () => {
       showSuccessToast("Book deleted from registry")
       queryClient.invalidateQueries({ queryKey: ["book-archive-infinite"] })
+      queryClient.invalidateQueries({ queryKey: ["book-archive-count"] })
     },
     onError: () => {
       showErrorToast("Failed to delete book")
@@ -356,7 +358,7 @@ function BookArchive() {
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
 
   const { data: firstPage } = useQuery({
-    queryKey: ["book-archive-infinite", { filter_missing }],
+    queryKey: ["book-archive-count", { filter_missing }],
     queryFn: () =>
       ItemsService.listBookRegistry({
         skip: 0,
@@ -392,6 +394,18 @@ function BookArchive() {
     },
     onError: () => {
       showErrorToast("Failed to start enrichment task")
+    },
+  })
+
+  const aiClassifyMutation = useMutation({
+    mutationFn: (data: { books: { author: string; title: string }[] }) =>
+      ItemsService.triggerAiClassifyBooks({ requestBody: data as any }),
+    onSuccess: () => {
+      showSuccessToast(`AI Classification started for ${selectedKeys.size} books`)
+      setSelectedKeys(new Set())
+    },
+    onError: () => {
+      showErrorToast("Failed to start AI classification task")
     },
   })
 
@@ -463,6 +477,14 @@ function BookArchive() {
     })
   }
 
+  const handleStartAiClassification = () => {
+    const books = Array.from(selectedKeys).map((key) => {
+      const [author, title] = key.split("|")
+      return { author, title }
+    })
+    aiClassifyMutation.mutate({ books })
+  }
+
   return (
     <Container maxW="full">
       <VStack align="start" pt={12} pb={6} gap={6} width="full">
@@ -483,80 +505,91 @@ function BookArchive() {
           {tab === "browse" && user?.is_superuser && (
             <HStack gap={2}>
               {selectedKeys.size > 0 && (
-                <DialogRoot
-                  open={isEnrichDialogOpen}
-                  onOpenChange={(e) => setIsEnrichDialogOpen(e.open)}
-                >
-                  <DialogTrigger asChild>
-                    <Button size="sm" variant="solid" colorPalette="purple">
-                      <FiZap /> Enrich Selected ({selectedKeys.size})
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>
-                        Enrich {selectedKeys.size} Books
-                      </DialogTitle>
-                    </DialogHeader>
-                    <DialogBody>
-                      <Stack gap={6}>
-                        <Field label="Source API">
-                          <RadioGroup
-                            value={enrichSource}
-                            onValueChange={(e) => setEnrichSource(e.value)}
-                          >
-                            <Stack direction="row" gap={4}>
-                              <Radio value="auto">
-                                Auto (Google → OpenLib)
-                              </Radio>
-                              <Radio value="google_books">
-                                Google Books Only
-                              </Radio>
-                              <Radio value="open_library">
-                                Open Library Only
-                              </Radio>
-                            </Stack>
-                          </RadioGroup>
-                        </Field>
-
-                        <VStack align="start" gap={2} width="full">
-                          <Text fontWeight="medium" fontSize="sm">
-                            Fields to Overwrite
-                          </Text>
-                          <Text fontSize="xs" color="fg.muted">
-                            Selected fields will be updated even if they already have data. 
-                            Unselected fields will only be filled if current data is missing.
-                          </Text>
-                          <Stack gap={2}>
-                            {ENRICH_OPTIONS.map((opt) => (
-                              <Checkbox
-                                key={opt.value}
-                                checked={fieldsToOverwrite.includes(opt.value)}
-                                onCheckedChange={(e) =>
-                                  handleFieldChange(opt.value, !!e.checked)
-                                }
-                              >
-                                {opt.label}
-                              </Checkbox>
-                            ))}
-                          </Stack>
-                        </VStack>
-                      </Stack>
-                    </DialogBody>
-                    <DialogFooter>
-                      <DialogActionTrigger asChild>
-                        <Button variant="outline">Cancel</Button>
-                      </DialogActionTrigger>
-                      <Button
-                        colorPalette="purple"
-                        loading={enrichMutation.isPending}
-                        onClick={handleStartEnrichment}
-                      >
-                        Start Enrichment
+                <>
+                  <Button
+                    size="sm"
+                    variant="solid"
+                    colorPalette="orange"
+                    onClick={handleStartAiClassification}
+                    loading={aiClassifyMutation.isPending}
+                  >
+                    <FiZap /> AI Classify Selected ({selectedKeys.size})
+                  </Button>
+                  <DialogRoot
+                    open={isEnrichDialogOpen}
+                    onOpenChange={(e) => setIsEnrichDialogOpen(e.open)}
+                  >
+                    <DialogTrigger asChild>
+                      <Button size="sm" variant="solid" colorPalette="purple">
+                        <FiZap /> Enrich Selected ({selectedKeys.size})
                       </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </DialogRoot>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>
+                          Enrich {selectedKeys.size} Books
+                        </DialogTitle>
+                      </DialogHeader>
+                      <DialogBody>
+                        <Stack gap={6}>
+                          <Field label="Source API">
+                            <RadioGroup
+                              value={enrichSource}
+                              onValueChange={(e) => setEnrichSource(e.value)}
+                            >
+                              <Stack direction="row" gap={4}>
+                                <Radio value="auto">
+                                  Auto (Google → OpenLib)
+                                </Radio>
+                                <Radio value="google_books">
+                                  Google Books Only
+                                </Radio>
+                                <Radio value="open_library">
+                                  Open Library Only
+                                </Radio>
+                              </Stack>
+                            </RadioGroup>
+                          </Field>
+
+                          <VStack align="start" gap={2} width="full">
+                            <Text fontWeight="medium" fontSize="sm">
+                              Fields to Overwrite
+                            </Text>
+                            <Text fontSize="xs" color="fg.muted">
+                              Selected fields will be updated even if they already have data. 
+                              Unselected fields will only be filled if current data is missing.
+                            </Text>
+                            <Stack gap={2}>
+                              {ENRICH_OPTIONS.map((opt) => (
+                                <Checkbox
+                                  key={opt.value}
+                                  checked={fieldsToOverwrite.includes(opt.value)}
+                                  onCheckedChange={(e) =>
+                                    handleFieldChange(opt.value, !!e.checked)
+                                  }
+                                >
+                                  {opt.label}
+                                </Checkbox>
+                              ))}
+                            </Stack>
+                          </VStack>
+                        </Stack>
+                      </DialogBody>
+                      <DialogFooter>
+                        <DialogActionTrigger asChild>
+                          <Button variant="outline">Cancel</Button>
+                        </DialogActionTrigger>
+                        <Button
+                          colorPalette="purple"
+                          loading={enrichMutation.isPending}
+                          onClick={handleStartEnrichment}
+                        >
+                          Start Enrichment
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </DialogRoot>
+                </>
               )}
 
               <NativeSelect.Root size="sm" width="200px">

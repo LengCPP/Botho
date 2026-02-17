@@ -21,8 +21,6 @@ if (navigator.storage?.persist) {
   navigator.storage.persist().then((persisted) => {
     if (persisted) {
       console.log("Storage persistence granted.")
-    } else {
-      console.log("Storage persistence denied.")
     }
   })
 }

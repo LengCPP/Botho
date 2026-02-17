@@ -1,27 +1,38 @@
 import json
-
-from google import genai
+import logging
+import httpx
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from app.constants import BOOK_CLASSIFICATION
 from app.core.config import settings
 
-# Initialize Gemini Client
-client = None
-if settings.GEMINI_API_KEY:
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+logger = logging.getLogger(__name__)
+
+# Providers
+OLLAMA_CHAT_URL = "http://ollama:11434/api/chat"
+LOCAL_MODEL = "gemma2:2b"
+
+def is_retryable_error(exception):
+    """Check if the error is a temporary connection or timeout error."""
+    return isinstance(exception, (httpx.ConnectError, httpx.TimeoutException))
 
 async def generate_honor_snapshot(reviews: list[str]) -> tuple[str | None, list[str]]:
-    """Use Gemini to synthesize a reputation summary and improvement tips."""
-    if not client or not reviews:
+    """Use Local LLM to synthesize a reputation summary and improvement tips."""
+    if not reviews:
         return None, []
 
     reviews_text = "\n".join([f"- {r}" for r in reviews])
     prompt = f"""
-    Analyze these anonymized community platform reviews and provide:
+    Analyze these community platform reviews and provide:
     1. A concise (2-3 sentences) SUMMARY of behavior.
-    2. A list of 2-3 actionable TIPS for improvement or maintaining excellence.
+    2. A list of 2-3 actionable TIPS for improvement.
 
-    Strictly follow this format:
+    Format:
     SUMMARY: [Text]
     TIPS:
     - [Tip 1]
@@ -31,8 +42,25 @@ async def generate_honor_snapshot(reviews: list[str]) -> tuple[str | None, list[
     {reviews_text}
     """
     try:
-        response = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
-        text = response.text
+        @retry(
+            wait=wait_exponential(multiplier=1, min=2, max=10),
+            stop=stop_after_attempt(3),
+            retry=retry_if_exception(is_retryable_error),
+            reraise=True
+        )
+        async def _call_local_llm():
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                payload = {
+                    "model": LOCAL_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "stream": False,
+                    "options": {"temperature": 0.1, "num_thread": 6}
+                }
+                resp = await client.post(OLLAMA_CHAT_URL, json=payload)
+                resp.raise_for_status()
+                return resp.json()["message"]["content"]
+
+        text = await _call_local_llm()
         summary, tips = "", []
         if "SUMMARY:" in text and "TIPS:" in text:
             parts = text.split("TIPS:")
@@ -40,17 +68,17 @@ async def generate_honor_snapshot(reviews: list[str]) -> tuple[str | None, list[
             tips = [t.strip("- ").strip() for t in parts[1].strip().split("\n") if t.strip()]
         return summary or None, tips
     except Exception as e:
-        print(f"Error calling Gemini: {e}")
+        logger.error(f"Error calling local LLM for honor snapshot: {e}")
         return None, []
 
 async def classify_book(title: str, author: str, description: str | None = None) -> tuple[str | None, str | None, str | None]:
-    """Use Gemini to determine a descriptive category, specific genre, and subjects for a single book."""
+    """Use Local LLM to determine a descriptive category, specific genre, and subjects for a single book."""
     results = await classify_books([{"title": title, "author": author, "description": description}])
     return results[0] if results else (None, None, None)
 
 async def classify_books(books: list[dict]) -> list[tuple[str | None, str | None, str | None]]:
-    """Use Gemini to classify multiple books in a single request for RPM efficiency."""
-    if not client or not books:
+    """Use Local LLM to classify multiple books in a single request for efficiency."""
+    if not books:
         return []
 
     classification_guide = json.dumps(BOOK_CLASSIFICATION, indent=2)
@@ -60,39 +88,109 @@ async def classify_books(books: list[dict]) -> list[tuple[str | None, str | None
     ])
 
     prompt = f"""
-    You are a professional librarian. Classify these {len(books)} books based strictly on the provided hierarchy.
+    Classify these {len(books)} books strictly using the provided GUIDE.
     
     GUIDE:
     {classification_guide}
 
-    BOOKS TO CLASSIFY:
+    INSTRUCTIONS:
+    1. Pick EXACTLY ONE 'category' from the GUIDE keys.
+    2. Pick EXACTLY ONE 'genre' from the list associated with that category in the GUIDE.
+    3. Provide 2-3 specific 'subjects' as a comma-separated string.
+    4. Respond ONLY with a JSON list of objects.
+
+    BOOKS:
     {books_text}
 
-    INSTRUCTIONS for each book:
-    1. CATEGORY: Must be EXACTLY one of the top-level keys in the GUIDE.
-    2. GENRE: Must be EXACTLY one of the values listed under your chosen CATEGORY in the GUIDE.
-    3. SUBJECTS: A list of 3-5 descriptive words/phrases (NOT genres).
-
-    Output EXACTLY in this format for each book (one per line, keeping the original ID):
-    ID: [ID] | CATEGORY: [Category] | GENRE: [Genre] | SUBJECTS: [Subjects]
+    Format:
+    [
+      {{"id": 0, "category": "Category Name", "genre": "Genre Name", "subjects": "subject1, subject2"}}
+    ]
     """
     try:
-        response = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
-        results = [None] * len(books)
-        lines = response.text.strip().split("\n")
+        @retry(
+            wait=wait_exponential(multiplier=2, min=4, max=20),
+            stop=stop_after_attempt(3),
+            retry=retry_if_exception(is_retryable_error),
+            before_sleep=lambda retry_state: logger.warning(f"Retrying classification (attempt {retry_state.attempt_number})..."),
+            reraise=True
+        )
+        async def _call_local_llm():
+            async with httpx.AsyncClient(timeout=600.0) as client:
+                payload = {
+                    "model": LOCAL_MODEL,
+                    "messages": [
+                        {"role": "system", "content": "You are a professional librarian. Respond ONLY with a valid JSON list of objects matching the guide exactly. For 'subjects', provide 2-3 descriptive keywords about the themes or topics, NEVER the book title."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "format": "json",
+                    "stream": False,
+                    "options": {"temperature": 0.0, "num_thread": 6}
+                }
+                resp = await client.post(OLLAMA_CHAT_URL, json=payload)
+                resp.raise_for_status()
+                return resp.json()["message"]["content"]
 
-        for line in lines:
-            if "|" in line and "CATEGORY:" in line:
-                try:
-                    parts = line.split("|")
-                    idx_part = parts[0].replace("ID:", "").strip()
-                    cat = parts[1].replace("CATEGORY:", "").strip()
-                    gen = parts[2].replace("GENRE:", "").strip()
-                    sub = parts[3].replace("SUBJECTS:", "").strip()
-                    results[int(idx_part)] = (cat, gen, sub)
-                except Exception:
-                    continue
+        text = await _call_local_llm()
+        logger.info(f"Local LLM Response: {text}")
+        
+        results = [(None, None, None)] * len(books)
+        try:
+            # Clean text: strip code blocks and whitespace
+            clean_text = text.strip()
+            if clean_text.startswith("```"):
+                clean_text = clean_text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+                if clean_text.startswith("json"):
+                    clean_text = clean_text.replace("json", "", 1).strip()
+            
+            data = json.loads(clean_text)
+            
+            def extract_item_data(obj):
+                """Helper to extract classification from varied object shapes."""
+                lowered = {k.lower(): v for k, v in obj.items() if isinstance(k, str)}
+                cat = lowered.get("category")
+                gen = lowered.get("genre")
+                sub = lowered.get("subjects") or lowered.get("subject")
+                if isinstance(sub, list):
+                    sub = ", ".join(map(str, sub))
+                return cat, gen, sub
+
+            if isinstance(data, list):
+                for item in data:
+                    if not isinstance(item, dict): continue
+                    idx = item.get("id") or item.get("ID")
+                    if idx is not None:
+                        idx_int = int(idx)
+                        if 0 <= idx_int < len(books):
+                            results[idx_int] = extract_item_data(item)
+            elif isinstance(data, dict):
+                for k, v in data.items():
+                    if isinstance(v, dict) and k.isdigit():
+                        idx_int = int(k)
+                        if 0 <= idx_int < len(books):
+                            results[idx_int] = extract_item_data(v)
+                    elif k.lower() in ["id", "category", "genre"]:
+                        idx = data.get("id") or data.get("ID") or 0
+                        idx_int = int(idx)
+                        if 0 <= idx_int < len(books):
+                            results[idx_int] = extract_item_data(data)
+                        break
+        except Exception as e:
+            logger.error(f"Failed to parse LLM JSON: {e}. Raw response: {text[:200]}")
+            for line in text.split("\n"):
+                if "CATEGORY:" in line and "|" in line:
+                    try:
+                        parts = line.split("|")
+                        i_val = int(parts[0].lower().replace("id:", "").strip())
+                        if 0 <= i_val < len(books):
+                            results[i_val] = (
+                                parts[1].replace("CATEGORY:", "").strip(),
+                                parts[2].replace("GENRE:", "").strip(),
+                                parts[3].replace("SUBJECTS:", "").strip()
+                            )
+                    except Exception: continue
+                
         return results
     except Exception as e:
-        print(f"Error bulk classifying books: {e}")
+        logger.error(f"Error bulk classifying books: {type(e).__name__}: {e}")
         return [(None, None, None)] * len(books)

@@ -72,6 +72,8 @@ services:
       - MEILI_MASTER_KEY=${MEILI_MASTER_KEY}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - VITE_GOOGLE_BOOKS_API_KEY=${VITE_GOOGLE_BOOKS_API_KEY}
 
   backend:
     image: '${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}'
@@ -223,10 +225,40 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-meili-http.rule=Host(`search.${DOMAIN?Variable not set}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-meili-http.entrypoints=http
 
+  ollama:
+    image: ollama/ollama:latest
+    restart: always
+    networks:
+      - default
+    volumes:
+      - ollama-data:/root/.ollama
+    # If you have an NVIDIA GPU, uncomment the lines below:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  ollama-pull-model:
+    image: curlimages/curl:latest
+    networks:
+      - default
+    depends_on:
+      - ollama
+    entrypoint: [ "/bin/sh", "-c" ]
+    command: |
+      "
+      sleep 5;
+      curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"qwen3:4b\"}';
+      "
+
 volumes:
   app-db-data:
   app-minio-data:
   app-meilisearch-data:
+  ollama-data:
 
 networks:
   traefik-public:

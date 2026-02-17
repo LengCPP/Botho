@@ -226,37 +226,52 @@ async def maintenance_bulk_classify(user_id: uuid.UUID):
         classified_count = 0
         from app.ai import classify_books
 
-        # Process in chunks of 10 for RPM efficiency
-        CHUNK_SIZE = 10
+        # Process in chunks of 1 for high reliability with small local models
+        CHUNK_SIZE = 1
         for i in range(0, len(books_to_classify), CHUNK_SIZE):
             chunk = books_to_classify[i:i + CHUNK_SIZE]
             chunk_objs = books_objects[i:i + CHUNK_SIZE]
 
-            logger.info(f"Classifying chunk {i//CHUNK_SIZE + 1} ({len(chunk)} books)...")
+            logger.info(f"Classifying chunk {i//CHUNK_SIZE + 1}/{len(books_to_classify)} ({len(chunk)} books)...")
 
-            results = await classify_books(chunk)
+            try:
+                results = await classify_books(chunk)
 
-            for book, res in zip(chunk_objs, results):
-                if not res: continue
-                cat, gen, sub = res
+                chunk_classified = 0
+                for book, res in zip(chunk_objs, results):
+                    if not res: continue
+                    cat_raw, gen_raw, sub_raw = res
 
-                if cat: book.category = cat
-                if gen: book.genre = gen
-                if sub: book.subject = sub
-                session.add(book)
-                session.flush()
-                sync_item_to_search(book)
+                    # Use map_book_classification for fuzzy matching against valid constants
+                    cat, gen, _ = map_book_classification([cat_raw, gen_raw])
 
-                # Convert subjects string to tags list
-                tags = [s.strip() for s in sub.split(",")] if sub else []
+                    if cat: book.category = cat
+                    if gen: book.genre = gen
+                    if sub_raw: book.subject = sub_raw
+                    
+                    session.add(book)
+                    session.flush()
+                    sync_item_to_search(book)
 
-                # Ensure WorkMetadata also gets updated
-                ensure_work_metadata(session, book.author, book.title, category=cat, genre=gen, tags=tags)
-                classified_count += 1
+                    # Convert subjects string to tags list
+                    tags = [s.strip() for s in sub_raw.split(",")] if sub_raw else []
 
-            await asyncio.sleep(4.0) # Safer throttle for Gemini free tier (15 RPM)
+                    # Ensure WorkMetadata also gets updated
+                    ensure_work_metadata(session, book.author, book.title, category=cat, genre=gen, tags=tags)
+                    classified_count += 1
+                    chunk_classified += 1
 
-        session.commit()
+                if chunk_classified > 0:
+                    session.commit() # Commit after EACH successful chunk
+                else:
+                    logger.warning(f"Chunk {i//CHUNK_SIZE + 1} failed to classify any books.")
+
+            except Exception as e:
+                logger.error(f"Error processing chunk {i//CHUNK_SIZE + 1}: {e}")
+                session.rollback()
+
+            await asyncio.sleep(0.5) # Minimal throttle for local execution
+
         logger.info(f"Maintenance complete: Classified {classified_count} books.")
 
         # Notify user
@@ -299,39 +314,49 @@ async def ai_classify_specific_books(
             books_meta_objs.append(meta)
 
         classified_count = 0
-        CHUNK_SIZE = 10
+        # Process in chunks of 1 for high reliability with small local models
+        CHUNK_SIZE = 1
         for i in range(0, len(books_data), CHUNK_SIZE):
             chunk = books_data[i:i + CHUNK_SIZE]
             chunk_metas = books_meta_objs[i:i + CHUNK_SIZE]
 
-            results = await classify_books(chunk)
+            try:
+                results = await classify_books(chunk)
 
-            for meta, res in zip(chunk_metas, results):
-                if not res: continue
-                cat, gen, sub = res
+                for meta, res in zip(chunk_metas, results):
+                    if not res: continue
+                    cat_raw, gen_raw, sub_raw = res
 
-                if cat: meta.category = cat
-                if gen: meta.genre = gen
-                if sub: meta.tags = [s.strip() for s in sub.split(",")]
+                    # Use fuzzy mapping to canonical constants
+                    cat, gen, _ = map_book_classification([cat_raw, gen_raw])
 
-                session.add(meta)
-                session.flush()
+                    if cat: meta.category = cat
+                    if gen: meta.genre = gen
+                    if sub_raw:
+                        meta.tags = [s.strip() for s in sub_raw.split(",")]
 
-                # Also sync items that use this metadata
-                items = session.exec(select(Item).where(Item.author == meta.author, Item.title == meta.title)).all()
-                for item in items:
-                    if cat: item.category = cat
-                    if gen: item.genre = gen
-                    if sub: item.subject = sub
-                    session.add(item)
-                    sync_item_to_search(item)
+                    session.add(meta)
+                    session.flush()
 
-                classified_count += 1
+                    # Also sync items that use this metadata
+                    items = session.exec(select(Item).where(Item.author == meta.author, Item.title == meta.title)).all()
+                    for item in items:
+                        if cat: item.category = cat
+                        if gen: item.genre = gen
+                        if sub_raw: item.subject = sub_raw
+                        session.add(item)
+                        sync_item_to_search(item)
 
-            if i + CHUNK_SIZE < len(books_data):
-                await asyncio.sleep(4.0)
+                    classified_count += 1
 
-        session.commit()
+                session.commit() # Commit after each successful chunk
+            except Exception as e:
+                logger.error(f"Error processing AI classification chunk {i//CHUNK_SIZE + 1}: {e}")
+                session.rollback()
+
+            await asyncio.sleep(0.5)
+
+        logger.info(f"AI classification complete: {classified_count} books processed.")
         await notification_manager.send_personal_message(
             {"type": "BOOK_ARCHIVE_UPDATED", "count": classified_count, "action": "ai_classified"},
             user_id
@@ -915,36 +940,51 @@ def map_book_classification(raw_values: str | list[str] | None) -> tuple[str | N
     from app.constants import BOOK_CLASSIFICATION
 
     # Normalize inputs to a list of strings
-    if isinstance(raw_values, str):
-        candidates = [raw_values]
-    else:
-        candidates = raw_values
-
-    # We only process the first meaningful candidate for category/genre mapping
-    # to avoid ambiguous multiple classifications.
+    candidates = [raw_values] if isinstance(raw_values, str) else raw_values
+    
+    found_cat = None
+    found_gen = None
+    
+    # 1. First Pass: Try to find any EXACT Genre Match (most specific)
     for val in candidates:
         if not val or not isinstance(val, str): continue
-        val_strip = val.strip()
+        val_strip = val.strip().strip('"').strip("'").strip("`").strip()
         if not val_strip: continue
         val_lower = val_strip.lower()
 
-        # 1. Exact Category Match
-        for cat in BOOK_CLASSIFICATION.keys():
-            if cat.lower() == val_lower:
-                return cat, None, None
-
-        # 2. Exact Genre Match
         for cat, genres in BOOK_CLASSIFICATION.items():
             for genre in genres:
                 if genre.lower() == val_lower:
                     return cat, genre, None
 
-        # 3. Partial Genre Match (e.g., "religion" -> "Non-Fiction", "Religion & Spirituality")
+    # 2. Second Pass: Try to find any EXACT Category Match
+    for val in candidates:
+        if not val or not isinstance(val, str): continue
+        val_strip = val.strip().strip('"').strip("'").strip("`").strip()
+        if not val_strip: continue
+        val_lower = val_strip.lower()
+
+        for cat in BOOK_CLASSIFICATION.keys():
+            if cat.lower() == val_lower:
+                found_cat = cat
+                break
+        if found_cat: break
+
+    # 3. Third Pass: Try to find any PARTIAL Genre Match
+    for val in candidates:
+        if not val or not isinstance(val, str): continue
+        val_strip = val.strip().strip('"').strip("'").strip("`").strip()
+        if not val_strip: continue
+        val_lower = val_strip.lower()
+
         for cat, genres in BOOK_CLASSIFICATION.items():
             for genre in genres:
-                if val_lower in genre.lower():
+                if val_lower in genre.lower() or genre.lower() in val_lower:
                     return cat, genre, None
 
-    # 4. No Match -> Use first candidate as subject
+    # 4. No specific genre found, return found category or use first candidate as subject
+    if found_cat:
+        return found_cat, None, None
+        
     first_val = candidates[0] if candidates else None
-    return None, None, first_val if isinstance(first_val, str) else str(first_val) if first_val else None
+    return None, None, str(first_val) if first_val else None

@@ -1,4 +1,4 @@
-import { ImportsService, type StagedItemPublic } from "@/client"
+import { ImportsService, ItemsService, type StagedItemPublic } from "@/client"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   DialogActionTrigger,
@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Tooltip } from "@/components/ui/tooltip"
+import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
 import {
   Box,
@@ -38,6 +39,7 @@ import {
   FaFileImport,
   FaSpinner,
   FaTrash,
+  FaRobot,
 } from "react-icons/fa"
 import * as XLSX from "xlsx"
 
@@ -219,6 +221,7 @@ export const ImportItems = ({
   const limit = 100
   const { showSuccessToast, showErrorToast, showInfoToast } = useCustomToast()
   const queryClient = useQueryClient()
+  const { user } = useAuth()
 
   const { data: stagedItems, isLoading: isStagedLoading } = useQuery({
     queryKey: ["stagedItems", communityId, isArchiveImport, page],
@@ -312,6 +315,25 @@ export const ImportItems = ({
       setSelectedIds([])
       queryClient.invalidateQueries({ queryKey: ["stagedItems"] })
     },
+  })
+
+  const classifyMutation = useMutation({
+    mutationFn: (ids: string[]) => {
+      const books = items
+        .filter((i) => ids.includes(i.id))
+        .map((i) => {
+          const raw = pendingEdits[i.id] || i.raw_data
+          return { author: raw.author, title: raw.title }
+        })
+      return ItemsService.triggerAiClassifyBooks({
+        requestBody: { books } as any,
+      })
+    },
+    onSuccess: () => {
+      showSuccessToast("AI Classification task started in background.")
+      setSelectedIds([])
+    },
+    onError: () => showErrorToast("Failed to start AI classification."),
   })
 
   const deleteSelectedMutation = useMutation({
@@ -497,7 +519,7 @@ export const ImportItems = ({
                   <Button
                     size="xs"
                     variant="outline"
-                    color="red.500"
+                    colorPalette="red"
                     disabled={selectedIds.length === 0}
                     onClick={() => deleteSelectedMutation.mutate()}
                   >
@@ -505,14 +527,28 @@ export const ImportItems = ({
                   </Button>
                 </HStack>
               </HStack>
-              <Button
-                bg="ui.hover"
-                size="sm"
-                disabled={selectedIds.length === 0 || hasPendingEdits}
-                onClick={() => processMutation.mutate(selectedIds)}
-              >
-                Add {selectedIds.length} to Collection
-              </Button>
+              <HStack gap={2}>
+                {user?.is_superuser && (
+                  <Button
+                    colorPalette="orange"
+                    size="sm"
+                    variant="surface"
+                    disabled={selectedIds.length === 0 || hasPendingEdits}
+                    onClick={() => classifyMutation.mutate(selectedIds)}
+                    loading={classifyMutation.isPending}
+                  >
+                    <Icon as={FaRobot} mr={1} /> AI Classify
+                  </Button>
+                )}
+                <Button
+                  bg="ui.hover"
+                  size="sm"
+                  disabled={selectedIds.length === 0 || hasPendingEdits}
+                  onClick={() => processMutation.mutate(selectedIds)}
+                >
+                  Add {selectedIds.length} to Collection
+                </Button>
+              </HStack>
             </HStack>
 
             <Box
