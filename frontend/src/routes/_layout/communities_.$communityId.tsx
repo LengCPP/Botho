@@ -129,6 +129,7 @@ const searchSchema = z.object({
     ),
   subject: z.string().optional(),
   author: z.string().optional(),
+  item_type: z.string().optional(),
   organize_by: z
     .enum(["subject", "genre", "category", "author", "ownership"])
     .catch(() => (localStorage.getItem("organize_by") as any) || "subject"),
@@ -138,7 +139,7 @@ const searchSchema = z.object({
 // ROUTE SETUP
 // ============================================================================
 
-export const Route = createFileRoute("/_layout/communities/$communityId")({
+export const Route = createFileRoute("/_layout/communities_/$communityId")({
   component: CommunityBoard,
   validateSearch: (s) => searchSchema.parse(s),
 })
@@ -162,6 +163,7 @@ function CommunityBoard() {
     display_type,
     subject,
     author,
+    item_type,
     organize_by,
   } = Route.useSearch()
 
@@ -201,16 +203,16 @@ function CommunityBoard() {
 
   // Save view preferences to localStorage
   useEffect(() => {
-    Object.entries({
+    for (const [key, value] of Object.entries({
       view_mode,
       display_type,
       organize_by,
       sort_by,
       sort_order,
       limit,
-    }).forEach(([key, value]) => {
+    })) {
       localStorage.setItem(key, String(value))
-    })
+    }
   }, [view_mode, display_type, organize_by, sort_by, sort_order, limit])
 
   // ========================================================================
@@ -229,16 +231,14 @@ function CommunityBoard() {
     [navigate],
   )
 
-  const handleOrganizeClick = (name: string) =>
-    updateSearch(
-      organize_by === "author"
-        ? { author: name }
-        : organize_by === "genre"
-          ? { genre: name }
-          : organize_by === "category"
-            ? { category: name }
-            : { subject: name },
-    )
+  const handleOrganizeClick = (name: string, iType?: string) =>
+    updateSearch({
+      item_type: iType,
+      author: organize_by === "author" ? name : undefined,
+      genre: organize_by === "genre" ? name : undefined,
+      category: organize_by === "category" ? name : undefined,
+      subject: organize_by === "subject" ? name : undefined,
+    })
 
   // ========================================================================
   // QUERIES
@@ -296,17 +296,6 @@ function CommunityBoard() {
     enabled: !!isStaff,
   })
 
-  // Invited users
-  const { data: invited, isLoading: isLoadingInvited } = useQuery({
-    queryKey: ["communityInvited", cId],
-    queryFn: () =>
-      CommunitiesService.readCommunityMembers({
-        id: cId,
-        status: "INVITED" as any,
-      }),
-    enabled: !!isStaff,
-  })
-
   // Items (infinite scroll)
   const {
     data: commI,
@@ -318,7 +307,7 @@ function CommunityBoard() {
     queryKey: [
       "communityItemsInfinite",
       cId,
-      { sort_by, sort_order, limit, category, genre, author, q: qP },
+      { sort_by, sort_order, limit, category, genre, author, item_type, q: qP },
     ],
     queryFn: ({ pageParam = 0 }) =>
       CommunitiesService.readCommunityItems({
@@ -330,6 +319,7 @@ function CommunityBoard() {
         category,
         genre,
         author,
+        itemType: item_type,
         q: qP,
         excludeLost: true,
         excludePrivate: true,
@@ -502,11 +492,11 @@ function CommunityBoard() {
       }),
     onSuccess: () => {
       showSuccessToast("Updated")
-      ;["communityMembers", "communityApplicants"].forEach((key) =>
+      for (const key of ["communityMembers", "communityApplicants"]) {
         queryClient.invalidateQueries({
           queryKey: [key, cId],
-        }),
-      )
+        })
+      }
     },
     onError: () => showErrorToast("Failed"),
   })
@@ -521,11 +511,11 @@ function CommunityBoard() {
       showSuccessToast("Removed")
       setIsRemoveModalOpen(false)
       setRemoveMember(null)
-      ;["communityMembers", "communityApplicants"].forEach((key) =>
+      for (const key of ["communityMembers", "communityApplicants"]) {
         queryClient.invalidateQueries({
           queryKey: [key, cId],
-        }),
-      )
+        })
+      }
     },
     onError: () => showErrorToast("Failed"),
   })
@@ -624,9 +614,10 @@ function CommunityBoard() {
     if (qP || !comm?.collection_index?.[organize_by]) {
       return facets?.pages.flatMap((p: any) => p.data) || []
     }
-    return Object.entries(comm.collection_index[organize_by])
-      .map(([name, data]: any) => ({
-        name,
+    return Object.values(comm.collection_index[organize_by])
+      .map((data: any) => ({
+        name: data.name,
+        item_type: data.item_type,
         count: data.count,
         sample_images: data.sample_images,
       }))
@@ -1056,6 +1047,7 @@ function CommunityBoard() {
                       updateSearch({
                         display_type: t,
                         subject: undefined,
+                        item_type: undefined,
                       })
                     }
                     sortBy={sort_by}
@@ -1086,6 +1078,7 @@ function CommunityBoard() {
                       updateSearch({
                         organize_by: v,
                         subject: undefined,
+                        item_type: undefined,
                       })
                     }
                     showDisplayToggle
@@ -1155,6 +1148,7 @@ function CommunityBoard() {
                                   author: undefined,
                                   genre: undefined,
                                   category: undefined,
+                                  item_type: undefined,
                                 })
                               }
                             >
@@ -1166,9 +1160,7 @@ function CommunityBoard() {
                               color="ui.hover"
                               textTransform="uppercase"
                             >
-                              {allItems[0]?.item_type === "book"
-                                ? "Books"
-                                : "Items"}{" "}
+                              {item_type === "book" ? "Books" : "Items"}{" "}
                               {currentFilter.toLowerCase() === "others"
                                 ? `with unspecified ${organize_by}`
                                 : `${

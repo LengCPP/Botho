@@ -520,7 +520,6 @@ def recommend_items(
                 author=item.author,
                 item_type=item.item_type,
                 image_url=item.image_url,
-                extra_data=item.extra_data,
                 info={
                     **(item.info or {}),
                     "average_condition_grade": cond_data["average_grade"],
@@ -655,11 +654,14 @@ def read_item_facets(
                 elif group_by == "genre":
                     stmt = stmt.where(Item.genre == name)
                 elif group_by == "subject":
-                    stmt = stmt.join(
-                        WorkMetadata,
-                        (Item.author == WorkMetadata.author)
-                        & (Item.title == WorkMetadata.title),
-                    ).where(cast(WorkMetadata.tags, String).ilike(f'%"{name}"%'))
+                    stmt = stmt.where(
+                        or_(
+                            Item.subject == name,
+                            Item.subject.ilike(f"{name},%"),
+                            Item.subject.ilike(f"%, {name}"),
+                            Item.subject.ilike(f"%, {name},%"),
+                        )
+                    )
 
                 imgs = session.exec(
                     stmt.where(Item.image_url.is_not(None)).limit(5)
@@ -782,28 +784,28 @@ def read_item_facets(
             )
 
     elif group_by == "subject":
-        # 1. Tags query
-        tags_expr = func.json_array_elements_text(WorkMetadata.tags)
+        # Expand Item.subject (comma-separated) into individual tags via unnest
+        tag_expr = func.btrim(
+            func.unnest(func.string_to_array(Item.subject, ","))
+        )
+
+        # Items that have a subject set
         tags_stmt = (
             select(
-                tags_expr.label("name"),
+                tag_expr.label("name"),
                 Item.item_type,
                 func.count(Item.id).label("count"),
                 func.array_agg(Item.image_url).label("sample_images"),
             )
-            .join(
-                WorkMetadata,
-                (Item.author == WorkMetadata.author)
-                & (Item.title == WorkMetadata.title),
-            )
             .where(Item.owner_id == target_owner_id)
+            .where(Item.subject.is_not(None))
+            .where(Item.subject != "")
         )
-
         if q:
-            tags_stmt = tags_stmt.where(tags_expr.ilike(f"%{q}%"))
+            tags_stmt = tags_stmt.where(tag_expr.ilike(f"%{q}%"))
         tags_stmt = tags_stmt.group_by("name", Item.item_type)
 
-        # 2. Others query (items with no tags)
+        # Items with no subject → "Others"
         others_stmt = (
             select(
                 cast("Others", String).label("name"),
@@ -811,24 +813,12 @@ def read_item_facets(
                 func.count(Item.id).label("count"),
                 func.array_agg(Item.image_url).label("sample_images"),
             )
-            .outerjoin(
-                WorkMetadata,
-                (Item.author == WorkMetadata.author)
-                & (Item.title == WorkMetadata.title),
-            )
             .where(Item.owner_id == target_owner_id)
-            .where(
-                or_(
-                    WorkMetadata.tags.is_(None),
-                    func.json_array_length(WorkMetadata.tags) == 0,
-                    WorkMetadata.author.is_(None),
-                )
-            )
+            .where(or_(Item.subject.is_(None), Item.subject == ""))
             .group_by(Item.item_type)
         )
 
-        # Combine
-        if q and "others".find(q.lower()) == -1:
+        if q and "others" not in q.lower():
             full_stmt = tags_stmt
         else:
             full_stmt = tags_stmt.union_all(others_stmt)
@@ -837,13 +827,15 @@ def read_item_facets(
             total_count = session.exec(
                 select(func.count()).select_from(full_stmt.subquery())
             ).one()
-            rows = session.exec(
-                select(full_stmt.subquery())
+            subq = full_stmt.subquery()
+            rows = session.execute(
+                select(subq)
                 .order_by(text("item_type"), text("name ASC"))
                 .offset(skip)
                 .limit(limit)
             ).all()
-            for name, i_type, count, imgs in rows:
+            for row in rows:
+                name, i_type, count, imgs = row[0], row[1], row[2], row[3]
                 valid_imgs = [img for img in (imgs or []) if img][:5]
                 results.append(
                     {"name": name, "item_type": i_type, "count": count, "sample_images": valid_imgs}
@@ -1200,7 +1192,6 @@ def read_items(
                         author=item.author,
                         item_type=item.item_type,
                         image_url=item.image_url,
-                        extra_data=item.extra_data,
                         info=item.info,
                         count=item.count,
                         created_at=item.created_at,
@@ -1269,22 +1260,20 @@ def read_items(
                 statement = statement.where(Item.genre == genre)
 
         if subject:
-            statement = statement.join(
-                WorkMetadata,
-                (Item.author == WorkMetadata.author)
-                & (Item.title == WorkMetadata.title),
-                isouter=True,
-            )
+            # Filter on Item.subject (comma-separated string) — consistent with
+            # how collection_index is built in update_collection_index().
             if subject == "Others":
                 statement = statement.where(
-                    or_(
-                        WorkMetadata.tags.is_(None),
-                        func.json_array_length(WorkMetadata.tags) == 0,
-                    )
+                    or_(Item.subject.is_(None), Item.subject == "")
                 )
             else:
                 statement = statement.where(
-                    cast(WorkMetadata.tags, String).ilike(f'%"{subject}"%')
+                    or_(
+                        Item.subject == subject,
+                        Item.subject.ilike(f"{subject},%"),
+                        Item.subject.ilike(f"%, {subject}"),
+                        Item.subject.ilike(f"%, {subject},%"),
+                    )
                 )
 
         if author:
@@ -1492,7 +1481,6 @@ def read_items(
                 author=item.author,
                 item_type=item.item_type,
                 image_url=item.image_url,
-                extra_data=item.extra_data,
                 info={
                     **(item.info or {}),
                     "average_condition_grade": avg_grade,
@@ -1576,34 +1564,34 @@ def read_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> 
     elif item.community_owner:
         community_pub = item.community_owner
 
-            cond_data = get_item_condition_data(session, item.id)
-        had_possession = check_possession(session, current_user.id, item.id)
-    
-        item_pub = ItemPublic(
-            id=item.id,
-            owner_id=item.owner_id,
-            title=item.title,
-            description=item.description,
-            author=item.author,
-            item_type=item.item_type,
-            image_url=item.image_url,
-            info={
-                **(item.info or {}),
-                "average_condition_grade": cond_data["average_grade"],
-                "physical_notes": cond_data["notes"],
-            },
-            count=item.count,
-            created_at=item.created_at,
-            owner=owner_pub,
-            community_owner=community_pub,
-            is_available=is_avail,
-            work_metadata=get_work_metadata(session, item.author, item.title),
-            had_possession=had_possession,
-            category=item.category,
-            genre=item.genre,
-            subject=item.subject,
-        )
-        return item_pub
+    cond_data = get_item_condition_data(session, item.id)
+    had_possession = check_possession(session, current_user.id, item.id)
+
+    item_pub = ItemPublic(
+        id=item.id,
+        owner_id=item.owner_id,
+        title=item.title,
+        description=item.description,
+        author=item.author,
+        item_type=item.item_type,
+        image_url=item.image_url,
+        info={
+            **(item.info or {}),
+            "average_condition_grade": cond_data["average_grade"],
+            "physical_notes": cond_data["notes"],
+        },
+        count=item.count,
+        created_at=item.created_at,
+        owner=owner_pub,
+        community_owner=community_pub,
+        is_available=is_avail,
+        work_metadata=get_work_metadata(session, item.author, item.title),
+        had_possession=had_possession,
+        category=item.category,
+        genre=item.genre,
+        subject=item.subject,
+    )
+    return item_pub
     
 @router.post("/", response_model=ItemPublic)
 async def create_item(
@@ -1804,7 +1792,6 @@ async def update_item(
     genre: Annotated[str | None, Form()] = None,
     subject: Annotated[str | None, Form()] = None,
     isbn: Annotated[str | None, Form()] = None,
-    extra_data: Annotated[str | None, Form()] = None,
     info: Annotated[str | None, Form()] = None,
     image: Annotated[UploadFile | None, File()] = None,
     image_url: Annotated[str | None, Form()] = None,
@@ -1865,15 +1852,6 @@ async def update_item(
                     db_item.image_url = image_url
             else:
                 db_item.image_url = image_url
-
-        if extra_data is not None:
-            try:
-                parsed_extra = json.loads(extra_data)
-                db_item.extra_data = parsed_extra
-            except json.JSONDecodeError:
-                raise HTTPException(
-                    status_code=400, detail="Invalid JSON in extra_data"
-                )
 
         if info is not None:
             try:
@@ -1965,7 +1943,6 @@ async def update_item(
             genre=db_item.genre,
             subject=db_item.subject,
             image_url=db_item.image_url,
-            extra_data=db_item.extra_data,
             info={
                 **(db_item.info or {}),
                 "average_condition_grade": cond_data["average_grade"],
@@ -2060,7 +2037,6 @@ def duplicate_item(
         author=source_item.author,
         item_type=source_item.item_type,
         image_url=source_item.image_url,
-        extra_data=source_item.extra_data,
         info={},  # Physical info (grade, notes) should not be copied
         owner_id=current_user.id,
     )
@@ -2086,7 +2062,6 @@ def duplicate_item(
         author=new_item.author,
         item_type=new_item.item_type,
         image_url=new_item.image_url,
-        extra_data=new_item.extra_data,
         info=new_item.info,
         count=new_item.count,
         created_at=new_item.created_at,
@@ -2146,6 +2121,22 @@ async def update_work_metadata(
         image_url=meta_in.image_url,
         overwrite=True,
     )
+
+    # Sync tags to Item.subject for the current user's matching items
+    if meta_in.tags:
+        new_subject = ", ".join(t.strip() for t in meta_in.tags if t.strip())
+        if new_subject:
+            matching_items = session.exec(
+                select(Item).where(
+                    Item.owner_id == current_user.id,
+                    Item.author == author,
+                    Item.title == title,
+                )
+            ).all()
+            for item in matching_items:
+                item.subject = new_subject
+            if matching_items:
+                session.flush()
 
     # Record contribution
     contribution = Contribution(

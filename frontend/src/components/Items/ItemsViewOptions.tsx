@@ -244,14 +244,9 @@ export function ItemsViewOptions({
             <Button
               variant="outline"
               size="sm"
-              colorPalette={
-                displayType === "collections" || category || genre
-                  ? "accent"
-                  : "gray"
-              }
+              colorPalette={organizeBy || category || genre ? "accent" : "gray"}
             >
-              <FaFilter />{" "}
-              {displayType === "collections" ? "Organize" : "Filter"}
+              <FaFilter /> Filter
             </Button>
           </Popover.Trigger>
           <Portal>
@@ -260,10 +255,10 @@ export function ItemsViewOptions({
                 <Popover.Arrow />
                 <Popover.Body>
                   <VStack gap={4} align="stretch">
-                    {displayType === "collections" && onChangeOrganizeBy ? (
+                    {onChangeOrganizeBy && (
                       <Box>
                         <Text fontSize="sm" fontWeight="bold" mb={2}>
-                          Organize Collections By
+                          Group By
                         </Text>
                         <VStack gap={2} align="stretch">
                           {organizeOptions.map((opt) => (
@@ -279,90 +274,92 @@ export function ItemsViewOptions({
                           ))}
                         </VStack>
                       </Box>
-                    ) : (
-                      <>
-                        {onChangeCategory && (
-                          <Box>
-                            <Text fontSize="sm" fontWeight="bold" mb={1}>
-                              Category
-                            </Text>
-                            <select
-                              id="category-filter"
-                              name="category"
-                              value={category || ""}
-                              onChange={(e) => {
-                                onChangeCategory(e.target.value || undefined)
-                                if (onChangeGenre) onChangeGenre(undefined)
-                              }}
-                              style={selectStyle}
-                            >
-                              <option
-                                value=""
-                                style={{ backgroundColor: selectBg }}
-                              >
-                                All Categories
-                              </option>
-                              {Object.keys(BOOK_CLASSIFICATION).map((cat) => (
-                                <option
-                                  key={cat}
-                                  value={cat}
-                                  style={{ backgroundColor: selectBg }}
-                                >
-                                  {cat}
-                                </option>
-                              ))}
-                            </select>
-                          </Box>
-                        )}
+                    )}
 
-                        {onChangeGenre && (
-                          <Box>
-                            <Text fontSize="sm" fontWeight="bold" mb={1}>
-                              Genre
-                            </Text>
-                            <select
-                              id="genre-filter"
-                              name="genre"
-                              value={genre || ""}
-                              onChange={(e) =>
-                                onChangeGenre(e.target.value || undefined)
-                              }
-                              style={selectStyle}
-                              disabled={!category}
-                            >
-                              <option
-                                value=""
-                                style={{ backgroundColor: selectBg }}
-                              >
-                                All Genres
-                              </option>
-                              {category &&
-                                BOOK_CLASSIFICATION[category]?.map((gen) => (
-                                  <option
-                                    key={gen}
-                                    value={gen}
-                                    style={{ backgroundColor: selectBg }}
-                                  >
-                                    {gen}
-                                  </option>
-                                ))}
-                            </select>
-                          </Box>
-                        )}
+                    {onChangeOrganizeBy && onChangeCategory && (
+                      <Separator />
+                    )}
 
-                        {(category || genre) && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              if (onChangeCategory) onChangeCategory(undefined)
-                              if (onChangeGenre) onChangeGenre(undefined)
-                            }}
+                    {onChangeCategory && (
+                      <Box>
+                        <Text fontSize="sm" fontWeight="bold" mb={1}>
+                          Category
+                        </Text>
+                        <select
+                          id="category-filter"
+                          name="category"
+                          value={category || ""}
+                          onChange={(e) => {
+                            onChangeCategory(e.target.value || undefined)
+                            if (onChangeGenre) onChangeGenre(undefined)
+                          }}
+                          style={selectStyle}
+                        >
+                          <option
+                            value=""
+                            style={{ backgroundColor: selectBg }}
                           >
-                            Clear Filters
-                          </Button>
-                        )}
-                      </>
+                            All Categories
+                          </option>
+                          {Object.keys(BOOK_CLASSIFICATION).map((cat) => (
+                            <option
+                              key={cat}
+                              value={cat}
+                              style={{ backgroundColor: selectBg }}
+                            >
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
+                      </Box>
+                    )}
+
+                    {onChangeGenre && (
+                      <Box>
+                        <Text fontSize="sm" fontWeight="bold" mb={1}>
+                          Genre
+                        </Text>
+                        <select
+                          id="genre-filter"
+                          name="genre"
+                          value={genre || ""}
+                          onChange={(e) =>
+                            onChangeGenre(e.target.value || undefined)
+                          }
+                          style={selectStyle}
+                          disabled={!category}
+                        >
+                          <option
+                            value=""
+                            style={{ backgroundColor: selectBg }}
+                          >
+                            All Genres
+                          </option>
+                          {category &&
+                            BOOK_CLASSIFICATION[category]?.map((gen) => (
+                              <option
+                                key={gen}
+                                value={gen}
+                                style={{ backgroundColor: selectBg }}
+                              >
+                                {gen}
+                              </option>
+                            ))}
+                        </select>
+                      </Box>
+                    )}
+
+                    {(category || genre) && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          if (onChangeCategory) onChangeCategory(undefined)
+                          if (onChangeGenre) onChangeGenre(undefined)
+                        }}
+                      >
+                        Clear Filters
+                      </Button>
                     )}
                   </VStack>
                 </Popover.Body>

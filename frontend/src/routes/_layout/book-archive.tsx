@@ -411,7 +411,9 @@ function BookArchive() {
     mutationFn: (data: { books: { author: string; title: string }[] }) =>
       ItemsService.triggerAiClassifyBooks({ requestBody: data as any }),
     onSuccess: () => {
-      showSuccessToast(`AI Classification started for ${selectedKeys.size} books`)
+      showSuccessToast(
+        `AI Classification started for ${selectedKeys.size} books`,
+      )
       setSelectedKeys(new Set())
     },
     onError: () => {
@@ -556,14 +558,17 @@ function BookArchive() {
                               Fields to Overwrite
                             </Text>
                             <Text fontSize="xs" color="fg.muted">
-                              Selected fields will be updated even if they already have data. 
-                              Unselected fields will only be filled if current data is missing.
+                              Selected fields will be updated even if they
+                              already have data. Unselected fields will only be
+                              filled if current data is missing.
                             </Text>
                             <Stack gap={2}>
                               {ENRICH_OPTIONS.map((opt) => (
                                 <Checkbox
                                   key={opt.value}
-                                  checked={fieldsToOverwrite.includes(opt.value)}
+                                  checked={fieldsToOverwrite.includes(
+                                    opt.value,
+                                  )}
                                   onCheckedChange={(e) =>
                                     handleFieldChange(opt.value, !!e.checked)
                                   }
@@ -639,7 +644,11 @@ function BookArchive() {
                     queryKey: ["book-archive-count"],
                   })
                 }}
-                loading={queryClient.isFetching({ queryKey: ["book-archive-infinite"] }) > 0}
+                loading={
+                  queryClient.isFetching({
+                    queryKey: ["book-archive-infinite"],
+                  }) > 0
+                }
                 title="Refresh Archive"
               >
                 <FiRefreshCw />

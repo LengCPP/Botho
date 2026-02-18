@@ -54,7 +54,7 @@ export function GroupCard({
     item_type ||
     groups?.[0]?.[0]?.item_type ||
     (type === "author" ? "book" : "general")
-  const isBook = effectiveItemType === "book"
+  const isBook = String(effectiveItemType).toLowerCase() === "book"
 
   const getDynamicBadgePhrase = () => {
     switch (type) {
@@ -118,7 +118,14 @@ export function GroupCard({
             </Badge>
           </VStack>
           <Badge variant="solid" colorPalette="teal" size="xs" ml={2}>
-            {displayCount} {isBook ? (displayCount === 1 ? "Book" : "Books") : (displayCount === 1 ? "Item" : "Items")}
+            {displayCount}{" "}
+            {isBook
+              ? displayCount === 1
+                ? "Book"
+                : "Books"
+              : displayCount === 1
+                ? "Item"
+                : "Items"}
           </Badge>
         </Flex>
 

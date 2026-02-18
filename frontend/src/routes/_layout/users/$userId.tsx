@@ -80,6 +80,7 @@ const userSearchSchema = z.object({
   organize_by: z
     .enum(["subject", "genre", "category", "author"])
     .catch(() => (localStorage.getItem("organize_by") as any) || "subject"),
+  item_type: z.string().optional(),
   q: z.string().optional(),
 })
 
@@ -103,6 +104,7 @@ function UserProfilePage() {
     subject,
     author,
     organize_by,
+    item_type,
     q,
   } = Route.useSearch()
   const { user: currentUser } = useAuth()
@@ -136,12 +138,13 @@ function UserProfilePage() {
     [navigate],
   )
 
-  const handleOpenCollection = (name: string) => {
+  const handleOpenCollection = (name: string, iType?: string) => {
     const params: any = {
       subject: undefined,
       author: undefined,
       genre: undefined,
       category: undefined,
+      item_type: iType,
     }
     if (organize_by === "subject") params.subject = name
     else if (organize_by === "author") params.author = name
@@ -176,7 +179,17 @@ function UserProfilePage() {
     queryKey: [
       "userItemsInfinite",
       userId,
-      { sort_by, sort_order, limit, category, genre, subject, author, q },
+      {
+        sort_by,
+        sort_order,
+        limit,
+        category,
+        genre,
+        subject,
+        author,
+        item_type,
+        q,
+      },
     ],
     queryFn: ({ pageParam = 0 }) =>
       ItemsService.readItems({
@@ -189,6 +202,7 @@ function UserProfilePage() {
         genre,
         subject,
         author,
+        itemType: item_type as any,
         q,
         minimal: true,
       }),
@@ -231,9 +245,7 @@ function UserProfilePage() {
       canSeeAll &&
       display_type === "collections" &&
       !subject &&
-      !author &&
-      !category &&
-      !genre,
+      !author,
   })
 
   const friendMutation = useMutation({
@@ -282,7 +294,7 @@ function UserProfilePage() {
   const activeGroups = groupItems(allItems as any)
 
   const currentFilterValue = subject || author || genre || category
-  const isDrillDown = !!currentFilterValue
+  const isDrillDown = !!(subject || author)
 
   if (isLoadingUser) return <Text p={4}>Loading profile...</Text>
   if (!user) return <Text p={4}>User not found</Text>
@@ -381,13 +393,7 @@ function UserProfilePage() {
               onChangeViewMode={(mode) => updateSearch({ view_mode: mode })}
               displayType={display_type}
               onChangeDisplayType={(type) =>
-                updateSearch({
-                  display_type: type,
-                  subject: undefined,
-                  author: undefined,
-                  genre: undefined,
-                  category: undefined,
-                })
+                updateSearch({ display_type: type })
               }
               sortBy={sort_by}
               onChangeSortBy={(val) => updateSearch({ sort_by: val })}
@@ -407,15 +413,13 @@ function UserProfilePage() {
                   organize_by: val,
                   subject: undefined,
                   author: undefined,
-                  genre: undefined,
-                  category: undefined,
                 })
               }
               showDisplayToggle={true}
               showViewToggle={display_type === "items" || isDrillDown}
               showLimit={true}
-              showFilter={display_type === "items"}
-              showSort={display_type === "items"}
+              showFilter={true}
+              showSort={display_type === "items" || isDrillDown}
             />
           </Flex>
 

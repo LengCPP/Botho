@@ -1,19 +1,19 @@
 import { SESSION_INACTIVITY_TIMEOUT } from "@/constants"
-import { useEffect, useRef } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import useAuth from "./useAuth"
 
 const useInactivityLogout = () => {
   const { logout } = useAuth()
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  const resetTimer = () => {
+  const resetTimer = useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
     }
     timeoutRef.current = setTimeout(() => {
       logout()
     }, SESSION_INACTIVITY_TIMEOUT)
-  }
+  }, [logout])
 
   useEffect(() => {
     const events = [
@@ -46,7 +46,7 @@ const useInactivityLogout = () => {
         clearTimeout(timeoutRef.current)
       }
     }
-  }, [logout])
+  }, [resetTimer])
 
   return null
 }

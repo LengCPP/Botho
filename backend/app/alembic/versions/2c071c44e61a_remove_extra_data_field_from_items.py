@@ -1,7 +1,7 @@
 """remove extra_data field from items
 
 Revision ID: 2c071c44e61a
-Revises: 1b6c309a776b
+Revises: b099f267b887
 Create Date: 2026-02-18 00:31:42.568796
 
 """
@@ -12,7 +12,7 @@ import sqlmodel.sql.sqltypes
 
 # revision identifiers, used by Alembic.
 revision = '2c071c44e61a'
-down_revision = '1b6c309a776b'
+down_revision = 'b099f267b887'
 branch_labels = None
 depends_on = None
 

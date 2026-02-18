@@ -39,9 +39,9 @@ function VerifyEmail() {
     if (token) {
       mutation.mutate(token)
     }
-  }, [token])
+  }, [token, mutation.mutate])
 
-  let content
+  let content: React.ReactNode = null
 
   if (mutation.isPending) {
     content = (

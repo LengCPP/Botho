@@ -8,7 +8,7 @@ import {
   VStack,
 } from "@chakra-ui/react"
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { FiAlertCircle, FiX } from "react-icons/fi"
 
 interface BarcodeScannerProps {
@@ -43,7 +43,7 @@ const BarcodeScanner = ({ onScan, onClose }: BarcodeScannerProps) => {
     }
   }
 
-  const startScanner = async () => {
+  const startScanner = useCallback(async () => {
     if (!containerRef.current) return
 
     try {
@@ -101,7 +101,7 @@ const BarcodeScanner = ({ onScan, onClose }: BarcodeScannerProps) => {
       }
       setIsScanning(false)
     }
-  }
+  }, [onScan])
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -118,7 +118,7 @@ const BarcodeScanner = ({ onScan, onClose }: BarcodeScannerProps) => {
           .catch(console.error)
       }
     }
-  }, [])
+  }, [startScanner])
 
   return (
     <VStack gap={4} width="100%" py={4}>

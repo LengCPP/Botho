@@ -9,7 +9,6 @@ export type Body_items_create_item = {
     genre?: (string | null);
     subject?: (string | null);
     isbn?: (string | null);
-    extra_data?: (string | null);
     info?: (string | null);
     image?: ((Blob | File) | null);
     image_url?: (string | null);
@@ -25,7 +24,6 @@ export type Body_items_update_item = {
     genre?: (string | null);
     subject?: (string | null);
     isbn?: (string | null);
-    extra_data?: (string | null);
     info?: (string | null);
     image?: ((Blob | File) | null);
     image_url?: (string | null);
@@ -228,9 +226,6 @@ export type ItemPublic = {
     category?: (string | null);
     genre?: (string | null);
     subject?: (string | null);
-    extra_data?: ({
-    [key: string]: unknown;
-} | null);
     info?: ({
     [key: string]: unknown;
 } | null);

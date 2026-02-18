@@ -15,7 +15,7 @@ import {
   VStack,
   useBreakpointValue,
 } from "@chakra-ui/react"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { FaPlus } from "react-icons/fa"
 import { FiCamera } from "react-icons/fi"
 
@@ -114,7 +114,6 @@ const AddItem = ({
       category: "",
       genre: "",
       subject: "",
-      extra_data: {},
       info: {
         grade: 10,
         physical_description: "",
@@ -142,6 +141,61 @@ const AddItem = ({
   const { data: isbnResults, isLoading: isSearchingIsbn } =
     useIsbnSearch(scannedIsbn)
 
+  const poolMutation = useMutation({
+    mutationFn: (itemId: string) =>
+      CommunitiesService.addItemToCommunity({ id: communityId!, itemId }),
+    onSuccess: () => {
+      showSuccessToast("Item added to community pool.")
+      queryClient.invalidateQueries({
+        queryKey: ["communityItems", communityId],
+      })
+      queryClient.invalidateQueries({
+        queryKey: ["communityItemsInfinite", communityId],
+      })
+      queryClient.invalidateQueries({ queryKey: ["my-items-for-community"] })
+    },
+    onError: (err: ApiError) => {
+      handleError(err)
+    },
+  })
+
+  const handleBookSelect = useCallback(
+    async (book: BookResult) => {
+      setValue("title", book.title, { shouldValidate: true })
+      setValue("description", book.description.substring(0, 2000))
+      setValue("author", book.authors.join(", "))
+      setValue("isbn", book.isbn)
+      setValue("image_url", book.thumbnail)
+      setValue("item_type", "book")
+
+      // Map classification via backend
+      if (book.categories && book.categories.length > 0) {
+        try {
+          const mapping = (await UtilsService.mapClassification({
+            q: book.categories[0],
+          })) as { category?: string; genre?: string; subject?: string }
+
+          if (mapping.category) {
+            setValue("category", mapping.category)
+            if (mapping.genre) {
+              setValue("genre", mapping.genre)
+            }
+          } else if (mapping.subject) {
+            setValue("subject", mapping.subject)
+            const currentTags = watch("work_info.tags")
+            const newTags = currentTags
+              ? `${currentTags}, ${mapping.subject}`
+              : mapping.subject
+            setValue("work_info.tags", newTags)
+          }
+        } catch (e) {
+          console.error("Failed to map classification:", e)
+        }
+      }
+    },
+    [setValue, watch],
+  )
+
   useEffect(() => {
     if (isbnResults && isbnResults.length > 0) {
       handleBookSelect(isbnResults[0])
@@ -151,53 +205,14 @@ const AddItem = ({
       showErrorToast(`Could not find book with ISBN: ${scannedIsbn}`)
       setScannedIsbn("")
     }
-  }, [isbnResults, isSearchingIsbn])
-
-  const poolMutation = useMutation({
-    mutationFn: (itemId: string) =>
-      CommunitiesService.addItemToCommunity({ id: communityId!, itemId }),
-    onSuccess: () => {
-      showSuccessToast("Item added to community pool!")
-      queryClient.invalidateQueries({
-        queryKey: ["communityItems", communityId],
-      })
-    },
-    onError: () => showErrorToast("Failed to add item"),
-  })
-
-  const handleBookSelect = async (book: BookResult) => {
-    setValue("title", book.title, { shouldValidate: true })
-    setValue("description", book.description.substring(0, 2000))
-    setValue("author", book.authors.join(", "))
-    setValue("isbn", book.isbn)
-    setValue("image_url", book.thumbnail)
-    setValue("item_type", "book")
-
-    // Map classification via backend
-    if (book.categories && book.categories.length > 0) {
-      try {
-        const mapping = (await UtilsService.mapClassification({
-          q: book.categories[0],
-        })) as { category?: string; genre?: string; subject?: string }
-
-        if (mapping.category) {
-          setValue("category", mapping.category)
-          if (mapping.genre) {
-            setValue("genre", mapping.genre)
-          }
-        } else if (mapping.subject) {
-          setValue("subject", mapping.subject)
-          const currentTags = watch("work_info.tags")
-          const newTags = currentTags
-            ? `${currentTags}, ${mapping.subject}`
-            : mapping.subject
-          setValue("work_info.tags", newTags)
-        }
-      } catch (e) {
-        console.error("Failed to map classification:", e)
-      }
-    }
-  }
+  }, [
+    isbnResults,
+    isSearchingIsbn,
+    handleBookSelect,
+    scannedIsbn,
+    showErrorToast,
+    showSuccessToast,
+  ])
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null
@@ -257,8 +272,7 @@ const AddItem = ({
       isbn: data.isbn,
       category: data.category,
       genre: data.genre,
-      subject: data.subject,
-      extra_data: JSON.stringify(data.extra_data || {}),
+      subject: data.work_info?.tags || data.subject || undefined,
       info: JSON.stringify(data.info || {}),
       image: imageFile,
       image_url: data.image_url,

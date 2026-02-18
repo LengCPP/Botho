@@ -1,5 +1,5 @@
-import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   DialogActionTrigger,
   DialogBody,
@@ -79,7 +79,11 @@ const ConfirmationModal = ({
               Cancel
             </Button>
           </DialogActionTrigger>
-          <Button colorPalette={colorPalette} onClick={handleConfirm} loading={isLoading}>
+          <Button
+            colorPalette={colorPalette}
+            onClick={handleConfirm}
+            loading={isLoading}
+          >
             {confirmButtonText}
           </Button>
         </DialogFooter>

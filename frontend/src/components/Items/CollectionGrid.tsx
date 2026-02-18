@@ -12,22 +12,22 @@ export interface CollectionItem {
 interface CollectionGridProps {
   items: CollectionItem[]
   type: string
-  onOpen: (name: string) => void
+  onOpen: (name: string, itemType?: string) => void
 }
 
 export function CollectionGrid({ items, type, onOpen }: CollectionGridProps) {
   return (
     <SimpleGrid columns={{ base: 1, md: 2, lg: 3, xl: 4 }} gap={6}>
-      {items.map((item) => (
+      {items.map((item, i) => (
         <GroupCard
-          key={`${item.name}-${item.item_type || "default"}`}
+          key={`${item.name ?? i}-${item.item_type || "default"}`}
           name={item.name}
           type={type}
           item_type={item.item_type}
           count={item.count}
           sample_image={item.sample_image}
           sample_images={item.sample_images}
-          onOpen={() => onOpen(item.name)}
+          onOpen={() => onOpen(item.name, item.item_type)}
         />
       ))}
     </SimpleGrid>

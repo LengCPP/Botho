@@ -37,9 +37,9 @@ import {
   FaEdit,
   FaExclamationTriangle,
   FaFileImport,
+  FaRobot,
   FaSpinner,
   FaTrash,
-  FaRobot,
 } from "react-icons/fa"
 import * as XLSX from "xlsx"
 
@@ -333,12 +333,12 @@ export const ImportItems = ({
   const dropDuplicates = () => {
     const seen = new Set()
     const toDelete: string[] = []
-    items.forEach((item) => {
+    for (const item of items) {
       const raw = pendingEdits[item.id] || item.raw_data
       const key = `${raw.title}-${raw.author}-${raw.isbn}`.toLowerCase().trim()
       if (seen.has(key)) toDelete.push(item.id)
       else seen.add(key)
-    })
+    }
     if (toDelete.length > 0) {
       setSelectedIds(toDelete)
       showInfoToast(

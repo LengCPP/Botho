@@ -28,6 +28,7 @@ def _update_collection_index_logic(session: Session, owner_id: uuid.UUID):
     """
     Internal logic to update the collection_index for a user or community.
     Calculates totals and sample images for genre, category, subject, and author.
+    Groups by name AND item_type.
     """
     import logging
     logger = logging.getLogger(__name__)
@@ -65,63 +66,48 @@ def _update_collection_index_logic(session: Session, owner_id: uuid.UUID):
 
     for item in items:
         # 0. Item Type
-        item_type = item.item_type.value if hasattr(item.item_type, 'value') else str(item.item_type)
-        if item_type not in index["item_type"]:
-            index["item_type"][item_type] = {"count": 0, "sample_images": []}
-        index["item_type"][item_type]["count"] += 1
-        if item.image_url and len(index["item_type"][item_type]["sample_images"]) < 5:
-            if item.image_url not in index["item_type"][item_type]["sample_images"]:
-                index["item_type"][item_type]["sample_images"].append(item.image_url)
+        i_type = item.item_type.value if hasattr(item.item_type, 'value') else str(item.item_type)
+        if i_type not in index["item_type"]:
+            index["item_type"][i_type] = {"name": i_type, "item_type": i_type, "count": 0, "sample_images": []}
+        index["item_type"][i_type]["count"] += 1
+        if item.image_url and len(index["item_type"][i_type]["sample_images"]) < 5:
+            if item.image_url not in index["item_type"][i_type]["sample_images"]:
+                index["item_type"][i_type]["sample_images"].append(item.image_url)
+
+        # Helper to update index with item_type awareness
+        def update_facet(facet_key: str, name: str):
+            clean_name = name or "Others"
+            key = f"{clean_name}|{i_type}"
+            if key not in index[facet_key]:
+                index[facet_key][key] = {
+                    "name": clean_name, 
+                    "item_type": i_type, 
+                    "count": 0, 
+                    "sample_images": []
+                }
+            index[facet_key][key]["count"] += 1
+            if item.image_url and len(index[facet_key][key]["sample_images"]) < 5:
+                if item.image_url not in index[facet_key][key]["sample_images"]:
+                    index[facet_key][key]["sample_images"].append(item.image_url)
 
         # 1. Author
-        author = item.author or "Others"
-        if author not in index["author"]:
-            index["author"][author] = {"count": 0, "sample_images": []}
-        index["author"][author]["count"] += 1
-        if item.image_url and len(index["author"][author]["sample_images"]) < 5:
-            if item.image_url not in index["author"][author]["sample_images"]:
-                index["author"][author]["sample_images"].append(item.image_url)
+        update_facet("author", item.author)
 
-        # 2. Category & Genre (Top-level fields)
-        category = item.category or "Others"
-        genre = item.genre or "Others"
+        # 2. Category & Genre
+        update_facet("category", item.category)
+        update_facet("genre", item.genre)
 
-        if category not in index["category"]:
-            index["category"][category] = {"count": 0, "sample_images": []}
-        index["category"][category]["count"] += 1
-        if item.image_url and len(index["category"][category]["sample_images"]) < 5:
-            if item.image_url not in index["category"][category]["sample_images"]:
-                index["category"][category]["sample_images"].append(item.image_url)
-
-        if genre not in index["genre"]:
-            index["genre"][genre] = {"count": 0, "sample_images": []}
-        index["genre"][genre]["count"] += 1
-        if item.image_url and len(index["genre"][genre]["sample_images"]) < 5:
-            if item.image_url not in index["genre"][genre]["sample_images"]:
-                index["genre"][genre]["sample_images"].append(item.image_url)
-
-        # 3. Subject (Tags) - Top-level field
+        # 3. Subject (Tags)
         tags = [s.strip() for s in item.subject.split(",")] if item.subject else []
         if not tags:
             tags = ["Others"]
-
         for tag in tags:
-            if tag not in index["subject"]:
-                index["subject"][tag] = {"count": 0, "sample_images": []}
-            index["subject"][tag]["count"] += 1
-            if item.image_url and len(index["subject"][tag]["sample_images"]) < 5:
-                if item.image_url not in index["subject"][tag]["sample_images"]:
-                    index["subject"][tag]["sample_images"].append(item.image_url)
+            update_facet("subject", tag)
 
         # 4. Ownership (Community only)
         if community:
             owner_type = "Community Owned" if item.owner_id == owner_id else "Member Shared Pool"
-            if owner_type not in index["ownership"]:
-                index["ownership"][owner_type] = {"count": 0, "sample_images": []}
-            index["ownership"][owner_type]["count"] += 1
-            if item.image_url and len(index["ownership"][owner_type]["sample_images"]) < 5:
-                if item.image_url not in index["ownership"][owner_type]["sample_images"]:
-                    index["ownership"][owner_type]["sample_images"].append(item.image_url)
+            update_facet("ownership", owner_type)
 
     if user:
         user.collection_index = index

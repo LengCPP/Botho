@@ -62,6 +62,7 @@ const itemsSearchSchema = z.object({
     ),
   subject: z.string().optional(),
   author: z.string().optional(),
+  item_type: z.string().optional(),
   organize_by: z
     .enum(["subject", "genre", "category", "author"])
     .catch(() => (localStorage.getItem("organize_by") as any) || "subject"),
@@ -88,6 +89,7 @@ function ItemsTable() {
     display_type,
     subject,
     author,
+    item_type,
     organize_by,
     q,
     tab,
@@ -128,6 +130,7 @@ function ItemsTable() {
         genre,
         subject,
         author,
+        item_type,
         q,
       },
     ],
@@ -142,6 +145,7 @@ function ItemsTable() {
         genre: genre,
         subject: subject,
         author: author,
+        itemType: item_type as any,
         q: q,
         minimal: true,
         excludeLost: true,
@@ -209,52 +213,34 @@ function ItemsTable() {
     [navigate],
   )
 
-  const handleOpenCollection = (name: string) => {
-    if (organize_by === "author") {
-      updateSearch({
-        author: name,
-        subject: undefined,
-        genre: undefined,
-        category: undefined,
-      })
-    } else if (organize_by === "genre") {
-      updateSearch({
-        genre: name,
-        subject: undefined,
-        author: undefined,
-        category: undefined,
-      })
-    } else if (organize_by === "category") {
-      updateSearch({
-        category: name,
-        subject: undefined,
-        author: undefined,
-        genre: undefined,
-      })
-    } else {
-      updateSearch({
-        subject: name,
-        author: undefined,
-        genre: undefined,
-        category: undefined,
-      })
-    }
+  const handleOpenCollection = (name: string, iType?: string) => {
+    updateSearch({
+      item_type: iType,
+      author: organize_by === "author" ? name : undefined,
+      genre: organize_by === "genre" ? name : undefined,
+      category: organize_by === "category" ? name : undefined,
+      subject: organize_by === "subject" ? name : undefined,
+    })
   }
 
   const allFacets = useMemo(() => {
     if (!q && user?.collection_index?.[organize_by]) {
       const raw = user.collection_index[organize_by]
-      return Object.entries(raw as any)
-        .map(([name, data]: any) => ({
-          name,
+      return Object.values(raw as any)
+        .map((data: any) => ({
+          name: data.name,
+          item_type: data.item_type,
           count: data.count,
           sample_images: data.sample_images,
         }))
-        .sort((a, b) => a.name.localeCompare(b.name)) as CollectionItem[]
+        .sort((a, b) =>
+          (a.name ?? "").localeCompare(b.name ?? ""),
+        ) as CollectionItem[]
     }
     return (infiniteFacets?.pages.flatMap((p) => (p as any).data) || []).map(
       (f: any) => ({
         name: f.name,
+        item_type: f.item_type,
         count: f.count,
         sample_image: f.sample_image,
         sample_images: f.sample_images,
@@ -318,6 +304,7 @@ function ItemsTable() {
                   author: undefined,
                   genre: undefined,
                   category: undefined,
+                  item_type: undefined,
                 })
               }
               mb={4}
@@ -418,6 +405,7 @@ function ItemsTable() {
               author: undefined,
               genre: undefined,
               category: undefined,
+              item_type: undefined,
             })
           }
           sortBy={sort_by}
@@ -445,6 +433,7 @@ function ItemsTable() {
               author: undefined,
               genre: undefined,
               category: undefined,
+              item_type: undefined,
             })
           }
           showDisplayToggle={true}
@@ -489,6 +478,7 @@ function ItemsTable() {
                     author: undefined,
                     genre: undefined,
                     category: undefined,
+                    item_type: undefined,
                   })
                 }
               >
@@ -500,7 +490,8 @@ function ItemsTable() {
                 textTransform="uppercase"
                 letterSpacing="wider"
               >
-                Items {organize_by} {subject || author || genre || category}
+                {item_type === "book" ? "Books" : "Items"} {organize_by}{" "}
+                {subject || author || genre || category}
               </Heading>
             </VStack>
           )}

@@ -736,6 +736,7 @@ def read_community_item_facets(
     """
     Get unique values and counts for a specific facet (category, genre, author, subject)
     belonging to a community. Uses Meilisearch for fuzzy search when q is provided.
+    Groups by BOTH the facet name and the item_type.
     """
     community = session.get(Community, id)
     if not community:
@@ -753,85 +754,6 @@ def read_community_item_facets(
             status_code=403, detail="Must be a member to view community items"
         )
 
-    # Optimization: Check collection index total
-    if community.collection_index:
-        total = community.collection_index.get("total")
-        if total == 0:
-            return {"data": [], "count": 0}
-
-    # Meilisearch logic if q is present
-    if q:
-        from app.search import client as meili_client
-
-        try:
-            index = meili_client.index("items")
-
-            # Map facet field
-            facet_field = group_by
-            if group_by == "subject":
-                facet_field = "subject"
-
-            search_params = {
-                "filter": f'owner_id = "{id}" OR pooled_in = "{id}"',
-                "facets": [facet_field],
-                "limit": 0,  # We only care about facets
-            }
-
-            search_results = index.search(q, search_params)
-            distribution = search_results.get("facetDistribution", {}).get(
-                facet_field, {}
-            )
-
-            # Convert to list and sort by name
-            all_facets = [
-                {"name": name, "count": count} for name, count in distribution.items()
-            ]
-            all_facets.sort(key=lambda x: x["name"].lower())
-            total_count = len(all_facets)
-
-            if not all_facets:
-                raise Exception("No facets found in Meilisearch, falling back to SQL")
-
-            # Slice for pagination
-            paged_facets = all_facets[skip : skip + limit]
-
-            # Fetch sample images from DB for these facets
-            results = []
-            for f in paged_facets:
-                name = f["name"]
-
-                # Items in this community (owned or pooled)
-                comm_item_ids = select(CommunityItem.item_id).where(
-                    CommunityItem.community_id == id
-                )
-                base_filter = or_(Item.owner_id == id, Item.id.in_(comm_item_ids))
-
-                stmt = select(Item.image_url).where(base_filter)
-                if group_by == "author":
-                    stmt = stmt.where(Item.author == name)
-                elif group_by == "category":
-                    stmt = stmt.where(Item.category == name)
-                elif group_by == "genre":
-                    stmt = stmt.where(Item.genre == name)
-                elif group_by == "subject":
-                    stmt = stmt.join(
-                        WorkMetadata,
-                        (Item.author == WorkMetadata.author)
-                        & (Item.title == WorkMetadata.title),
-                    ).where(cast(WorkMetadata.tags, String).ilike(f'%"{name}"%'))
-
-                imgs = session.exec(
-                    stmt.where(Item.image_url.is_not(None)).limit(5)
-                ).all()
-                results.append(
-                    {"name": name, "count": f["count"], "sample_images": list(imgs)}
-                )
-
-            return {"data": results, "count": len(all_facets)}
-        except Exception:
-            pass  # Fallback to SQL if Meilisearch fails
-
-    # SQL Fallback
     # Filter for items in this community (owned or pooled)
     comm_item_ids = select(CommunityItem.item_id).where(
         CommunityItem.community_id == id
@@ -840,84 +762,99 @@ def read_community_item_facets(
 
     results = []
     total_count = 0
+
+    # SQL logic (Meilisearch grouping by multiple facets is complex, SQL is better for this specific composite grouping)
     if group_by == "author":
-        count_stmt = select(func.count(func.distinct(Item.author))).where(base_filter)
+        count_stmt = select(func.count(func.distinct(text("author || '|' || item_type")))).where(base_filter)
         if q:
             count_stmt = count_stmt.where(Item.author.ilike(f"%{q}%"))
         total_count = session.exec(count_stmt).one()
 
         stmt = select(
-            Item.author, func.count(Item.id), func.array_agg(Item.image_url)
+            Item.author, Item.item_type, func.count(Item.id), func.array_agg(Item.image_url)
         ).where(base_filter)
         if q:
             stmt = stmt.where(Item.author.ilike(f"%{q}%"))
         stmt = (
-            stmt.group_by(Item.author)
+            stmt.group_by(Item.author, Item.item_type)
             .order_by(Item.author.asc())
             .offset(skip)
             .limit(limit)
         )
 
         rows = session.exec(stmt).all()
-        for author, count, imgs in rows:
+        for author, i_type, count, imgs in rows:
             valid_imgs = [img for img in (imgs or []) if img][:5]
             results.append(
                 {
                     "name": author or "Others",
+                    "item_type": i_type,
                     "count": count,
                     "sample_images": valid_imgs,
                 }
             )
 
     elif group_by == "category":
-        count_stmt = select(func.count(func.distinct(Item.category))).where(base_filter)
+        count_stmt = select(func.count(func.distinct(text("category || '|' || item_type")))).where(base_filter)
         if q:
             count_stmt = count_stmt.where(Item.category.ilike(f"%{q}%"))
         total_count = session.exec(count_stmt).one()
 
         stmt = select(
             Item.category.label("name"),
+            Item.item_type,
             func.count(Item.id).label("count"),
             func.array_agg(Item.image_url).label("sample_images"),
         ).where(base_filter)
         if q:
             stmt = stmt.where(Item.category.ilike(f"%{q}%"))
         stmt = (
-            stmt.group_by("name")
+            stmt.group_by("name", Item.item_type)
             .order_by(Item.category.asc())
             .offset(skip)
             .limit(limit)
         )
 
         rows = session.exec(stmt).all()
-        for name, count, imgs in rows:
+        for name, i_type, count, imgs in rows:
             valid_imgs = [img for img in (imgs or []) if img][:5]
             results.append(
-                {"name": name or "Others", "count": count, "sample_images": valid_imgs}
+                {
+                    "name": name or "Others",
+                    "item_type": i_type,
+                    "count": count,
+                    "sample_images": valid_imgs,
+                }
             )
 
     elif group_by == "genre":
-        count_stmt = select(func.count(func.distinct(Item.genre))).where(base_filter)
+        count_stmt = select(func.count(func.distinct(text("genre || '|' || item_type")))).where(base_filter)
         if q:
             count_stmt = count_stmt.where(Item.genre.ilike(f"%{q}%"))
         total_count = session.exec(count_stmt).one()
 
         stmt = select(
             Item.genre.label("name"),
+            Item.item_type,
             func.count(Item.id).label("count"),
             func.array_agg(Item.image_url).label("sample_images"),
         ).where(base_filter)
         if q:
             stmt = stmt.where(Item.genre.ilike(f"%{q}%"))
         stmt = (
-            stmt.group_by("name").order_by(Item.genre.asc()).offset(skip).limit(limit)
+            stmt.group_by("name", Item.item_type).order_by(Item.genre.asc()).offset(skip).limit(limit)
         )
 
         rows = session.exec(stmt).all()
-        for name, count, imgs in rows:
+        for name, i_type, count, imgs in rows:
             valid_imgs = [img for img in (imgs or []) if img][:5]
             results.append(
-                {"name": name or "Others", "count": count, "sample_images": valid_imgs}
+                {
+                    "name": name or "Others",
+                    "item_type": i_type,
+                    "count": count,
+                    "sample_images": valid_imgs,
+                }
             )
 
     elif group_by == "subject":
@@ -926,6 +863,7 @@ def read_community_item_facets(
         tags_stmt = (
             select(
                 tags_expr.label("name"),
+                Item.item_type,
                 func.count(Item.id).label("count"),
                 func.array_agg(Item.image_url).label("sample_images"),
             )
@@ -938,12 +876,13 @@ def read_community_item_facets(
         )
         if q:
             tags_stmt = tags_stmt.where(tags_expr.ilike(f"%{q}%"))
-        tags_stmt = tags_stmt.group_by("name")
+        tags_stmt = tags_stmt.group_by("name", Item.item_type)
 
         # 2. Others query
         others_stmt = (
             select(
                 cast("Others", String).label("name"),
+                Item.item_type,
                 func.count(Item.id).label("count"),
                 func.array_agg(Item.image_url).label("sample_images"),
             )
@@ -960,6 +899,7 @@ def read_community_item_facets(
                     WorkMetadata.author.is_(None),
                 )
             )
+            .group_by(Item.item_type)
         )
 
         if q and "others".find(q.lower()) == -1:
@@ -973,14 +913,14 @@ def read_community_item_facets(
             ).one()
             rows = session.exec(
                 select(full_stmt.subquery())
-                .order_by(text("name ASC"))
+                .order_by(text("item_type"), text("name ASC"))
                 .offset(skip)
                 .limit(limit)
             ).all()
-            for name, count, imgs in rows:
+            for name, i_type, count, imgs in rows:
                 valid_imgs = [img for img in (imgs or []) if img][:5]
                 results.append(
-                    {"name": name, "count": count, "sample_images": valid_imgs}
+                    {"name": name, "item_type": i_type, "count": count, "sample_images": valid_imgs}
                 )
         except Exception:
             pass
@@ -1002,6 +942,7 @@ def read_community_items(
     genre: str | None = None,
     subject: str | None = None,
     author: str | None = None,
+    item_type: str | None = None,
     q: str | None = None,
 ) -> Any:
     """
@@ -1047,6 +988,8 @@ def read_community_items(
                 filters.append(f'subject = "{subject}"')
             if author:
                 filters.append(f'author = "{author}"')
+            if item_type:
+                filters.append(f'item_type = "{item_type}"')
 
             search_params = {
                 "limit": limit,
@@ -1153,6 +1096,8 @@ def read_community_items(
                 )
         if author:
             statement = statement.where(col(Item.author).ilike(f"%{author}%"))
+        if item_type:
+            statement = statement.where(Item.item_type == item_type)
 
         # Apply sorting
         sort_column = Item.created_at

@@ -167,7 +167,12 @@ export const ItemDetailModal = ({
                 <Grid templateColumns="repeat(2, 1fr)" gap={4}>
                   {details.map((detail) => (
                     <Box key={detail.label}>
-                      <Text fontSize="xs" fontWeight="bold" color="fg.subtle" textTransform="uppercase">
+                      <Text
+                        fontSize="xs"
+                        fontWeight="bold"
+                        color="fg.subtle"
+                        textTransform="uppercase"
+                      >
                         {detail.label}
                       </Text>
                       <Text fontSize="sm">{detail.value}</Text>
@@ -186,7 +191,12 @@ export const ItemDetailModal = ({
                 borderWidth="1px"
                 borderColor="border.subtle"
               >
-                <Heading size="xs" mb={3} textTransform="uppercase" color="ui.main">
+                <Heading
+                  size="xs"
+                  mb={3}
+                  textTransform="uppercase"
+                  color="ui.main"
+                >
                   Copy Specifics
                 </Heading>
                 <VStack align="start" gap={3}>
@@ -214,7 +224,13 @@ export const ItemDetailModal = ({
                       <Text fontSize="sm" fontWeight="bold" mb={1}>
                         Physical Notes:
                       </Text>
-                      <VStack align="start" gap={1} pl={2} borderLeftWidth="2px" borderColor="ui.main">
+                      <VStack
+                        align="start"
+                        gap={1}
+                        pl={2}
+                        borderLeftWidth="2px"
+                        borderColor="ui.main"
+                      >
                         {physicalNotes.map((note: string, idx: number) => (
                           <Text key={idx} fontSize="sm" fontStyle="italic">
                             "{note}"

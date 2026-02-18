@@ -4,6 +4,10 @@ import { TanStackRouterVite } from "@tanstack/router-vite-plugin"
 import react from "@vitejs/plugin-react-swc"
 import { defineConfig } from "vite"
 
+// When running inside Docker the backend is reachable via its service name.
+// When running locally, override with BACKEND_PROXY_URL=http://localhost in .env
+const backendProxyTarget = process.env.BACKEND_PROXY_URL ?? "http://backend:8000"
+
 // https://vitejs.dev/config/
 export default defineConfig({
   resolve: {
@@ -17,7 +21,7 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       "/api": {
-        target: "http://backend:8000",
+        target: backendProxyTarget,
         changeOrigin: true,
         secure: false,
         ws: true,
@@ -26,7 +30,7 @@ export default defineConfig({
         },
       },
       "/docs": {
-        target: "http://backend:8000",
+        target: backendProxyTarget,
         changeOrigin: true,
         secure: false,
         headers: {
@@ -34,7 +38,7 @@ export default defineConfig({
         },
       },
       "/openapi.json": {
-        target: "http://backend:8000",
+        target: backendProxyTarget,
         changeOrigin: true,
         secure: false,
         headers: {
