@@ -170,7 +170,6 @@ def search(
             author=item.author,
             item_type=item.item_type,
             image_url=item.image_url,
-            extra_data=item.extra_data,
             info=item.info,
             count=item.count,
             created_at=item.created_at,

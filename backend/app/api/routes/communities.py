@@ -1240,7 +1240,6 @@ def read_community_items(
             category=item.category,
             genre=item.genre,
             subject=item.subject,
-            extra_data=item.extra_data,
             info=item.info,
             count=item.count,
             created_at=item.created_at,

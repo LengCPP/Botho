@@ -677,7 +677,7 @@ def read_item_facets(
     total_count = 0
 
     if group_by == "author":
-        count_stmt = select(func.count(func.distinct(Item.author))).where(
+        count_stmt = select(func.count(func.distinct(text("author || '|' || item_type")))).where(
             Item.owner_id == target_owner_id
         )
         if q:
@@ -685,32 +685,33 @@ def read_item_facets(
         total_count = session.exec(count_stmt).one()
 
         stmt = select(
-            Item.author, func.count(Item.id), func.array_agg(Item.image_url)
+            Item.author, Item.item_type, func.count(Item.id), func.array_agg(Item.image_url)
         ).where(Item.owner_id == target_owner_id)
 
         if q:
             stmt = stmt.where(Item.author.ilike(f"%{q}%"))
 
         stmt = (
-            stmt.group_by(Item.author)
+            stmt.group_by(Item.author, Item.item_type)
             .order_by(Item.author.asc())
             .offset(skip)
             .limit(limit)
         )
 
         rows = session.exec(stmt).all()
-        for author, count, imgs in rows:
+        for author, i_type, count, imgs in rows:
             valid_imgs = [img for img in (imgs or []) if img][:5]
             results.append(
                 {
                     "name": author or "Others",
+                    "item_type": i_type,
                     "count": count,
                     "sample_images": valid_imgs,
                 }
             )
 
     elif group_by == "category":
-        count_stmt = select(func.count(func.distinct(Item.category))).where(
+        count_stmt = select(func.count(func.distinct(text("category || '|' || item_type")))).where(
             Item.owner_id == target_owner_id
         )
         if q:
@@ -719,6 +720,7 @@ def read_item_facets(
 
         stmt = select(
             Item.category.label("name"),
+            Item.item_type,
             func.count(Item.id).label("count"),
             func.array_agg(Item.image_url).label("sample_images"),
         ).where(Item.owner_id == target_owner_id)
@@ -727,21 +729,26 @@ def read_item_facets(
             stmt = stmt.where(Item.category.ilike(f"%{q}%"))
 
         stmt = (
-            stmt.group_by("name")
+            stmt.group_by("name", Item.item_type)
             .order_by(Item.category.asc())
             .offset(skip)
             .limit(limit)
         )
 
         rows = session.exec(stmt).all()
-        for name, count, imgs in rows:
+        for name, i_type, count, imgs in rows:
             valid_imgs = [img for img in (imgs or []) if img][:5]
             results.append(
-                {"name": name or "Others", "count": count, "sample_images": valid_imgs}
+                {
+                    "name": name or "Others",
+                    "item_type": i_type,
+                    "count": count,
+                    "sample_images": valid_imgs,
+                }
             )
 
     elif group_by == "genre":
-        count_stmt = select(func.count(func.distinct(Item.genre))).where(
+        count_stmt = select(func.count(func.distinct(text("genre || '|' || item_type")))).where(
             Item.owner_id == target_owner_id
         )
         if q:
@@ -750,6 +757,7 @@ def read_item_facets(
 
         stmt = select(
             Item.genre.label("name"),
+            Item.item_type,
             func.count(Item.id).label("count"),
             func.array_agg(Item.image_url).label("sample_images"),
         ).where(Item.owner_id == target_owner_id)
@@ -758,14 +766,19 @@ def read_item_facets(
             stmt = stmt.where(Item.genre.ilike(f"%{q}%"))
 
         stmt = (
-            stmt.group_by("name").order_by(Item.genre.asc()).offset(skip).limit(limit)
+            stmt.group_by("name", Item.item_type).order_by(Item.genre.asc()).offset(skip).limit(limit)
         )
 
         rows = session.exec(stmt).all()
-        for name, count, imgs in rows:
+        for name, i_type, count, imgs in rows:
             valid_imgs = [img for img in (imgs or []) if img][:5]
             results.append(
-                {"name": name or "Others", "count": count, "sample_images": valid_imgs}
+                {
+                    "name": name or "Others",
+                    "item_type": i_type,
+                    "count": count,
+                    "sample_images": valid_imgs,
+                }
             )
 
     elif group_by == "subject":
@@ -774,6 +787,7 @@ def read_item_facets(
         tags_stmt = (
             select(
                 tags_expr.label("name"),
+                Item.item_type,
                 func.count(Item.id).label("count"),
                 func.array_agg(Item.image_url).label("sample_images"),
             )
@@ -787,12 +801,13 @@ def read_item_facets(
 
         if q:
             tags_stmt = tags_stmt.where(tags_expr.ilike(f"%{q}%"))
-        tags_stmt = tags_stmt.group_by("name")
+        tags_stmt = tags_stmt.group_by("name", Item.item_type)
 
         # 2. Others query (items with no tags)
         others_stmt = (
             select(
                 cast("Others", String).label("name"),
+                Item.item_type,
                 func.count(Item.id).label("count"),
                 func.array_agg(Item.image_url).label("sample_images"),
             )
@@ -809,6 +824,7 @@ def read_item_facets(
                     WorkMetadata.author.is_(None),
                 )
             )
+            .group_by(Item.item_type)
         )
 
         # Combine
@@ -823,14 +839,14 @@ def read_item_facets(
             ).one()
             rows = session.exec(
                 select(full_stmt.subquery())
-                .order_by(text("name ASC"))
+                .order_by(text("item_type"), text("name ASC"))
                 .offset(skip)
                 .limit(limit)
             ).all()
-            for name, count, imgs in rows:
+            for name, i_type, count, imgs in rows:
                 valid_imgs = [img for img in (imgs or []) if img][:5]
                 results.append(
-                    {"name": name, "count": count, "sample_images": valid_imgs}
+                    {"name": name, "item_type": i_type, "count": count, "sample_images": valid_imgs}
                 )
         except Exception:
             pass
@@ -1560,37 +1576,35 @@ def read_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> 
     elif item.community_owner:
         community_pub = item.community_owner
 
-    cond_data = get_item_condition_data(session, item.id)
-    had_possession = check_possession(session, current_user.id, item.id)
-
-    item_pub = ItemPublic(
-        id=item.id,
-        owner_id=item.owner_id,
-        title=item.title,
-        description=item.description,
-        author=item.author,
-        item_type=item.item_type,
-        image_url=item.image_url,
-        extra_data=item.extra_data,
-        info={
-            **(item.info or {}),
-            "average_condition_grade": cond_data["average_grade"],
-            "physical_notes": cond_data["notes"],
-        },
-        count=item.count,
-        created_at=item.created_at,
-        owner=owner_pub,
-        community_owner=community_pub,
-        is_available=is_avail,
-        work_metadata=get_work_metadata(session, item.author, item.title),
-        had_possession=had_possession,
-        category=item.category,
-        genre=item.genre,
-        subject=item.subject,
-    )
-    return item_pub
-
-
+            cond_data = get_item_condition_data(session, item.id)
+        had_possession = check_possession(session, current_user.id, item.id)
+    
+        item_pub = ItemPublic(
+            id=item.id,
+            owner_id=item.owner_id,
+            title=item.title,
+            description=item.description,
+            author=item.author,
+            item_type=item.item_type,
+            image_url=item.image_url,
+            info={
+                **(item.info or {}),
+                "average_condition_grade": cond_data["average_grade"],
+                "physical_notes": cond_data["notes"],
+            },
+            count=item.count,
+            created_at=item.created_at,
+            owner=owner_pub,
+            community_owner=community_pub,
+            is_available=is_avail,
+            work_metadata=get_work_metadata(session, item.author, item.title),
+            had_possession=had_possession,
+            category=item.category,
+            genre=item.genre,
+            subject=item.subject,
+        )
+        return item_pub
+    
 @router.post("/", response_model=ItemPublic)
 async def create_item(
     *,
@@ -1605,7 +1619,6 @@ async def create_item(
     genre: Annotated[str | None, Form()] = None,
     subject: Annotated[str | None, Form()] = None,
     isbn: Annotated[str | None, Form()] = None,
-    extra_data: Annotated[str | None, Form()] = None,
     info: Annotated[str | None, Form()] = None,
     image: Annotated[UploadFile | None, File()] = None,
     image_url: Annotated[str | None, Form()] = None,
@@ -1615,28 +1628,12 @@ async def create_item(
     Create a new item. Associates with current user or community as owner.
     """
     try:
-        parsed_extra = {}
-        if extra_data:
-            try:
-                parsed_extra = json.loads(extra_data)
-            except json.JSONDecodeError:
-                raise HTTPException(
-                    status_code=400, detail="Invalid JSON in extra_data"
-                )
-
         parsed_info = {}
         if info:
             try:
                 parsed_info = json.loads(info)
             except json.JSONDecodeError:
                 raise HTTPException(status_code=400, detail="Invalid JSON in info")
-
-        # Auto-extract author if not provided but in extra_data (e.g. from Google Books)
-        final_author = author
-        if not final_author and parsed_extra:
-            final_author = parsed_extra.get("author") or parsed_extra.get("authors")
-            if isinstance(final_author, list):
-                final_author = ", ".join(final_author)
 
         # Handle image upload
         final_image_url = image_url
@@ -1704,13 +1701,12 @@ async def create_item(
         db_item = Item(
             title=title,
             description=description,
-            author=final_author,
+            author=author,
             item_type=item_type,
             category=final_category,
             genre=final_genre,
             subject=final_subject,
-            isbn=isbn or parsed_extra.get("isbn"),
-            extra_data=parsed_extra,
+            isbn=isbn,
             info=parsed_info,
             image_url=final_image_url,
             owner_id=target_owner_id,
@@ -1733,10 +1729,10 @@ async def create_item(
                 session.add(comm_item)
 
         # Ensure WorkMetadata exists
-        if final_author:
+        if author:
             ensure_work_metadata(
                 session,
-                final_author,
+                author,
                 title,
                 isbn_val=db_item.isbn,
                 description=description,
@@ -1773,7 +1769,6 @@ async def create_item(
             category=db_item.category,
             genre=db_item.genre,
             subject=db_item.subject,
-            extra_data=db_item.extra_data,
             info=db_item.info,
             count=db_item.count,
             created_at=db_item.created_at,

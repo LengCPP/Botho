@@ -15,6 +15,7 @@ import {
 interface GroupCardProps {
   name: string
   type: string
+  item_type?: string // book or general
   groups?: ItemPublic[][]
   count?: number
   sample_image?: string | null
@@ -26,6 +27,7 @@ interface GroupCardProps {
 export function GroupCard({
   name,
   type,
+  item_type,
   groups,
   count,
   sample_image,
@@ -46,6 +48,44 @@ export function GroupCard({
     : (previewItems.map((item) => item.image_url).filter(Boolean) as string[])
 
   const displayCount = count !== undefined ? count : groups?.length || 0
+
+  // Determine item type for labels
+  const effectiveItemType =
+    item_type ||
+    groups?.[0]?.[0]?.item_type ||
+    (type === "author" ? "book" : "general")
+  const isBook = effectiveItemType === "book"
+
+  const getDynamicBadgePhrase = () => {
+    switch (type) {
+      case "author":
+        return isBook ? "Works by Author" : "Creator's Works"
+      case "subject":
+        return isBook ? "On this Subject" : "Related Topic"
+      case "genre":
+        return isBook ? "In this Genre" : "Genre Collection"
+      case "category":
+        return isBook ? "In this Category" : "Category Collection"
+      default:
+        return `${type.toUpperCase()} COLLECTION`
+    }
+  }
+
+  const getDynamicTitle = () => {
+    if (name !== "Others") return name
+    switch (type) {
+      case "author":
+        return isBook ? "Unknown Author" : "Unknown Creator"
+      case "subject":
+        return isBook ? "General Subjects" : "Various Topics"
+      case "genre":
+        return isBook ? "Miscellaneous Genres" : "Other Genres"
+      case "category":
+        return isBook ? "Uncategorized Books" : "Uncategorized Items"
+      default:
+        return `Other ${type}s`
+    }
+  }
 
   return (
     <Card.Root
@@ -71,21 +111,14 @@ export function GroupCard({
               color={textColor}
               lineClamp={1}
             >
-              {name === "Others" ? `Unspecified ${type}` : name}
+              {getDynamicTitle()}
             </Text>
             <Badge colorPalette="accent" variant="subtle" size="xs">
-              {(type || "subject").toUpperCase()} COLLECTION
+              {getDynamicBadgePhrase().toUpperCase()}
             </Badge>
           </VStack>
           <Badge variant="solid" colorPalette="teal" size="xs" ml={2}>
-            {displayCount}{" "}
-            {groups?.[0]?.[0]?.item_type === "book" || type === "author"
-              ? displayCount === 1
-                ? "Book"
-                : "Books"
-              : displayCount === 1
-                ? "Item"
-                : "Items"}
+            {displayCount} {isBook ? (displayCount === 1 ? "Book" : "Books") : (displayCount === 1 ? "Item" : "Items")}
           </Badge>
         </Flex>
 

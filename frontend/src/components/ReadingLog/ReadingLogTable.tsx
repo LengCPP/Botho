@@ -142,7 +142,6 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
       isbn: selectedLog.work_metadata?.isbn,
       category: selectedLog.work_metadata?.category,
       genre: selectedLog.work_metadata?.genre,
-      extra_data: {},
       info: {},
       id: selectedLog.id,
       owner_id: selectedLog.user_id,

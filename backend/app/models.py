@@ -568,7 +568,6 @@ class ItemBase(SQLModel):
     category: str | None = Field(default=None, max_length=255)
     genre: str | None = Field(default=None, max_length=255)
     subject: str | None = Field(default=None, max_length=512)
-    extra_data: dict[str, Any] | None = Field(default={}, sa_column=Column(JSON))
     info: dict[str, Any] | None = Field(default={}, sa_column=Column(JSON)) # physical_description, grade (1-10)
     is_lost: bool = Field(default=False)
     is_private: bool = Field(default=False)
@@ -728,8 +727,13 @@ class ItemUpdate(SQLModel):
     author: str | None = Field(default=None, max_length=255)
     item_type: ItemType | None = None
     image_url: str | None = None
-    extra_data: dict[str, Any] | None = None
     info: dict[str, Any] | None = None
+    category: str | None = None
+    genre: str | None = None
+    subject: str | None = None
+    isbn: str | None = None
+    is_lost: bool | None = None
+    is_private: bool | None = None
 
 
 class ItemOwnerPublic(SQLModel):

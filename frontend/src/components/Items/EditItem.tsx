@@ -56,7 +56,6 @@ interface FormValues {
   isbn?: string
   category?: string
   genre?: string
-  extra_data: Record<string, any>
   info: {
     grade?: number
     physical_description?: string
@@ -106,14 +105,9 @@ const EditItem = ({
       description: item.description ?? "",
       author: item.author ?? "",
       item_type: item.item_type as any,
-      isbn: item.isbn || (item.extra_data as any)?.isbn || "",
-      category: item.category || (item.extra_data as any)?.category || "",
-      genre: item.genre || (item.extra_data as any)?.genre || "",
-      extra_data: (() => {
-        const { isbn, category, genre, ...rest } =
-          (item.extra_data as any) || {}
-        return rest
-      })(),
+      isbn: item.isbn || "",
+      category: item.category || "",
+      genre: item.genre || "",
       info: (item.info as any) || { grade: 10, physical_description: "" },
       image_url: item.image_url ?? "",
       work_info: {
@@ -179,7 +173,6 @@ const EditItem = ({
       category: data.category,
       genre: data.genre,
       subject: data.work_info?.tags,
-      extra_data: JSON.stringify(data.extra_data || {}),
       info: JSON.stringify(data.info || {}),
       image: imageFile,
       image_url: data.image_url,

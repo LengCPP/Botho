@@ -172,11 +172,6 @@ export type ItemBatchAction = {
     item_ids: Array<(string)>;
 };
 
-export type ItemBatchEnrich = {
-    item_ids: Array<(string)>;
-    fields_to_overwrite?: Array<(string)>;
-};
-
 export type ItemConditionRatingCreate = {
     item_id: string;
     grade: number;
@@ -1110,17 +1105,17 @@ export type ItemsBatchMarkLostData = {
 
 export type ItemsBatchMarkLostResponse = (Message);
 
+export type ItemsBatchMarkFoundData = {
+    requestBody: ItemBatchAction;
+};
+
+export type ItemsBatchMarkFoundResponse = (Message);
+
 export type ItemsBatchTogglePrivacyData = {
     requestBody: ItemBatchAction;
 };
 
 export type ItemsBatchTogglePrivacyResponse = (Message);
-
-export type ItemsBatchEnrichMetadataData = {
-    requestBody: ItemBatchEnrich;
-};
-
-export type ItemsBatchEnrichMetadataResponse = (Message);
 
 export type ItemsBatchSyncFromArchiveData = {
     requestBody: ItemBatchAction;

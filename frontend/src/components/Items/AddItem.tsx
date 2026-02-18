@@ -55,7 +55,6 @@ interface ItemCreate {
   category?: string
   genre?: string
   subject?: string
-  extra_data?: Record<string, any>
   info?: {
     grade?: number
     physical_description?: string

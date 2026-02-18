@@ -256,7 +256,6 @@ async def enrich_and_import_item(staged_id: uuid.UUID, owner_id: uuid.UUID, comm
                     category=cat,
                     genre=gen,
                     subject=subject_str,
-                    extra_data={},
                     # Physical info CAN come from staging as it's user-specific
                     info=d.get("info", {}) 
                 )

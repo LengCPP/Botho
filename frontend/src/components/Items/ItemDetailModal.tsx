@@ -81,7 +81,6 @@ export const ItemDetailModal = ({
 }: ItemDetailModalProps) => {
   if (!item) return null
 
-  const extraData = (item.extra_data as any) || {}
   const info = (item.info as any) || {}
   const workMeta = item.work_metadata
 
@@ -99,11 +98,7 @@ export const ItemDetailModal = ({
     []
 
   const details = [
-    { label: "Publisher", value: extraData.publisher },
-    { label: "Published", value: extraData.publishedDate || extraData.publication_year },
-    { label: "Language", value: extraData.language },
-    { label: "Pages", value: extraData.pageCount || extraData.pages },
-    { label: "ISBN", value: item.isbn || workMeta?.isbn || extraData.isbn },
+    { label: "ISBN", value: item.isbn || workMeta?.isbn },
   ].filter((d) => d.value)
 
   return (

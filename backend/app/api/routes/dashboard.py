@@ -228,7 +228,6 @@ def get_recent_activity(
             author=item.author,
             item_type=item.item_type,
             image_url=item.image_url,
-            extra_data=item.extra_data,
             info={
                 **(item.info or {}),
                 "average_condition_grade": avg_grade,
