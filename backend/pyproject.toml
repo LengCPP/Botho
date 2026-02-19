@@ -26,7 +26,6 @@ dependencies = [
     "meilisearch>=0.31.0",
     "mailtrap>=2.4.0",
     "pywebpush>=1.14.0",
-    "google-genai>=0.1.0",
     "pandas>=2.2.0",
     "openpyxl>=3.1.0",
     "xlrd>=2.0.1",

@@ -1,4 +1,4 @@
-import { UsersService } from "@/client"
+import { ReviewsService, UsersService } from "@/client"
 import { useColorModeValue } from "@/components/ui/color-mode"
 import {
   Badge,
@@ -14,14 +14,23 @@ import {
   VStack,
 } from "@chakra-ui/react"
 import { useQuery } from "@tanstack/react-query"
-import { FiAlertCircle, FiAward, FiTrendingUp } from "react-icons/fi"
-import MyReviewsList from "./MyReviewsList"
+import { FiAlertCircle, FiAward, FiStar, FiTrendingUp } from "react-icons/fi"
 
 const ReputationOverview = () => {
   const { data: reputation, isLoading } = useQuery({
     queryKey: ["reputation", "me"],
     queryFn: () => UsersService.readUserReputationMe(),
   })
+
+  const { data: reviews } = useQuery({
+    queryKey: ["reviews", "me"],
+    queryFn: () => ReviewsService.readMyReviews(),
+  })
+
+  const avgRating =
+    reviews && reviews.length > 0
+      ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+      : null
 
   const bgColor = useColorModeValue("main.50", "gray.800")
   const borderColor = useColorModeValue("main.200", "gray.700")
@@ -175,6 +184,28 @@ const ReputationOverview = () => {
             <Heading size="xs">The Sentiment Mirror</Heading>
           </HStack>
 
+          {avgRating !== null && (
+            <HStack gap={3} align="center">
+              <HStack gap={1}>
+                {[...Array(5)].map((_, i) => (
+                  <Icon
+                    key={i}
+                    as={FiStar}
+                    boxSize="16px"
+                    color={i < Math.round(avgRating) ? "yellow.400" : "gray.300"}
+                    fill={i < Math.round(avgRating) ? "yellow.400" : "transparent"}
+                  />
+                ))}
+              </HStack>
+              <Text fontSize="sm" fontWeight="bold">
+                {avgRating.toFixed(1)}
+              </Text>
+              <Text fontSize="xs" color="gray.500">
+                ({reviews!.length} review{reviews!.length !== 1 ? "s" : ""})
+              </Text>
+            </HStack>
+          )}
+
           <Text
             fontSize="sm"
             fontStyle="italic"
@@ -224,8 +255,6 @@ const ReputationOverview = () => {
         reviews. Raw comments are never shown to you to prevent retaliation and
         maintain a safe environment.
       </Text>
-
-      <MyReviewsList />
     </VStack>
   )
 }

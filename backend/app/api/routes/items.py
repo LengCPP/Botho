@@ -1809,8 +1809,8 @@ async def create_item(
         session.refresh(db_item)
         sync_item_to_search(db_item)
 
-        # Update collection index for owner and pooled communities in background
-        invalidate_item_caches(session, db_item.id, background_tasks)
+        # Update collection index for owner and pooled communities synchronously
+        invalidate_item_caches(session, db_item.id)
 
         owner_pub = None
         community_pub = None
@@ -2083,10 +2083,12 @@ def delete_item(
     session.delete(db_item)
     session.commit()
 
-    # Update collection index for owner in background
-    background_tasks.add_task(rebuild_collection_index_task, owner_id)
+    rebuild_collection_index_task(owner_id)
 
-    delete_item_from_search(id)
+    try:
+        delete_item_from_search(id)
+    except Exception:
+        pass  # Meilisearch failure should not block a successful DB delete
     return Message(message="Item deleted successfully")
 
 
@@ -2121,8 +2123,7 @@ def duplicate_item(
     session.refresh(new_item)
     sync_item_to_search(new_item)
 
-    # Update collection index for owner in background
-    background_tasks.add_task(rebuild_collection_index_task, new_item.owner_id)
+    rebuild_collection_index_task(new_item.owner_id)
 
     owner_pub = filter_owner_privacy(
         current_user, current_user.id, is_admin=current_user.is_superuser
@@ -2524,7 +2525,7 @@ def batch_delete_items(
 
     session.commit()
     for o_id in owner_ids:
-        background_tasks.add_task(rebuild_collection_index_task, o_id)
+        rebuild_collection_index_task(o_id)
 
     return Message(message=f"Successfully deleted {deleted_count} items.")
 

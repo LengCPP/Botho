@@ -122,7 +122,6 @@ class Settings(BaseSettings):
     VAPID_PRIVATE_KEY: str | None = None
     VAPID_MAILTO: str | None = None
 
-    GEMINI_API_KEY: str | None = None
     VITE_GOOGLE_BOOKS_API_KEY: str | None = None
 
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
