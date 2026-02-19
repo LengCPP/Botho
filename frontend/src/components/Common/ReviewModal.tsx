@@ -159,6 +159,7 @@ const ReviewModal = ({ loan, isOpen, onClose }: ReviewModalProps) => {
                     </Field>
 
                     <Field
+                      id="review_comment"
                       label="Comments (Private to Owners/Admins)"
                       helperText="Your raw comments are only visible to the item owner or community admins. The user will only see an anonymized AI summary."
                     >
@@ -188,6 +189,7 @@ const ReviewModal = ({ loan, isOpen, onClose }: ReviewModalProps) => {
                     </Text>
                     <VStack gap={4} align="stretch">
                       <Field
+                        id="review_condition_grade"
                         label="Condition Grade (1-10)"
                         helperText="10 = Brand New, 1 = Heavily Damaged"
                       >
@@ -209,7 +211,7 @@ const ReviewModal = ({ loan, isOpen, onClose }: ReviewModalProps) => {
                           )}
                         />
                       </Field>
-                      <Field label="Condition Notes">
+                      <Field id="review_condition_notes" label="Condition Notes">
                         <Textarea
                           id="review_condition_notes"
                           {...register("condition_notes")}

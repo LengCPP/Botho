@@ -121,6 +121,7 @@ const EditProfileModal = ({ user, isOpen, onClose }: EditProfileModalProps) => {
               General Info
             </Heading>
             <Field
+              id="full_name"
               label="Name"
               invalid={!!errors.full_name}
               errorText={errors.full_name?.message as string}
@@ -132,6 +133,7 @@ const EditProfileModal = ({ user, isOpen, onClose }: EditProfileModalProps) => {
               />
             </Field>
             <Field
+              id="alias"
               label="Alias"
               invalid={!!errors.alias}
               errorText={errors.alias?.message as string}
@@ -143,6 +145,7 @@ const EditProfileModal = ({ user, isOpen, onClose }: EditProfileModalProps) => {
               />
             </Field>
             <Field
+              id="bio"
               label="Bio"
               invalid={!!errors.bio}
               errorText={errors.bio?.message as string}
@@ -157,6 +160,7 @@ const EditProfileModal = ({ user, isOpen, onClose }: EditProfileModalProps) => {
             <Separator my={2} />
             <Heading size="xs">Contact Details</Heading>
             <Field
+              id="email"
               label="Email"
               invalid={!!errors.email}
               errorText={errors.email?.message as string}

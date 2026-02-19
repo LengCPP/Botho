@@ -656,12 +656,15 @@ const ItemCard = ({
                         .map((s: string) => s.trim())
                         .filter(Boolean) ||
                       []
+                    const subjects = [...new Set(rawSubjects)]
+                    const visible = subjects.slice(0, 3)
+                    const extraCount = subjects.length - 3
                     return (
-                      rawSubjects.length > 0 && (
+                      subjects.length > 0 && (
                         <Flex wrap="wrap" gap={1} mt={1}>
-                          {rawSubjects.map((tag: string) => (
+                          {visible.map((tag: string, i: number) => (
                             <Badge
-                              key={tag}
+                              key={`${i}-${tag}`}
                               variant="subtle"
                               colorPalette="cyan"
                               size="2xs"
@@ -669,6 +672,11 @@ const ItemCard = ({
                               {tag}
                             </Badge>
                           ))}
+                          {extraCount > 0 && (
+                            <Badge variant="subtle" colorPalette="gray" size="2xs">
+                              +{extraCount} more
+                            </Badge>
+                          )}
                         </Flex>
                       )
                     )

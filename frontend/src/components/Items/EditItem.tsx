@@ -246,6 +246,7 @@ const EditItem = ({
             {!onlyInfo && (
               <>
                 <Field
+                  id="edit_item_type"
                   label="Item Type"
                   required
                   invalid={!!errors.item_type}
@@ -274,6 +275,7 @@ const EditItem = ({
                 </Field>
 
                 <Field
+                  id="edit_title"
                   required
                   invalid={!!errors.title}
                   errorText={errors.title?.message}
@@ -290,6 +292,7 @@ const EditItem = ({
                 </Field>
 
                 <Field
+                  id="edit_description"
                   invalid={!!errors.description}
                   errorText={errors.description?.message}
                   label="Description"
@@ -324,7 +327,7 @@ const EditItem = ({
 
             {itemType === "book" && !onlyInfo && (
               <>
-                <Field label="Author">
+                <Field id="edit_author" label="Author">
                   <Input
                     id="edit_author"
                     placeholder="Author"
@@ -337,6 +340,7 @@ const EditItem = ({
                   Universal Work Info
                 </Text>
                 <Field
+                  id="edit_subjects"
                   label="Subjects"
                   helperText="Comma separated (e.g. love, war, peace)"
                 >
@@ -349,7 +353,7 @@ const EditItem = ({
 
                 <Separator />
 
-                <Field label="ISBN">
+                <Field id="edit_isbn" label="ISBN">
                   <Input
                     id="edit_isbn"
                     placeholder="ISBN"
@@ -357,7 +361,7 @@ const EditItem = ({
                   />
                 </Field>
                 <HStack width="full" gap={4}>
-                  <Field label="Category" flex={1}>
+                  <Field id="edit_category" label="Category" flex={1}>
                     <select
                       id="edit_category"
                       {...register("category")}
@@ -377,7 +381,7 @@ const EditItem = ({
                       ))}
                     </select>
                   </Field>
-                  <Field label="Genre" flex={1}>
+                  <Field id="edit_genre" label="Genre" flex={1}>
                     <select
                       id="edit_genre"
                       {...register("genre")}
@@ -407,6 +411,7 @@ const EditItem = ({
             {onlyInfo ? (
               <VStack align="stretch" gap={4} width="full">
                 <Field
+                  id="edit_grade"
                   label="Condition Grade (1-10)"
                   helperText="10 = Brand New, 1 = Very Poor"
                 >
@@ -419,7 +424,7 @@ const EditItem = ({
                   />
                 </Field>
 
-                <Field label="Condition / Physical Description">
+                <Field id="edit_physical_description" label="Condition / Physical Description">
                   <Textarea
                     id="edit_physical_description"
                     placeholder="Explain the physical state of your copy (e.g. 'Signed by author', 'Slightly torn cover')"
@@ -463,6 +468,7 @@ const EditItem = ({
                     </Flex>
 
                     <Field
+                      id="edit_grade_full"
                       label="Condition Grade (1-10)"
                       helperText="10 = Brand New, 1 = Very Poor"
                     >
@@ -475,7 +481,7 @@ const EditItem = ({
                       />
                     </Field>
 
-                    <Field label="Condition / Physical Description">
+                    <Field id="edit_physical_description_full" label="Condition / Physical Description">
                       <Textarea
                         id="edit_physical_description_full"
                         placeholder="Explain the physical state of your copy (e.g. 'Signed by author', 'Slightly torn cover')"
@@ -490,7 +496,7 @@ const EditItem = ({
 
             {!onlyInfo && (
               <>
-                <Field label="Upload New Image">
+                <Field id="edit_image_file" label="Upload New Image">
                   {item.image_url && !imageFile && (
                     <Box mb={2}>
                       <Image
@@ -512,7 +518,7 @@ const EditItem = ({
                   />
                 </Field>
 
-                <Field label="Image URL">
+                <Field id="edit_image_url" label="Image URL">
                   <Input
                     id="edit_image_url"
                     placeholder="https://example.com/image.jpg"

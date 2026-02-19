@@ -331,6 +331,7 @@ const AddItem = ({
             : "Fill in the details to add a new item."}
         </Text>
         <Field
+          id="item_type"
           label="Item Type"
           required
           invalid={!!errors.item_type}
@@ -367,6 +368,7 @@ const AddItem = ({
         </Field>
 
         <Field
+          id="title"
           required
           invalid={!!errors.title}
           errorText={errors.title?.message}
@@ -395,6 +397,7 @@ const AddItem = ({
         </Field>
 
         <Field
+          id="description"
           invalid={!!errors.description}
           errorText={errors.description?.message}
           label="Description"
@@ -425,7 +428,7 @@ const AddItem = ({
 
         {itemType === "book" && (
           <>
-            <Field label="Author">
+            <Field id="author" label="Author">
               <Input id="author" placeholder="Author" {...register("author")} />
             </Field>
 
@@ -434,6 +437,7 @@ const AddItem = ({
               Universal Work Info
             </Text>
             <Field
+              id="subjects"
               label="Subjects"
               helperText="Comma separated (e.g. love, war, peace)"
             >
@@ -472,6 +476,7 @@ const AddItem = ({
                 </Flex>
 
                 <Field
+                  id="grade"
                   label="Condition Grade (1-10)"
                   helperText="10 = Brand New, 1 = Very Poor"
                 >
@@ -484,7 +489,7 @@ const AddItem = ({
                   />
                 </Field>
 
-                <Field label="Condition / Physical Description">
+                <Field id="physical_description" label="Condition / Physical Description">
                   <Textarea
                     id="physical_description"
                     placeholder="Explain the physical state of your copy (e.g. 'Signed by author', 'Slightly torn cover')"
@@ -495,11 +500,11 @@ const AddItem = ({
               </VStack>
             )}
 
-            <Field label="ISBN">
+            <Field id="isbn" label="ISBN">
               <Input id="isbn" placeholder="ISBN" {...register("isbn")} />
             </Field>
             <HStack width="full" gap={4}>
-              <Field label="Category" flex={1}>
+              <Field id="category" label="Category" flex={1}>
                 <select
                   id="category"
                   {...register("category")}
@@ -519,7 +524,7 @@ const AddItem = ({
                   ))}
                 </select>
               </Field>
-              <Field label="Genre" flex={1}>
+              <Field id="genre" label="Genre" flex={1}>
                 <select
                   id="genre"
                   {...register("genre")}
@@ -545,7 +550,7 @@ const AddItem = ({
           </>
         )}
 
-        <Field label="Upload Image">
+        <Field id="image_file" label="Upload Image">
           <Input
             id="image_file"
             name="image_file"
@@ -556,7 +561,7 @@ const AddItem = ({
           />
         </Field>
 
-        <Field label="Image URL (alternative)">
+        <Field id="image_url" label="Image URL (alternative)">
           <Input
             id="image_url"
             placeholder="https://example.com/image.jpg"

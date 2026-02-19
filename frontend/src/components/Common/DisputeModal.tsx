@@ -76,7 +76,7 @@ const DisputeModal = ({ review, isOpen, onClose }: DisputeModalProps) => {
                 moderator.
               </Text>
             </VStack>
-            <Field label="Dispute Reason" required>
+            <Field id={id} label="Dispute Reason" required>
               <Textarea
                 id={id}
                 name="dispute_reason"

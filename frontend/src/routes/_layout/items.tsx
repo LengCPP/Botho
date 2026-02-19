@@ -267,6 +267,7 @@ function ItemsTable() {
               Add a new item to get started
             </EmptyState.Description>
           </VStack>
+          <AddItem />
         </EmptyState.Content>
       </EmptyState.Root>
     )
