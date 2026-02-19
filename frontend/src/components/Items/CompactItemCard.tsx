@@ -54,6 +54,7 @@ export const CompactItemCard = ({
   onExtensionRequest,
 }: CompactItemCardProps) => {
   const [itemIndex, setItemIndex] = useState(0)
+  const [imgError, setImgError] = useState(false)
   const { user } = useAuth()
   const queryClient = useQueryClient()
 
@@ -210,7 +211,7 @@ export const CompactItemCard = ({
           flexShrink={0}
           position="relative"
         >
-          {item.image_url ? (
+          {item.image_url && !imgError ? (
             <Image
               src={getImageUrl(item.image_url)}
               alt={item.title}
@@ -218,6 +219,7 @@ export const CompactItemCard = ({
               width="100%"
               height="100%"
               loading="lazy"
+              onError={() => setImgError(true)}
             />
           ) : (
             <Flex align="center" justify="center" h="100%" bg="gray.400">

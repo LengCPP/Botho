@@ -72,6 +72,7 @@ interface ItemsViewOptionsProps {
 
   // Customization
   organizeOptions?: readonly string[]
+  filterLabel?: string
 }
 
 export function ItemsViewOptions({
@@ -100,6 +101,7 @@ export function ItemsViewOptions({
   showLimit = true,
   showSearch = true,
   organizeOptions = ["subject", "genre", "category", "author"],
+  filterLabel = "Filter",
 }: ItemsViewOptionsProps) {
   const [localQ, setLocalQ] = useState(q || "")
   // Track the external 'q' to avoid resetting local state on internal changes
@@ -246,7 +248,7 @@ export function ItemsViewOptions({
               size="sm"
               colorPalette={organizeBy || category || genre ? "accent" : "gray"}
             >
-              <FaFilter /> Filter
+              <FaFilter /> {filterLabel}
             </Button>
           </Popover.Trigger>
           <Portal>

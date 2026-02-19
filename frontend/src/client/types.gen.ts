@@ -941,6 +941,8 @@ export type ItemsTriggerSyncToArchiveResponse = (Message);
 
 export type ItemsSyncItemsToRegistryResponse = (Message);
 
+export type ItemsCleanupBrokenImagesResponse = (Message);
+
 export type ItemsListBookRegistryData = {
     filterMissing?: (string | null);
     limit?: number;

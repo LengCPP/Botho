@@ -117,22 +117,6 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
   )
   const totalCount = data?.pages[0]?.count || 0
 
-  if (isLoading && !allLogs.length) {
-    return (
-      <Flex justify="center" py={10}>
-        <Spinner color="ui.primary" />
-      </Flex>
-    )
-  }
-
-  if (!allLogs.length) {
-    return (
-      <Box textAlign="center" py={10} color="gray.500">
-        No books in this section.
-      </Box>
-    )
-  }
-
   const selectedItem = useMemo(() => {
     if (!selectedLog) return null
     return {
@@ -149,6 +133,22 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
       created_at: selectedLog.created_at.toString(),
     } as any
   }, [selectedLog])
+
+  if (isLoading && !allLogs.length) {
+    return (
+      <Flex justify="center" py={10}>
+        <Spinner color="ui.primary" />
+      </Flex>
+    )
+  }
+
+  if (!allLogs.length) {
+    return (
+      <Box textAlign="center" py={10} color="gray.500">
+        No books in this section.
+      </Box>
+    )
+  }
 
   return (
     <>
@@ -192,6 +192,7 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
                           objectFit="cover"
                           borderRadius="sm"
                           boxShadow="xs"
+                          onError={(e) => { e.currentTarget.style.display = "none" }}
                         />
                       ) : (
                         <Flex

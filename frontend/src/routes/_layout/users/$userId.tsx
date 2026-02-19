@@ -7,7 +7,6 @@ import {
   Heading,
   IconButton,
   Separator,
-  SimpleGrid,
   Text,
   VStack,
 } from "@chakra-ui/react"
@@ -20,7 +19,6 @@ import {
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { BsThreeDotsVertical } from "react-icons/bs"
-import { FaChevronLeft } from "react-icons/fa"
 import { FiShare2, FiUserCheck, FiUserMinus, FiUserPlus } from "react-icons/fi"
 import { z } from "zod"
 
@@ -33,14 +31,10 @@ import {
 } from "@/client"
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import ReviewModal from "@/components/Common/ReviewModal"
-import { CollectionGrid } from "@/components/Items/CollectionGrid"
-import { CompactItemCard } from "@/components/Items/CompactItemCard"
 import { ExtensionRequestModal } from "@/components/Items/ExtensionRequestModal"
-import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
-import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
+import { ItemsBrowser } from "@/components/Items/ItemsBrowser"
 import { LoanRequestModal } from "@/components/Items/LoanRequestModal"
-import PendingItems from "@/components/Pending/PendingItems"
 import UserInformation from "@/components/UserSettings/UserInformation"
 import UserProfilePicture from "@/components/UserSettings/UserProfilePicture"
 import { useColorModeValue } from "@/components/ui/color-mode"
@@ -291,11 +285,6 @@ function UserProfilePage() {
   const totalItemCount = (infiniteItems?.pages[0] as any)?.count || 0
   const totalFacetCount = (infiniteFacets?.pages[0] as any)?.count || 0
 
-  const activeGroups = groupItems(allItems as any)
-
-  const currentFilterValue = subject || author || genre || category
-  const isDrillDown = !!(subject || author)
-
   if (isLoadingUser) return <Text p={4}>Loading profile...</Text>
   if (!user) return <Text p={4}>User not found</Text>
 
@@ -368,166 +357,59 @@ function UserProfilePage() {
       </VStack>
 
       {canSeeAll ? (
-        <Box>
-          <Flex
-            justify="space-between"
-            align="center"
-            mb={6}
-            wrap="wrap"
-            gap={4}
-          >
-            <Heading size="md">
-              {display_type === "collections"
-                ? isDrillDown
-                  ? currentFilterValue.toLowerCase() === "others"
-                    ? `Items with unspecified ${organize_by}`
-                    : `Items in ${currentFilterValue}`
-                  : "Item Collections"
-                : `Items (${user?.collection_index?.total ?? totalItemCount})`}
-            </Heading>
-
-            <ItemsViewOptions
-              q={q}
-              onChangeQ={(val) => updateSearch({ q: val })}
-              viewMode={view_mode}
-              onChangeViewMode={(mode) => updateSearch({ view_mode: mode })}
-              displayType={display_type}
-              onChangeDisplayType={(type) =>
-                updateSearch({ display_type: type })
-              }
-              sortBy={sort_by}
-              onChangeSortBy={(val) => updateSearch({ sort_by: val })}
-              sortOrder={sort_order}
-              onChangeSortOrder={(val) => updateSearch({ sort_order: val })}
-              limit={limit}
-              onChangeLimit={(val) => updateSearch({ limit: val })}
-              category={category}
-              onChangeCategory={(val) =>
-                updateSearch({ category: val, genre: undefined })
-              }
-              genre={genre}
-              onChangeGenre={(val) => updateSearch({ genre: val })}
-              organizeBy={organize_by}
-              onChangeOrganizeBy={(val) =>
-                updateSearch({
-                  organize_by: val,
-                  subject: undefined,
-                  author: undefined,
-                })
-              }
-              showDisplayToggle={true}
-              showViewToggle={display_type === "items" || isDrillDown}
-              showLimit={true}
-              showFilter={true}
-              showSort={display_type === "items" || isDrillDown}
-            />
-          </Flex>
-
-          {(isLoadingItems && !allItems.length) ||
-          (isLoadingFacets && !allFacets.length) ? (
-            <PendingItems />
-          ) : allItems.length === 0 && !allFacets.length ? (
-            <Text color="gray.500">No items found.</Text>
-          ) : (
-            <>
-              {/* Back Button for Drilldown */}
-              {isDrillDown && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  mb={4}
-                  onClick={() =>
-                    updateSearch({
-                      subject: undefined,
-                      author: undefined,
-                      genre: undefined,
-                      category: undefined,
-                    })
-                  }
-                >
-                  <FaChevronLeft style={{ marginRight: "8px" }} /> Back to
-                  Collections
-                </Button>
-              )}
-
-              {/* Render Collections Grid */}
-              {display_type === "collections" && !isDrillDown ? (
-                <VStack align="stretch" gap={8}>
-                  <CollectionGrid
-                    items={allFacets}
-                    type={organize_by}
-                    onOpen={handleOpenCollection}
-                  />
-                  {hasNextFacets && (
-                    <Flex justify="center" mt={8}>
-                      <Button
-                        variant="ghost"
-                        colorPalette="accent"
-                        onClick={() => fetchNextFacets()}
-                        loading={isFetchingNextFacets}
-                      >
-                        Load More Collections (Showing {allFacets.length} of{" "}
-                        {totalFacetCount})
-                      </Button>
-                    </Flex>
-                  )}
-                </VStack>
-              ) : (
-                /* Render Items Grid */
-                <VStack align="stretch" gap={8}>
-                  <SimpleGrid
-                    columns={
-                      view_mode === "list" ? 1 : { base: 2, sm: 3, md: 4 }
-                    }
-                    gap={view_mode === "list" ? 2 : { base: 2, md: 6 }}
-                  >
-                    {activeGroups.map((group) => {
-                      const firstItem = group[0]
-                      return view_mode === "list" ? (
-                        <CompactItemCard
-                          key={firstItem.id}
-                          item={group}
-                          onShowDetails={() => setSelectedItem(firstItem)}
-                          onReview={(l) => setSelectedLoanForReview(l)}
-                          onLoanRequest={(i) => setSelectedItemForLoan(i)}
-                          onExtensionRequest={(l) =>
-                            setSelectedLoanForExtension(l)
-                          }
-                        />
-                      ) : (
-                        <ItemCard
-                          key={firstItem.id}
-                          item={group}
-                          displayOwnerId={userId}
-                          onShowDetails={() => setSelectedItem(firstItem)}
-                          onReview={(l) => setSelectedLoanForReview(l)}
-                          onLoanRequest={(i) => setSelectedItemForLoan(i)}
-                          onExtensionRequest={(l) =>
-                            setSelectedLoanForExtension(l)
-                          }
-                        />
-                      )
-                    })}
-                  </SimpleGrid>
-
-                  {hasNextItems && (
-                    <Flex justify="center" mt={8}>
-                      <Button
-                        variant="ghost"
-                        colorPalette="accent"
-                        onClick={() => fetchNextItems()}
-                        loading={isFetchingNextItems}
-                      >
-                        Load More Items (Showing {allItems.length} of{" "}
-                        {totalItemCount})
-                      </Button>
-                    </Flex>
-                  )}
-                </VStack>
-              )}
-            </>
-          )}
-        </Box>
+        <ItemsBrowser
+          displayType={display_type}
+          viewMode={view_mode}
+          organizeBy={organize_by}
+          sortBy={sort_by}
+          sortOrder={sort_order}
+          limit={limit}
+          q={q}
+          category={category}
+          genre={genre}
+          subject={subject}
+          author={author}
+          itemType={item_type}
+          items={groupItems(allItems as any)}
+          facets={allFacets}
+          totalItemCount={user?.collection_index?.total ?? totalItemCount}
+          totalFacetCount={totalFacetCount}
+          isLoading={
+            (isLoadingItems && !allItems.length) ||
+            (isLoadingFacets && !allFacets.length)
+          }
+          hasNextItems={hasNextItems}
+          hasNextFacets={hasNextFacets}
+          isFetchingNextItems={isFetchingNextItems}
+          isFetchingNextFacets={isFetchingNextFacets}
+          onChangeDisplayType={(t) => updateSearch({ display_type: t })}
+          onChangeViewMode={(m) => updateSearch({ view_mode: m })}
+          onChangeOrganizeBy={(v) =>
+            updateSearch({ organize_by: v, subject: undefined, author: undefined })
+          }
+          onChangeSortBy={(v) => updateSearch({ sort_by: v })}
+          onChangeSortOrder={(v) => updateSearch({ sort_order: v })}
+          onChangeLimit={(v) => updateSearch({ limit: v })}
+          onChangeQ={(v) => updateSearch({ q: v })}
+          onChangeCategory={(v) => updateSearch({ category: v, genre: undefined })}
+          onChangeGenre={(v) => updateSearch({ genre: v })}
+          onOpenCollection={handleOpenCollection}
+          onClearDrilldown={() =>
+            updateSearch({
+              subject: undefined,
+              author: undefined,
+              genre: undefined,
+              category: undefined,
+            })
+          }
+          onFetchNextItems={fetchNextItems}
+          onFetchNextFacets={fetchNextFacets}
+          displayOwnerId={userId}
+          onShowDetails={setSelectedItem}
+          onReview={setSelectedLoanForReview}
+          onLoanRequest={setSelectedItemForLoan}
+          onExtensionRequest={setSelectedLoanForExtension}
+        />
       ) : (
         <Box
           p={10}

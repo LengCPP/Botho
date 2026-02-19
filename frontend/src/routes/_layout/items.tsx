@@ -1,14 +1,10 @@
 import {
   Badge,
-  Box,
   Button,
   Container,
   EmptyState,
-  Flex,
   HStack,
   Heading,
-  SimpleGrid,
-  Text,
   VStack,
 } from "@chakra-ui/react"
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query"
@@ -26,18 +22,11 @@ import {
 } from "@/client"
 import ReviewModal from "@/components/Common/ReviewModal"
 import AddItem from "@/components/Items/AddItem"
-import {
-  CollectionGrid,
-  type CollectionItem,
-} from "@/components/Items/CollectionGrid"
-import { CompactItemCard } from "@/components/Items/CompactItemCard"
 import { ExtensionRequestModal } from "@/components/Items/ExtensionRequestModal"
-import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
-import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
+import { ItemsBrowser } from "@/components/Items/ItemsBrowser"
 import { LoanRequestModal } from "@/components/Items/LoanRequestModal"
 import { ManageItems } from "@/components/Items/ManageItems"
-import PendingItems from "@/components/Pending/PendingItems"
 import useAuth from "@/hooks/useAuth"
 import { groupItems } from "@/utils"
 
@@ -223,35 +212,11 @@ function ItemsTable() {
     })
   }
 
-  const allFacets = useMemo(() => {
-    if (!q && user?.collection_index?.[organize_by]) {
-      const raw = user.collection_index[organize_by]
-      return Object.values(raw as any)
-        .map((data: any) => ({
-          name: data.name,
-          item_type: data.item_type,
-          count: data.count,
-          sample_images: data.sample_images,
-        }))
-        .sort((a, b) =>
-          (a.name ?? "").localeCompare(b.name ?? ""),
-        ) as CollectionItem[]
-    }
-    return (infiniteFacets?.pages.flatMap((p) => (p as any).data) || []).map(
-      (f: any) => ({
-        name: f.name,
-        item_type: f.item_type,
-        count: f.count,
-        sample_image: f.sample_image,
-        sample_images: f.sample_images,
-      }),
-    ) as CollectionItem[]
-  }, [user, organize_by, infiniteFacets, q])
-
-  const totalFacetCount = useMemo(() => {
-    if (!q && user?.collection_index?.[organize_by]) return allFacets.length
-    return (infiniteFacets?.pages[0] as any)?.count || 0
-  }, [user, organize_by, allFacets, infiniteFacets, q])
+  const allFacets = useMemo(
+    () => infiniteFacets?.pages.flatMap((p) => (p as any).data) || [],
+    [infiniteFacets],
+  )
+  const totalFacetCount = (infiniteFacets?.pages[0] as any)?.count || 0
 
   const allItems = useMemo(
     () => infiniteData?.pages.flatMap((p) => p.data as any[]) ?? [],
@@ -278,46 +243,18 @@ function ItemsTable() {
     )
   }
 
-  if (isLoadingInfinite || isLoadingFacets) {
-    return <PendingItems />
-  }
-
-  const isDrillDown = !!subject || !!author || !!category || !!genre
-  const hasCollections = allFacets.length > 0
-
-  if (
-    allItems.length === 0 &&
+  const hasNoData =
     !isLoadingInfinite &&
-    !hasCollections &&
-    !isLoadingFacets
-  ) {
-    if (q || isDrillDown) {
-      return (
-        <Box mt={8}>
-          {isDrillDown && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() =>
-                updateSearch({
-                  subject: undefined,
-                  author: undefined,
-                  genre: undefined,
-                  category: undefined,
-                  item_type: undefined,
-                })
-              }
-              mb={4}
-            >
-              <FaChevronLeft style={{ marginRight: "8px" }} /> Back to
-              Collections
-            </Button>
-          )}
-          <Text color="gray.500">No items match your filters.</Text>
-        </Box>
-      )
-    }
+    !isLoadingFacets &&
+    allItems.length === 0 &&
+    allFacets.length === 0 &&
+    !q &&
+    !subject &&
+    !author &&
+    !category &&
+    !genre
 
+  if (hasNoData) {
     return (
       <EmptyState.Root>
         <EmptyState.Content>
@@ -335,36 +272,6 @@ function ItemsTable() {
     )
   }
 
-  const renderGroup = (groups: any[][]) => (
-    <SimpleGrid
-      columns={view_mode === "list" ? 1 : { base: 2, sm: 3, md: 4 }}
-      gap={view_mode === "list" ? 2 : { base: 2, md: 6 }}
-    >
-      {groups.map((group) => {
-        const firstItem = group[0]
-        return view_mode === "list" ? (
-          <CompactItemCard
-            key={firstItem.id}
-            item={group}
-            onShowDetails={() => setSelectedItem(firstItem)}
-            onReview={(l) => setSelectedLoanForReview(l)}
-            onLoanRequest={(i) => setSelectedItemForLoan(i)}
-            onExtensionRequest={(l) => setSelectedLoanForExtension(l)}
-          />
-        ) : (
-          <ItemCard
-            key={firstItem.id}
-            item={group}
-            onShowDetails={() => setSelectedItem(firstItem)}
-            onReview={(l) => setSelectedLoanForReview(l)}
-            onLoanRequest={(i) => setSelectedItemForLoan(i)}
-            onExtensionRequest={(l) => setSelectedLoanForExtension(l)}
-          />
-        )
-      })}
-    </SimpleGrid>
-  )
-
   return (
     <VStack align="stretch" gap={6} width="full" pt={12}>
       <HStack align="baseline" gap={4}>
@@ -374,144 +281,88 @@ function ItemsTable() {
         </Badge>
       </HStack>
 
-      <Flex
-        justify="space-between"
-        align="center"
-        width="full"
-        wrap="wrap"
-        gap={4}
-      >
-        <HStack gap={4}>
-          <AddItem />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => updateSearch({ tab: "manage" })}
-          >
-            <FiSettings /> Manage Items
-          </Button>
-        </HStack>
-
-        <ItemsViewOptions
-          q={q}
-          onChangeQ={(val) => updateSearch({ q: val })}
-          viewMode={view_mode}
-          onChangeViewMode={(mode) => updateSearch({ view_mode: mode })}
-          displayType={display_type}
-          onChangeDisplayType={(type) =>
-            updateSearch({
-              display_type: type,
-              subject: undefined,
-              author: undefined,
-              genre: undefined,
-              category: undefined,
-              item_type: undefined,
-            })
-          }
-          sortBy={sort_by}
-          onChangeSortBy={(val) => updateSearch({ sort_by: val })}
-          sortOrder={sort_order}
-          onChangeSortOrder={(val) => updateSearch({ sort_order: val })}
-          limit={limit}
-          onChangeLimit={(val) => updateSearch({ limit: val })}
-          category={category}
-          onChangeCategory={(val) =>
-            updateSearch({
-              category: val,
-              genre: undefined,
-              subject: undefined,
-              author: undefined,
-            })
-          }
-          genre={genre}
-          onChangeGenre={(val) => updateSearch({ genre: val })}
-          organizeBy={organize_by}
-          onChangeOrganizeBy={(val) =>
-            updateSearch({
-              organize_by: val,
-              subject: undefined,
-              author: undefined,
-              genre: undefined,
-              category: undefined,
-              item_type: undefined,
-            })
-          }
-          showDisplayToggle={true}
-          showViewToggle={true}
-          showFilter={true}
-          showSort={true}
-          showLimit={true}
-        />
-      </Flex>
-
-      {display_type === "collections" && !isDrillDown ? (
-        <Box>
-          <CollectionGrid
-            items={allFacets}
-            type={organize_by}
-            onOpen={handleOpenCollection}
-          />
-          {hasNextFacets && (
-            <Flex justify="center" mt={10} mb={10}>
-              <Button
-                variant="ghost"
-                colorPalette="accent"
-                onClick={() => fetchNextFacets()}
-                loading={isFetchingNextFacets}
-              >
-                Load More Collections (Showing {allFacets.length} of{" "}
-                {totalFacetCount})
-              </Button>
-            </Flex>
-          )}
-        </Box>
-      ) : (
-        <Box>
-          {isDrillDown && (
-            <VStack align="start" mb={6} gap={2}>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  updateSearch({
-                    subject: undefined,
-                    author: undefined,
-                    genre: undefined,
-                    category: undefined,
-                    item_type: undefined,
-                  })
-                }
-              >
-                <FaChevronLeft style={{ marginRight: "8px" }} /> Collections
-              </Button>
-              <Heading
-                size="lg"
-                color="ui.hover"
-                textTransform="uppercase"
-                letterSpacing="wider"
-              >
-                {item_type === "book" ? "Books" : "Items"} {organize_by}{" "}
-                {subject || author || genre || category}
-              </Heading>
-            </VStack>
-          )}
-
-          {renderGroup(groupItems(allItems as any))}
-
-          {hasNextPage && (
-            <Flex justify="center" mt={10} mb={10}>
-              <Button
-                variant="ghost"
-                colorPalette="accent"
-                onClick={() => fetchNextPage()}
-                loading={isFetchingNextPage}
-              >
-                Load More Items (Showing {allItems.length} of {totalItemCount})
-              </Button>
-            </Flex>
-          )}
-        </Box>
-      )}
+      <ItemsBrowser
+        displayType={display_type}
+        viewMode={view_mode}
+        organizeBy={organize_by}
+        sortBy={sort_by}
+        sortOrder={sort_order}
+        limit={limit}
+        q={q}
+        category={category}
+        genre={genre}
+        subject={subject}
+        author={author}
+        itemType={item_type}
+        items={groupItems(allItems as any)}
+        facets={allFacets}
+        totalItemCount={user?.collection_index?.total ?? totalItemCount}
+        totalFacetCount={totalFacetCount}
+        isLoading={
+          (isLoadingInfinite && !allItems.length) ||
+          (isLoadingFacets && !allFacets.length)
+        }
+        hasNextItems={hasNextPage}
+        hasNextFacets={hasNextFacets}
+        isFetchingNextItems={isFetchingNextPage}
+        isFetchingNextFacets={isFetchingNextFacets}
+        onChangeDisplayType={(t) =>
+          updateSearch({
+            display_type: t,
+            subject: undefined,
+            author: undefined,
+            genre: undefined,
+            category: undefined,
+            item_type: undefined,
+          })
+        }
+        onChangeViewMode={(m) => updateSearch({ view_mode: m })}
+        onChangeOrganizeBy={(v) =>
+          updateSearch({
+            organize_by: v,
+            subject: undefined,
+            author: undefined,
+            genre: undefined,
+            category: undefined,
+            item_type: undefined,
+          })
+        }
+        onChangeSortBy={(v) => updateSearch({ sort_by: v })}
+        onChangeSortOrder={(v) => updateSearch({ sort_order: v })}
+        onChangeLimit={(v) => updateSearch({ limit: v })}
+        onChangeQ={(v) => updateSearch({ q: v })}
+        onChangeCategory={(v) => updateSearch({ category: v, genre: undefined })}
+        onChangeGenre={(v) => updateSearch({ genre: v })}
+        onOpenCollection={handleOpenCollection}
+        onClearDrilldown={() =>
+          updateSearch({
+            subject: undefined,
+            author: undefined,
+            genre: undefined,
+            category: undefined,
+            item_type: undefined,
+          })
+        }
+        onFetchNextItems={fetchNextPage}
+        onFetchNextFacets={fetchNextFacets}
+        onShowDetails={setSelectedItem}
+        onReview={setSelectedLoanForReview}
+        onLoanRequest={setSelectedItemForLoan}
+        onExtensionRequest={setSelectedLoanForExtension}
+        leftSlot={
+          <HStack gap={4}>
+            <AddItem />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => updateSearch({ tab: "manage" })}
+            >
+              <FiSettings /> Manage Items
+            </Button>
+          </HStack>
+        }
+        emptyMessage="No items match your filters."
+      />
 
       <ItemDetailModal
         item={selectedItem}

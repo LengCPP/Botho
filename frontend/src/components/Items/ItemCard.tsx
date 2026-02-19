@@ -81,6 +81,7 @@ const ItemCard = ({
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false)
   const [isReadingLogConfirmOpen, setIsReadingLogConfirmOpen] = useState(false)
   const [itemIndex, setItemIndex] = useState(0)
+  const [imgError, setImgError] = useState(false)
   const { user } = useAuth()
   const isMobile = useBreakpointValue({ base: true, md: false })
   const queryClient = useQueryClient()
@@ -402,6 +403,7 @@ const ItemCard = ({
                 height="100%"
                 opacity={0.8}
                 loading="lazy"
+                onError={(e) => { e.currentTarget.style.display = "none" }}
               />
             )}
           </Box>
@@ -425,9 +427,9 @@ const ItemCard = ({
             borderRadius="lg"
             borderWidth="0"
             boxShadow="md"
-            bg={item.image_url ? "black" : bgColor}
+            bg={item.image_url && !imgError ? "black" : bgColor}
           >
-            {item.image_url ? (
+            {item.image_url && !imgError ? (
               <Image
                 src={getImageUrl(item.image_url)}
                 alt={item.title}
@@ -435,6 +437,7 @@ const ItemCard = ({
                 width="100%"
                 height="100%"
                 loading="lazy"
+                onError={() => setImgError(true)}
               />
             ) : (
               <Flex

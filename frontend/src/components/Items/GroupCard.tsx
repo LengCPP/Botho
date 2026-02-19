@@ -11,6 +11,7 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react"
+import { FiBook } from "react-icons/fi"
 
 interface GroupCardProps {
   name: string
@@ -37,6 +38,8 @@ export function GroupCard({
   const bgColor = useColorModeValue("accent.50", "gray.800")
   const borderColor = useColorModeValue("accent.200", "gray.600")
   const textColor = useColorModeValue("gray.800", "gray.100")
+  const placeholderBg = useColorModeValue("gray.200", "gray.600")
+  const placeholderIconColor = useColorModeValue("gray.400", "gray.500")
 
   // Flatten and take first 5 for preview
   const allItems = groups?.flat() || []
@@ -163,6 +166,7 @@ export function GroupCard({
                     boxShadow="xl"
                     border="1px solid white"
                     loading="lazy"
+                    onError={(e) => { e.currentTarget.style.display = "none" }}
                   />
                 </Box>
               ))}
@@ -180,14 +184,38 @@ export function GroupCard({
                   borderRadius="sm"
                   boxShadow="xl"
                   border="1px solid white"
+                  onError={(e) => { e.currentTarget.style.display = "none" }}
                 />
               </Box>
             </Flex>
           ) : (
-            <Flex height="100%" align="center" justify="center">
-              <Text fontSize="sm" color="gray.500" fontStyle="italic">
-                Empty
-              </Text>
+            <Flex justify="center" align="center" height="100%">
+              {Array.from({ length: Math.min(Math.max(displayCount, 1), 3) }).map(
+                (_, index) => (
+                  <Box
+                    key={index}
+                    zIndex={3 - index}
+                    height="100%"
+                    aspectRatio="2/3"
+                    flexShrink={0}
+                    ml={index === 0 ? 0 : "-70%"}
+                    transform={`rotate(${index * 10 - 10}deg)`}
+                    transition="transform 0.2s"
+                    bg={placeholderBg}
+                    borderRadius="sm"
+                    boxShadow="md"
+                    border="1px solid"
+                    borderColor={borderColor}
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                  >
+                    {index === 0 && (
+                      <FiBook size={20} color={placeholderIconColor} />
+                    )}
+                  </Box>
+                ),
+              )}
             </Flex>
           )}
         </Box>

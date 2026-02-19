@@ -93,6 +93,7 @@ const BookRow = React.memo(
               alt={book.title}
               h="80px"
               objectFit="contain"
+              onError={(e) => { e.currentTarget.style.display = "none" }}
             />
           ) : (
             <Box
@@ -433,6 +434,20 @@ function BookArchive() {
     },
   })
 
+  const cleanupBrokenImagesMutation = useMutation({
+    mutationKey: ["cleanup-broken-images"],
+    mutationFn: () => ItemsService.cleanupBrokenImages(),
+    onSuccess: () => {
+      showSuccessToast(
+        "Broken image cleanup started — refresh in a moment to see results",
+      )
+      queryClient.invalidateQueries({ queryKey: ["book-archive-infinite"] })
+    },
+    onError: () => {
+      showErrorToast("Failed to start broken image cleanup")
+    },
+  })
+
   const handleTabChange = (value: string) => {
     navigate({
       search: (prev: any) => ({ ...prev, tab: value, page: 1 }),
@@ -537,7 +552,7 @@ function BookArchive() {
                           <Field label="Source API">
                             <RadioGroup
                               value={enrichSource}
-                              onValueChange={(e) => setEnrichSource(e.value)}
+                              onValueChange={(e) => setEnrichSource(e.value ?? "auto")}
                             >
                               <Stack direction="row" gap={4}>
                                 <Radio value="auto">
@@ -633,6 +648,16 @@ function BookArchive() {
                 title="Scan all user items and ensure they are recorded in the archive"
               >
                 <FiRefreshCw /> Sync from Items
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                colorPalette="red"
+                onClick={() => cleanupBrokenImagesMutation.mutate()}
+                loading={cleanupBrokenImagesMutation.isPending}
+                title="Null out image_url for any item whose cover file is missing in storage, so it appears in the Missing Image filter"
+              >
+                <FiTrash2 /> Clear Broken Images
               </Button>
               <IconButton
                 variant="ghost"

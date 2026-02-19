@@ -236,6 +236,81 @@ async def sync_items_to_registry(
     return Message(message="Global registry sync started in background.")
 
 
+@router.post("/book-registry/cleanup-broken-images", response_model=Message)
+def cleanup_broken_images(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
+) -> Any:
+    """
+    Find all WorkMetadata and Item records whose image_url points to a missing
+    MinIO object and null it out so they appear in the 'Missing Image' filter.
+    Superuser only. Processes in background.
+    """
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+
+    def cleanup_task():
+        import logging
+
+        from minio.error import S3Error
+        from sqlmodel import Session
+
+        from app.core.db import engine
+        from app.core.config import settings as _settings
+        from app.storage import minio_client
+
+        log = logging.getLogger(__name__)
+
+        def is_broken(url: str | None) -> bool:
+            if not url or "/api/v1/storage/image/" not in url:
+                return False
+            object_name = url.split("/api/v1/storage/image/")[-1]
+            try:
+                minio_client.stat_object(_settings.MINIO_STORAGE_BUCKET, object_name)
+                return False
+            except S3Error:
+                return True
+            except Exception:
+                return True
+
+        with Session(engine) as bg_session:
+            works = bg_session.exec(
+                select(WorkMetadata).where(
+                    WorkMetadata.image_url.is_not(None),
+                    WorkMetadata.image_url != "",
+                )
+            ).all()
+            work_cleaned = 0
+            for work in works:
+                if is_broken(work.image_url):
+                    work.image_url = None
+                    work_cleaned += 1
+            bg_session.commit()
+
+            items = bg_session.exec(
+                select(Item).where(
+                    Item.image_url.is_not(None),
+                    Item.image_url != "",
+                )
+            ).all()
+            item_cleaned = 0
+            for item in items:
+                if is_broken(item.image_url):
+                    item.image_url = None
+                    item_cleaned += 1
+            bg_session.commit()
+
+            log.info(
+                f"Broken image cleanup complete: {work_cleaned} registry entries, "
+                f"{item_cleaned} item records nulled."
+            )
+
+    background_tasks.add_task(cleanup_task)
+    return Message(message="Broken image cleanup started in background.")
+
+
 @router.get("/book-registry", response_model=WorksMetadataPublic)
 def list_book_registry(
     session: SessionDep,

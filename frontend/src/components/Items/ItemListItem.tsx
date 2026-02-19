@@ -3,6 +3,7 @@ import useAuth from "@/hooks/useAuth"
 import { getImageUrl } from "@/utils"
 import { Badge, Box, Flex, HStack, Image, Text, VStack } from "@chakra-ui/react"
 import { Link } from "@tanstack/react-router"
+import { useState } from "react"
 import { FiBook, FiUser } from "react-icons/fi"
 
 interface ItemListItemProps {
@@ -13,6 +14,7 @@ export const ItemListItem = ({ item: itemProp }: ItemListItemProps) => {
   const { user } = useAuth()
   const items = Array.isArray(itemProp) ? itemProp : [itemProp]
   const item = items[0]
+  const [imgError, setImgError] = useState(false)
   const isBook = item.item_type === "book"
   const count = items.length
 
@@ -75,7 +77,7 @@ export const ItemListItem = ({ item: itemProp }: ItemListItemProps) => {
           overflow="hidden"
           position="relative"
         >
-          {item.image_url ? (
+          {item.image_url && !imgError ? (
             <Image
               src={getImageUrl(item.image_url)}
               alt={item.title}
@@ -83,6 +85,7 @@ export const ItemListItem = ({ item: itemProp }: ItemListItemProps) => {
               height="100%"
               objectFit="cover"
               loading="lazy"
+              onError={() => setImgError(true)}
             />
           ) : (
             <Flex

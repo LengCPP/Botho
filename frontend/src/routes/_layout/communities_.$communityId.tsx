@@ -30,7 +30,6 @@ import {
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
 import { isPast, isToday } from "date-fns"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { FaChevronLeft } from "react-icons/fa"
 import {
   FiBell,
   FiBellOff,
@@ -62,16 +61,12 @@ import ForgiveModal from "@/components/Common/ForgiveModal"
 import ReviewModal from "@/components/Common/ReviewModal"
 import InviteFriend from "@/components/Communities/InviteFriend"
 import AddItem from "@/components/Items/AddItem"
-import { CollectionGrid } from "@/components/Items/CollectionGrid"
-import { CompactItemCard } from "@/components/Items/CompactItemCard"
 import { ExtensionRequestModal } from "@/components/Items/ExtensionRequestModal"
-import ItemCard from "@/components/Items/ItemCard"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
-import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
+import { ItemsBrowser } from "@/components/Items/ItemsBrowser"
 import { LoanCard } from "@/components/Items/LoanCard"
 import { LoanRequestModal } from "@/components/Items/LoanRequestModal"
 import { ManageItems } from "@/components/Items/ManageItems"
-import PendingItems from "@/components/Pending/PendingItems"
 import {
   DialogBody,
   DialogCloseTrigger,
@@ -195,7 +190,6 @@ function CommunityBoard() {
 
   // Derived state
   const isFiltered = !!subject || !!author || !!category || !!genre
-  const currentFilter = subject || author || genre || category || "Unknown"
 
   // ========================================================================
   // EFFECTS
@@ -252,8 +246,8 @@ function CommunityBoard() {
         id: cId,
       }) as Promise<any>,
     initialData: () => {
-      const communities =
-        queryClient.getQueryData<any>(["communities"])?.data || []
+      const cached = queryClient.getQueryData<any>(["communitiesInfinite"])
+      const communities = cached?.pages?.flatMap((p: any) => p.data) || []
       return communities.find((c: any) => c.id === cId)
     },
   })
@@ -610,56 +604,14 @@ function CommunityBoard() {
     [commI],
   )
 
-  const allCollections = useMemo(() => {
-    if (qP || !comm?.collection_index?.[organize_by]) {
-      return facets?.pages.flatMap((p: any) => p.data) || []
-    }
-    return Object.values(comm.collection_index[organize_by])
-      .map((data: any) => ({
-        name: data.name,
-        item_type: data.item_type,
-        count: data.count,
-        sample_images: data.sample_images,
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name))
-  }, [comm, organize_by, facets, qP])
+  const allCollections = useMemo(
+    () => facets?.pages.flatMap((p: any) => p.data) || [],
+    [facets],
+  )
 
   // ========================================================================
   // RENDER HELPERS
   // ========================================================================
-
-  const renderItemGrid = (items: any[]) => (
-    <SimpleGrid
-      columns={view_mode === "list" ? 1 : { base: 2, sm: 3, md: 4 }}
-      gap={view_mode === "list" ? 2 : { base: 2, md: 6 }}
-    >
-      {items.map((x: any) =>
-        view_mode === "list" ? (
-          <CompactItemCard
-            key={x[0].id}
-            item={x}
-            communityId={cId}
-            isAdmin={isAdmin}
-            onShowDetails={() => setSelectedItem(x[0])}
-            onReview={setSelectedLoan}
-            onLoanRequest={(i) => setSelectedItemForLoan(i)}
-            onExtensionRequest={(l) => setSelectedLoanForExtension(l)}
-          />
-        ) : (
-          <ItemCard
-            key={x[0].id}
-            item={x}
-            communityId={cId}
-            isAdmin={isAdmin}
-            onShowDetails={() => setSelectedItem(x[0])}
-            onReview={setSelectedLoan}
-            onLoanRequest={(i) => setSelectedItemForLoan(i)}
-            onExtensionRequest={(l) => setSelectedLoanForExtension(l)}
-          />
-        ),
-      )}
-    </SimpleGrid>
-  )
 
   const handleAction = (loan: any, action: string, params?: any) => {
     if (action === "forgive") {
@@ -1013,190 +965,95 @@ function CommunityBoard() {
                   />
                 )}
 
-                {/* Controls */}
-                <Flex
-                  justify="space-between"
-                  align="center"
-                  wrap="wrap"
-                  gap={4}
-                >
-                  <HStack gap={4} align="baseline">
-                    <AddItem communityId={cId} isAdmin={isAdmin} />
-                    {isAdmin && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => updateSearch({ tab: "manage-items" })}
-                      >
-                        <FiSettings /> Manage Items
-                      </Button>
-                    )}
-                  </HStack>
-
-                  <ItemsViewOptions
-                    q={qP}
-                    onChangeQ={(v) => updateSearch({ q: v })}
-                    viewMode={view_mode}
-                    onChangeViewMode={(m) =>
-                      updateSearch({
-                        view_mode: m,
-                      })
-                    }
-                    displayType={display_type}
-                    onChangeDisplayType={(t) =>
-                      updateSearch({
-                        display_type: t,
-                        subject: undefined,
-                        item_type: undefined,
-                      })
-                    }
-                    sortBy={sort_by}
-                    onChangeSortBy={(v) =>
-                      updateSearch({
-                        sort_by: v,
-                      })
-                    }
-                    sortOrder={sort_order}
-                    onChangeSortOrder={(v) =>
-                      updateSearch({
-                        sort_order: v,
-                      })
-                    }
-                    limit={limit}
-                    onChangeLimit={(v) => updateSearch({ limit: v })}
-                    category={category}
-                    onChangeCategory={(v) =>
-                      updateSearch({
-                        category: v,
-                        genre: undefined,
-                      })
-                    }
-                    genre={genre}
-                    onChangeGenre={(v) => updateSearch({ genre: v })}
-                    organizeBy={organize_by}
-                    onChangeOrganizeBy={(v) =>
-                      updateSearch({
-                        organize_by: v,
-                        subject: undefined,
-                        item_type: undefined,
-                      })
-                    }
-                    showDisplayToggle
-                    showViewToggle
-                    showFilter
-                    showSort
-                    showLimit
-                    organizeOptions={[
-                      "subject",
-                      "genre",
-                      "category",
-                      "author",
-                      ...(isAdmin ? ["ownership"] : []),
-                    ]}
-                  />
-                </Flex>
-
-                {/* Content */}
-                {(isLoadingItems && !allItems.length) ||
-                (isLoadingFacets && !allCollections.length) ? (
-                  <PendingItems />
-                ) : !allItems.length && !allCollections.length ? (
-                  <Box
-                    p={10}
-                    textAlign="center"
-                    borderWidth="1px"
-                    borderStyle="dashed"
-                    rounded="md"
-                  >
-                    <Text color="fg.muted">
-                      {qP ? "No matches." : "Empty pool."}
-                    </Text>
-                  </Box>
-                ) : (
-                  <Box mt={8}>
-                    {display_type === "collections" && !isFiltered ? (
-                      <Box>
-                        <CollectionGrid
-                          items={allCollections}
-                          type={organize_by}
-                          onOpen={handleOrganizeClick}
-                        />
-
-                        {hasNextFacets && (
-                          <Flex justify="center" mt={8}>
-                            <Button
-                              variant="ghost"
-                              colorPalette="accent"
-                              onClick={() => fetchNextFacets()}
-                              loading={isFetchingNextFacets}
-                            >
-                              Load More Collections
-                            </Button>
-                          </Flex>
-                        )}
-                      </Box>
-                    ) : (
-                      <Box>
-                        {display_type === "collections" && isFiltered && (
-                          <VStack align="start" mb={6} gap={2}>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                updateSearch({
-                                  subject: undefined,
-                                  author: undefined,
-                                  genre: undefined,
-                                  category: undefined,
-                                  item_type: undefined,
-                                })
-                              }
-                            >
-                              <FaChevronLeft /> Collections
-                            </Button>
-
-                            <Heading
-                              size="lg"
-                              color="ui.hover"
-                              textTransform="uppercase"
-                            >
-                              {item_type === "book" ? "Books" : "Items"}{" "}
-                              {currentFilter.toLowerCase() === "others"
-                                ? `with unspecified ${organize_by}`
-                                : `${
-                                    organize_by === "author"
-                                      ? "by"
-                                      : organize_by === "genre"
-                                        ? "in"
-                                        : organize_by === "category"
-                                          ? "in category"
-                                          : "on"
-                                  } ${currentFilter}`}{" "}
-                              ({commI?.pages[0]?.count})
-                            </Heading>
-                          </VStack>
-                        )}
-
-                        <VStack align="stretch" gap={8}>
-                          {renderItemGrid(groupItems(allItems, false))}
-
-                          {hasNextItems && (
-                            <Flex justify="center">
-                              <Button
-                                variant="ghost"
-                                colorPalette="accent"
-                                onClick={() => fetchNextItems()}
-                                loading={isFetchingNextItems}
-                              >
-                                Load More Items
-                              </Button>
-                            </Flex>
-                          )}
-                        </VStack>
-                      </Box>
-                    )}
-                  </Box>
-                )}
+                <ItemsBrowser
+                  displayType={display_type}
+                  viewMode={view_mode}
+                  organizeBy={organize_by}
+                  sortBy={sort_by}
+                  sortOrder={sort_order}
+                  limit={limit}
+                  q={qP}
+                  category={category}
+                  genre={genre}
+                  subject={subject}
+                  author={author}
+                  itemType={item_type}
+                  items={groupItems(allItems as any)}
+                  facets={allCollections}
+                  totalItemCount={commI?.pages[0]?.count || 0}
+                  totalFacetCount={(facets?.pages[0] as any)?.count || 0}
+                  isLoading={
+                    (isLoadingItems && !allItems.length) ||
+                    (isLoadingFacets && !allCollections.length)
+                  }
+                  hasNextItems={hasNextItems}
+                  hasNextFacets={hasNextFacets}
+                  isFetchingNextItems={isFetchingNextItems}
+                  isFetchingNextFacets={isFetchingNextFacets}
+                  onChangeDisplayType={(t) =>
+                    updateSearch({
+                      display_type: t,
+                      subject: undefined,
+                      item_type: undefined,
+                    })
+                  }
+                  onChangeViewMode={(m) => updateSearch({ view_mode: m })}
+                  onChangeOrganizeBy={(v) =>
+                    updateSearch({
+                      organize_by: v,
+                      subject: undefined,
+                      item_type: undefined,
+                    })
+                  }
+                  onChangeSortBy={(v) => updateSearch({ sort_by: v })}
+                  onChangeSortOrder={(v) => updateSearch({ sort_order: v })}
+                  onChangeLimit={(v) => updateSearch({ limit: v })}
+                  onChangeQ={(v) => updateSearch({ q: v })}
+                  onChangeCategory={(v) =>
+                    updateSearch({ category: v, genre: undefined })
+                  }
+                  onChangeGenre={(v) => updateSearch({ genre: v })}
+                  onOpenCollection={handleOrganizeClick}
+                  onClearDrilldown={() =>
+                    updateSearch({
+                      subject: undefined,
+                      author: undefined,
+                      genre: undefined,
+                      category: undefined,
+                      item_type: undefined,
+                    })
+                  }
+                  onFetchNextItems={fetchNextItems}
+                  onFetchNextFacets={fetchNextFacets}
+                  communityId={cId}
+                  isAdmin={isAdmin}
+                  onShowDetails={setSelectedItem}
+                  onReview={setSelectedLoan}
+                  onLoanRequest={setSelectedItemForLoan}
+                  onExtensionRequest={setSelectedLoanForExtension}
+                  organizeOptions={[
+                    "subject",
+                    "genre",
+                    "category",
+                    "author",
+                    ...(isAdmin ? ["ownership"] : []),
+                  ]}
+                  leftSlot={
+                    <HStack gap={4} align="baseline">
+                      <AddItem communityId={cId} isAdmin={isAdmin} />
+                      {isAdmin && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => updateSearch({ tab: "manage-items" })}
+                        >
+                          <FiSettings /> Manage Items
+                        </Button>
+                      )}
+                    </HStack>
+                  }
+                  emptyMessage={qP ? "No matches." : "Empty pool."}
+                />
               </VStack>
 
               <ItemDetailModal
