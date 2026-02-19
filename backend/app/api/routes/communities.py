@@ -21,6 +21,7 @@ from app.models import (
     CommunityAnnouncementPublic,
     CommunityAnnouncementsPublic,
     CommunityCreate,
+    CommunityFavorite,
     CommunityInvitationCreate,
     CommunityItem,
     CommunityMember,
@@ -78,6 +79,7 @@ def read_communities(
     skip: int = 0,
     limit: int = 100,
     member_only: bool = False,
+    browse: bool = False,
 ) -> Any:
     """
     Retrieve communities.
@@ -91,6 +93,18 @@ def read_communities(
             )
         ).all()
         statement = select(Community).where(Community.id.in_(user_memberships))
+    elif browse:
+        # Browse: global (public) communities the user is NOT an accepted member of
+        accepted_memberships = session.exec(
+            select(CommunityMember.community_id).where(
+                CommunityMember.user_id == current_user.id,
+                CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+            )
+        ).all()
+        statement = select(Community).where(
+            Community.is_private == False,  # noqa: E712
+            Community.id.not_in(accepted_memberships),
+        )
     else:
         # All memberships (including INVITED/PENDING) to allow discovery of private/joined ones
         user_memberships = session.exec(
@@ -131,6 +145,17 @@ def read_communities(
     else:
         membership_map = {}
 
+    # Get favorites for current user among fetched communities
+    favorite_ids: set[uuid.UUID] = set()
+    if community_ids:
+        favorites = session.exec(
+            select(CommunityFavorite.community_id).where(
+                CommunityFavorite.user_id == current_user.id,
+                CommunityFavorite.community_id.in_(community_ids),
+            )
+        ).all()
+        favorite_ids = set(favorites)
+
     for community in communities:
         comm_pub = CommunityPublic.model_validate(community)
         meta = membership_map.get(community.id)
@@ -138,6 +163,7 @@ def read_communities(
             comm_pub.current_user_role = meta["role"]
             comm_pub.current_user_status = meta["status"]
             comm_pub.notifications_enabled = meta["notif"]
+        comm_pub.is_favorited = community.id in favorite_ids
         communities_public.append(comm_pub)
 
     return CommunitiesPublic(data=communities_public, count=count)
@@ -722,6 +748,38 @@ def update_community_notifications(
     return Message(message=f"Notifications {'enabled' if enabled else 'disabled'}")
 
 
+@router.post("/{id}/favorite", response_model=Message)
+def toggle_favorite_community(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+) -> Any:
+    """
+    Toggle favorite status for a community.
+    """
+    community = session.get(Community, id)
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    existing = session.exec(
+        select(CommunityFavorite).where(
+            CommunityFavorite.community_id == id,
+            CommunityFavorite.user_id == current_user.id,
+        )
+    ).first()
+
+    if existing:
+        session.delete(existing)
+        session.commit()
+        return Message(message="Removed from favorites")
+    else:
+        fav = CommunityFavorite(community_id=id, user_id=current_user.id)
+        session.add(fav)
+        session.commit()
+        return Message(message="Added to favorites")
+
+
 @router.get("/{id}/item-facets")
 def read_community_item_facets(
     *,
@@ -977,8 +1035,8 @@ def read_community_items(
     if q:
         try:
             index = meili_client.index("items")
-            # Filter: item belongs to community (owned or pooled)
-            filters = [f'(owner_id = "{id}" OR pooled_in = "{id}")']
+            # Filter: item belongs to community (owned or pooled), exclude private/lost
+            filters = [f'(owner_id = "{id}" OR pooled_in = "{id}")', "is_private = false", "is_lost = false"]
 
             if category:
                 filters.append(f'category = "{category}"')
@@ -1048,6 +1106,8 @@ def read_community_items(
                     ),
                 )
                 .where(Item.id.not_in(defaulted_item_ids))
+                .where(Item.is_private == False)  # noqa: E712
+                .where(Item.is_lost == False)  # noqa: E712
             )
         else:
             statement = (
@@ -1064,6 +1124,8 @@ def read_community_items(
                     )
                 )
                 .where(Item.id.not_in(defaulted_item_ids))
+                .where(Item.is_private == False)  # noqa: E712
+                .where(Item.is_lost == False)  # noqa: E712
             )
 
         # Basic SQL filtering

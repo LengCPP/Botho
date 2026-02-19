@@ -5,12 +5,13 @@ import {
   Card,
   Flex,
   Heading,
+  IconButton,
   Text,
   VStack,
 } from "@chakra-ui/react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
-import { FiTrash2 } from "react-icons/fi"
+import { FiStar, FiTrash2 } from "react-icons/fi"
 
 import { CommunitiesService } from "@/client"
 import EditCommunity from "@/components/Communities/EditCommunity"
@@ -46,10 +47,21 @@ const CommunityCard = ({
     onSuccess: () => {
       showSuccessToast("Joined community!")
       queryClient.invalidateQueries({ queryKey: ["communities"] })
+      queryClient.invalidateQueries({ queryKey: ["communitiesInfinite"] })
       queryClient.invalidateQueries({ queryKey: ["currentUser"] })
       queryClient.invalidateQueries({ queryKey: ["search"] })
     },
     onError: () => showErrorToast("Failed to join community"),
+  })
+
+  const favoriteMutation = useMutation({
+    mutationFn: () =>
+      CommunitiesService.toggleFavoriteCommunity({ id: community.id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["communitiesInfinite"] })
+      queryClient.invalidateQueries({ queryKey: ["browseCommunitiesInfinite"] })
+    },
+    onError: () => showErrorToast("Failed to update favorite"),
   })
 
   const isMember = community.current_user_status === "ACCEPTED"
@@ -108,19 +120,42 @@ const CommunityCard = ({
               )}
             </Flex>
           </VStack>
-          {isAdmin && (
-            <Flex gap={2}>
-              <EditCommunity community={community} />
-              <Button
-                size="xs"
-                variant={"danger" as any}
-                onClick={() => onDisbandRequest?.(community)}
-                title="Disband Community"
-              >
-                <FiTrash2 />
-              </Button>
-            </Flex>
-          )}
+          <Flex gap={2}>
+            <IconButton
+              size="xs"
+              variant="ghost"
+              aria-label={
+                community.is_favorited
+                  ? "Remove from favorites"
+                  : "Add to favorites"
+              }
+              onClick={() => favoriteMutation.mutate()}
+              loading={favoriteMutation.isPending}
+              color={community.is_favorited ? "yellow.400" : "gray.400"}
+              title={
+                community.is_favorited
+                  ? "Remove from favorites"
+                  : "Add to favorites"
+              }
+            >
+              <FiStar
+                fill={community.is_favorited ? "currentColor" : "none"}
+              />
+            </IconButton>
+            {isAdmin && (
+              <>
+                <EditCommunity community={community} />
+                <Button
+                  size="xs"
+                  variant={"danger" as any}
+                  onClick={() => onDisbandRequest?.(community)}
+                  title="Disband Community"
+                >
+                  <FiTrash2 />
+                </Button>
+              </>
+            )}
+          </Flex>
         </Flex>
 
         <Box flex="1">

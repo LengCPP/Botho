@@ -131,6 +131,7 @@ export type CommunityPublic = {
     collection_index?: ({
     [key: string]: unknown;
 } | null);
+    is_favorited?: boolean;
 };
 
 export type CommunityUpdate = {
@@ -600,6 +601,7 @@ export type WorksMetadataPublic = {
 };
 
 export type CommunitiesReadCommunitiesData = {
+    browse?: boolean;
     limit?: number;
     memberOnly?: boolean;
     skip?: number;
@@ -675,6 +677,12 @@ export type CommunitiesUpdateCommunityNotificationsData = {
 };
 
 export type CommunitiesUpdateCommunityNotificationsResponse = (Message);
+
+export type CommunitiesToggleFavoriteCommunityData = {
+    id: string;
+};
+
+export type CommunitiesToggleFavoriteCommunityResponse = (Message);
 
 export type CommunitiesReadCommunityItemFacetsData = {
     groupBy?: string;

@@ -130,6 +130,15 @@ class CommunityInterest(SQLModel, table=True):
     interest_id: uuid.UUID = Field(foreign_key="interest.id", primary_key=True, ondelete="CASCADE")
 
 
+class CommunityFavorite(SQLModel, table=True):
+    community_id: uuid.UUID = Field(
+        foreign_key="community.id", primary_key=True, ondelete="CASCADE"
+    )
+    user_id: uuid.UUID = Field(
+        foreign_key="user.id", primary_key=True, ondelete="CASCADE"
+    )
+
+
 # Support Models
 class UserSettingsSchema(SQLModel):
     autocomplete_enabled: bool = Field(default=True)
@@ -621,6 +630,7 @@ class CommunityPublic(CommunityBase):
     current_user_status: CommunityMemberStatus | None = None
     notifications_enabled: bool | None = None
     collection_index: dict[str, Any] | None = None
+    is_favorited: bool = False
 
 
 class CommunityAnnouncementBase(SQLModel):
