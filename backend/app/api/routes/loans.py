@@ -17,6 +17,7 @@ from app.models import (
     ForgivenessRequest,
     Friendship,
     FriendshipStatus,
+    InterestSignal,
     Item,
     Loan,
     LoanCreate,
@@ -140,9 +141,20 @@ async def create_loan_request(
             if not session.exec(statement).first():
                 raise HTTPException(status_code=403, detail="Must be a member of the community to borrow its items")
 
-    # Check for existing active or pending loans for this item
+    # Block if item is actively on loan
     if not check_item_availability(session, loan_in.item_id):
-        raise HTTPException(status_code=400, detail="Item is already requested or on loan")
+        raise HTTPException(status_code=400, detail="Item is currently on loan. Signal interest to be notified when available.")
+
+    # Block if user already has a pending request for this item
+    existing_pending = session.exec(
+        select(Loan).where(
+            Loan.item_id == loan_in.item_id,
+            Loan.requester_id == current_user.id,
+            Loan.status == LoanStatus.PENDING
+        )
+    ).first()
+    if existing_pending:
+        raise HTTPException(status_code=400, detail="You already have a pending request for this item")
 
     db_loan = Loan(
         item_id=loan_in.item_id,
@@ -202,14 +214,14 @@ def read_incoming_loan_requests(
     """
     statement = (
         select(Loan)
-        .where(Loan.owner_id == current_user.id)
+        .where(Loan.owner_id == current_user.id, Loan.status != LoanStatus.BACKLOGGED)
         .order_by(Loan.created_at.desc())
     )
 
     count_statement = (
         select(func.count())
         .select_from(Loan)
-        .where(Loan.owner_id == current_user.id)
+        .where(Loan.owner_id == current_user.id, Loan.status != LoanStatus.BACKLOGGED)
     )
 
     count = session.exec(count_statement).one()
@@ -304,7 +316,6 @@ async def respond_to_loan_request(
     session.refresh(loan)
 
     # Notify requester
-    # Fix: Always redirect borrower to their personal loans section
     status_msg = "accepted" if accept else "rejected"
     await notify_user(
         session=session,
@@ -314,6 +325,56 @@ async def respond_to_loan_request(
         type=NotificationType.SUCCESS if accept else NotificationType.WARNING,
         link="/loans"
     )
+
+    # When accepting, backlog or reassign other pending requests for the same item
+    if accept:
+        pending_siblings = session.exec(
+            select(Loan).where(
+                Loan.item_id == loan.item_id,
+                Loan.status == LoanStatus.PENDING,
+                Loan.id != loan.id
+            )
+        ).all()
+
+        for sibling in pending_siblings:
+            # Find another available copy with the same title from the same owner
+            alt_candidates = session.exec(
+                select(Item).where(
+                    Item.title == loan.item.title,
+                    Item.owner_id == loan.item.owner_id,
+                    Item.id != loan.item_id,
+                    Item.is_lost == False,
+                )
+            ).all()
+            alt_item = next(
+                (it for it in alt_candidates if check_item_availability(session, it.id)),
+                None
+            )
+
+            if alt_item:
+                sibling.item_id = alt_item.id
+                session.add(sibling)
+                await notify_user(
+                    session=session,
+                    recipient_id=sibling.requester_id,
+                    title="Request Reassigned to Another Copy",
+                    message=f"Your request for '{loan.item.title}' has been moved to another available copy.",
+                    type=NotificationType.INFO,
+                    link="/loans"
+                )
+            else:
+                sibling.status = LoanStatus.BACKLOGGED
+                session.add(sibling)
+                await notify_user(
+                    session=session,
+                    recipient_id=sibling.requester_id,
+                    title="Request On Hold",
+                    message=f"'{loan.item.title}' was approved for another borrower. Your request will resume automatically when the item is returned.",
+                    type=NotificationType.WARNING,
+                    link="/loans"
+                )
+
+        session.commit()
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
 
@@ -347,7 +408,7 @@ async def cancel_loan(
     if not is_requester and not is_owner and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
-    if loan.status not in [LoanStatus.PENDING, LoanStatus.ACCEPTED]:
+    if loan.status not in [LoanStatus.PENDING, LoanStatus.ACCEPTED, LoanStatus.BACKLOGGED]:
         raise HTTPException(status_code=400, detail="Loan cannot be cancelled at this stage")
 
     loan.status = LoanStatus.CANCELLED
@@ -412,9 +473,33 @@ async def ratify_loan(
         raise HTTPException(status_code=400, detail="Loan must be accepted before ratification")
 
     loan.status = LoanStatus.ACTIVE
+
+    # Cancel sibling pending loans for the same item
+    other_pending = session.exec(
+        select(Loan).where(
+            Loan.item_id == loan.item_id,
+            Loan.status == LoanStatus.PENDING,
+            Loan.id != loan.id
+        )
+    ).all()
+    for other in other_pending:
+        other.status = LoanStatus.CANCELLED
+        session.add(other)
+
     session.add(loan)
     session.commit()
     session.refresh(loan)
+
+    # Notify each cancelled requester
+    for other in other_pending:
+        await notify_user(
+            session=session,
+            recipient_id=other.requester_id,
+            title="Request Cancelled — Item is Out",
+            message=f"'{loan.item.title}' was lent to someone else. Signal interest to be notified when it's back!",
+            type=NotificationType.INFO,
+            link=f"/loans?signal-interest={loan.item_id}"
+        )
 
     # Notify owner or admins
     if loan.owner_id:
@@ -534,26 +619,76 @@ async def return_loan(
     if loan.status not in [LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING]:
         raise HTTPException(status_code=400, detail="Loan must be active or return pending to be returned")
 
+    # Pre-load values needed after commit (avoids lazy-loading on expired objects)
+    item_title = loan.item.title
+    item_id = loan.item_id
+    requester_id = loan.requester_id
+    owner_id = loan.owner_id
+
     loan.status = LoanStatus.RETURNED
     loan.returned_at = datetime.now(timezone.utc)
     session.add(loan)
+
+    # Collect interest signals before deleting them
+    interest_signals = session.exec(
+        select(InterestSignal).where(InterestSignal.item_id == item_id)
+    ).all()
+    signal_user_ids = [sig.user_id for sig in interest_signals]
+    for sig in interest_signals:
+        session.delete(sig)
+
+    # Restore any BACKLOGGED loans to PENDING now that the item is available
+    backlogged_loans = session.exec(
+        select(Loan).where(
+            Loan.item_id == item_id,
+            Loan.status == LoanStatus.BACKLOGGED
+        )
+    ).all()
+    backlogged_requester_ids = [bl.requester_id for bl in backlogged_loans]
+    for bl in backlogged_loans:
+        bl.status = LoanStatus.PENDING
+        session.add(bl)
+
     session.commit()
     session.refresh(loan)
 
     # Refresh honor for both parties
-    await refresh_user_honor(session, loan.requester_id)
-    if loan.owner_id:
-        await refresh_user_honor(session, loan.owner_id)
+    await refresh_user_honor(session, requester_id)
+    if owner_id:
+        await refresh_user_honor(session, owner_id)
 
     # Notify requester
     await notify_user(
         session=session,
-        recipient_id=loan.requester_id,
+        recipient_id=requester_id,
         title="Return Confirmed",
-        message=f"Receipt of '{loan.item.title}' has been confirmed.",
+        message=f"Receipt of '{item_title}' has been confirmed.",
         type=NotificationType.SUCCESS,
         link="/loans"
     )
+
+    # Notify interest signalers that item is now available
+    for user_id in signal_user_ids:
+        await notify_user(
+            session=session,
+            recipient_id=user_id,
+            title="Item Now Available!",
+            message=f"'{item_title}' is now available to borrow.",
+            type=NotificationType.ITEM_AVAILABLE,
+            link="/items",
+            ws_extra={"item_id": str(item_id), "item_title": item_title}
+        )
+
+    # Notify requesters whose BACKLOGGED loans were restored to PENDING
+    for bl_requester_id in backlogged_requester_ids:
+        await notify_user(
+            session=session,
+            recipient_id=bl_requester_id,
+            title="Your Request Is Active Again!",
+            message=f"'{item_title}' has been returned. Your loan request is now active — the owner can review it.",
+            type=NotificationType.INFO,
+            link="/loans"
+        )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
 
@@ -896,3 +1031,58 @@ async def send_return_reminder(
     )
 
     return Message(message="Reminder sent successfully")
+
+
+@router.post("/items/{item_id}/interest", response_model=Message)
+async def signal_item_interest(
+    *, session: SessionDep, current_user: CurrentUser, item_id: uuid.UUID
+) -> Any:
+    """Signal interest in borrowing an item that is currently on loan."""
+    item = session.get(Item, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    if item.owner_id == current_user.id:
+        raise HTTPException(status_code=400, detail="You own this item")
+    if check_item_availability(session, item_id):
+        raise HTTPException(status_code=400, detail="Item is available — request a loan directly")
+    existing = session.exec(
+        select(InterestSignal).where(
+            InterestSignal.item_id == item_id,
+            InterestSignal.user_id == current_user.id
+        )
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Already signaled interest")
+    sig = InterestSignal(item_id=item_id, user_id=current_user.id)
+    session.add(sig)
+    session.commit()
+    return Message(message="Interest signaled successfully")
+
+
+@router.delete("/items/{item_id}/interest", response_model=Message)
+async def cancel_item_interest(
+    *, session: SessionDep, current_user: CurrentUser, item_id: uuid.UUID
+) -> Any:
+    """Remove an interest signal."""
+    sig = session.exec(
+        select(InterestSignal).where(
+            InterestSignal.item_id == item_id,
+            InterestSignal.user_id == current_user.id
+        )
+    ).first()
+    if not sig:
+        raise HTTPException(status_code=404, detail="No interest signal found")
+    session.delete(sig)
+    session.commit()
+    return Message(message="Interest signal removed")
+
+
+@router.get("/my-interest-signals")
+async def get_my_interest_signals(
+    *, session: SessionDep, current_user: CurrentUser
+) -> Any:
+    """Get all interest signals for the current user."""
+    signals = session.exec(
+        select(InterestSignal).where(InterestSignal.user_id == current_user.id)
+    ).all()
+    return {"data": [{"id": str(s.id), "item_id": str(s.item_id)} for s in signals]}

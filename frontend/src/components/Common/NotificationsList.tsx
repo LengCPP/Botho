@@ -15,6 +15,7 @@ import { FaCircle } from "react-icons/fa"
 import { FiTrash2 } from "react-icons/fi"
 import { NotificationsService } from "../../client"
 import { useNotifications } from "../../hooks/useNotifications"
+import SignalInterestModal from "./SignalInterestModal"
 
 interface NotificationsListProps {
   onItemClick?: () => void
@@ -37,6 +38,12 @@ const NotificationsList = ({
   const [touchStart, setTouchStart] = useState<number | null>(null)
   const [swipingId, setSwipingId] = useState<string | null>(null)
   const [swipeOffset, setSwipeOffset] = useState(0)
+
+  // State for signal-interest modal
+  const [signalInterest, setSignalInterest] = useState<{
+    itemId: string
+    message: string
+  } | null>(null)
 
   const markAsReadMutation = useMutation({
     mutationFn: (id: string) =>
@@ -68,6 +75,18 @@ const NotificationsList = ({
     onItemClick?.()
 
     if (notification.link) {
+      // Check for signal-interest modal trigger
+      const signalInterestMatch = notification.link.match(
+        /[?&]signal-interest=([a-f0-9-]+)/i,
+      )
+      if (signalInterestMatch) {
+        setSignalInterest({
+          itemId: signalInterestMatch[1],
+          message: notification.message,
+        })
+        return
+      }
+
       const communityMatch = notification.link.match(
         /\/communities\/([a-f0-9-]+)(?:\?tab=([a-z]+))?/i,
       )
@@ -134,6 +153,15 @@ const NotificationsList = ({
   }
 
   return (
+    <>
+    {signalInterest && (
+      <SignalInterestModal
+        isOpen={!!signalInterest}
+        onClose={() => setSignalInterest(null)}
+        itemId={signalInterest.itemId}
+        notificationMessage={signalInterest.message}
+      />
+    )}
     <VStack align="stretch" gap={0} w="full">
       {data.map((notification) => (
         <Box
@@ -244,6 +272,7 @@ const NotificationsList = ({
         </Button>
       )}
     </VStack>
+    </>
   )
 }
 

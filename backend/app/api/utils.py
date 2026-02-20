@@ -895,6 +895,17 @@ def filter_loan_privacy(loan: Loan, current_user_id: Any = None, is_admin: bool 
     if loan.requester:
         loan_public.requester = filter_user_privacy(loan.requester, current_user_id, is_admin=reveal_requester)
 
+    if session and reveal_requester:
+        from app.models import InterestSignal, InterestSignalPublic
+        signals = session.exec(select(InterestSignal).where(InterestSignal.item_id == loan.item_id)).all()
+        loan_public.interest_signals = [
+            InterestSignalPublic(
+                id=s.id, item_id=s.item_id, user_id=s.user_id, created_at=s.created_at,
+                user=filter_user_privacy(s.user, current_user_id, is_admin=is_admin)
+            )
+            for s in signals
+        ]
+
     if session and current_user_id:
         existing_review = session.exec(
             select(UserReview).where(
@@ -934,7 +945,11 @@ def check_item_availability(session: Session, item_id: uuid.UUID) -> bool:
     active_loan = session.exec(
         select(Loan).where(
             Loan.item_id == item_id,
-            Loan.status.in_([LoanStatus.ACTIVE, LoanStatus.PENDING, LoanStatus.ACCEPTED, LoanStatus.RETURN_PENDING, LoanStatus.EXTENSION_PENDING, LoanStatus.DEFAULTED])
+            Loan.status.in_([
+                LoanStatus.ACTIVE, LoanStatus.ACCEPTED,
+                LoanStatus.RETURN_PENDING, LoanStatus.EXTENSION_PENDING,
+                LoanStatus.DEFAULTED
+            ])
         )
     ).first()
     return active_loan is None

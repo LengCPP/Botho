@@ -45,7 +45,7 @@ export const Route = createFileRoute("/_layout/loans")({
 function LoansPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
-  const { showSuccessToast } = useCustomToast()
+  const { showSuccessToast, showErrorToast } = useCustomToast()
   const [viewMode, setViewMode] = useState<"card" | "list">("card")
   const [sortBy, setSortBy] = useState("created_at")
   const [sortOrder, setSortOrder] = useState("desc")
@@ -284,6 +284,11 @@ function LoansPage() {
       if (variables.action === "signalReturn") {
         setSelectedLoanForReview(data as LoanPublic)
       }
+    },
+    onError: (err: any) => {
+      const detail = err?.body?.detail || "Something went wrong. Please try again."
+      showErrorToast(detail)
+      setConfirmConfig(null)
     },
   })
 
@@ -698,6 +703,7 @@ function LoansPage() {
           title={confirmConfig.title}
           message={confirmConfig.message}
           isLoading={actionMutation.isPending}
+          showCheckbox={false}
         />
       )}
     </Container>

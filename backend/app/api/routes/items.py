@@ -1117,7 +1117,6 @@ def read_items(
                         Loan.status.in_(
                             [
                                 LoanStatus.ACTIVE,
-                                LoanStatus.PENDING,
                                 LoanStatus.ACCEPTED,
                                 LoanStatus.RETURN_PENDING,
                                 LoanStatus.EXTENSION_PENDING,
@@ -1414,7 +1413,6 @@ def read_items(
                 Loan.status.in_(
                     [
                         LoanStatus.ACTIVE,
-                        LoanStatus.PENDING,
                         LoanStatus.ACCEPTED,
                         LoanStatus.RETURN_PENDING,
                         LoanStatus.EXTENSION_PENDING,

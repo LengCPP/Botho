@@ -19,6 +19,7 @@ async def notify_user(
     message: str,
     type: NotificationType = NotificationType.INFO,
     link: str | None = None,
+    ws_extra: dict | None = None,
 ):
     """
     1. Create DB notification.
@@ -36,10 +37,10 @@ async def notify_user(
     )
 
     # 2. Send WebSocket message
-    await notification_manager.send_personal_message(
-        {"type": "new_notification", "title": title, "message": message, "notification_type": type, "link": link},
-        recipient_id
-    )
+    ws_message = {"type": "new_notification", "title": title, "message": message, "notification_type": type, "link": link}
+    if ws_extra:
+        ws_message.update(ws_extra)
+    await notification_manager.send_personal_message(ws_message, recipient_id)
 
     # 3. Send Push Notifications
     subscriptions = session.exec(

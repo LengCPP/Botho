@@ -9,6 +9,7 @@ import { useEffect, useState } from "react"
 import { FaBars } from "react-icons/fa"
 import { FiSettings } from "react-icons/fi"
 
+import { ItemAvailableBanner } from "@/components/Common/ItemAvailableBanner"
 import { LoanReminderBanner } from "@/components/Common/LoanReminderBanner"
 import Navbar from "@/components/Common/Navbar"
 import NotFound from "@/components/Common/NotFound"
@@ -65,6 +66,7 @@ function Layout() {
     <Flex direction="column" minH="100dvh">
       <Navbar />
       <LoanReminderBanner />
+      <ItemAvailableBanner />
 
       {/* Mobile Burger Menu Trigger */}
       <Box

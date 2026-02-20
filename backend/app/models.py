@@ -47,6 +47,7 @@ class LoanStatus(str, Enum):
     RETURN_PENDING = "RETURN_PENDING" # Requester signaled return
     RETURNED = "RETURNED"
     DEFAULTED = "DEFAULTED" # Marked unrecoverable by lender
+    BACKLOGGED = "BACKLOGGED" # Paused because another request was approved first
 
 
 class NotificationType(str, Enum):
@@ -54,6 +55,7 @@ class NotificationType(str, Enum):
     SUCCESS = "SUCCESS"
     WARNING = "WARNING"
     ERROR = "ERROR"
+    ITEM_AVAILABLE = "ITEM_AVAILABLE"
 
 
 class ReadingLogStatus(str, Enum):
@@ -229,6 +231,19 @@ class Loan(SQLModel, table=True):
         sa_relationship_kwargs={"foreign_keys": "Loan.requester_id", "back_populates": "loans_in"}
     )
     community: "Community" = Relationship(back_populates="loans")
+
+
+class InterestSignal(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    item_id: uuid.UUID = Field(foreign_key="item.id", ondelete="CASCADE", index=True)
+    user_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
+    community_id: uuid.UUID | None = Field(default=None, foreign_key="community.id", ondelete="CASCADE")
+    created_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    )
+    item: "Item" = Relationship(back_populates="interest_signals")
+    user: "User" = Relationship(back_populates="interest_signals")
 
 
 class StagedItem(SQLModel, table=True):
@@ -423,6 +438,7 @@ class User(UserBase, table=True):
     )
     contributions: list["Contribution"] = Relationship(back_populates="user")
     collection_index: dict[str, Any] | None = Field(default={}, sa_column=Column(JSONB))
+    interest_signals: list["InterestSignal"] = Relationship(back_populates="user", cascade_delete=True)
 
 
 class CommunityBase(SQLModel):
@@ -607,6 +623,9 @@ class Item(ItemBase, table=True):
     loans: list["Loan"] = Relationship(
         back_populates="item",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+    interest_signals: list["InterestSignal"] = Relationship(
+        back_populates="item", sa_relationship_kwargs={"cascade": "all, delete-orphan"}
     )
 
 
@@ -898,6 +917,14 @@ class ItemReviewsPublic(SQLModel):
     count: int
 
 
+class InterestSignalPublic(SQLModel):
+    id: uuid.UUID
+    item_id: uuid.UUID
+    user_id: uuid.UUID
+    created_at: datetime
+    user: "UserPublic"
+
+
 class LoanCreate(SQLModel):
     item_id: uuid.UUID
     community_id: uuid.UUID | None = None
@@ -930,6 +957,7 @@ class LoanPublic(SQLModel):
     community: Optional["CommunityPublic"]
     has_review: bool = False
     other_admins_exist: bool = False
+    interest_signals: list["InterestSignalPublic"] = []
 
 
 class LoansPublic(SQLModel):
@@ -1108,6 +1136,8 @@ class UserReputationSchema(SQLModel):
     ai_honor_summary: str | None = None
     ai_improvement_tips: list[str] | None = []
     review_count: int
+    returned_count: int = 0
+    total_borrows: int = 0
 
 
 class UserReportCardPublic(SQLModel):

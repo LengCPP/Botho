@@ -168,7 +168,7 @@ def get_recent_activity(
         select(Loan.item_id).where(
             Loan.item_id.in_(item_ids),
             Loan.status.in_([
-                LoanStatus.ACTIVE, LoanStatus.PENDING, LoanStatus.ACCEPTED,
+                LoanStatus.ACTIVE, LoanStatus.ACCEPTED,
                 LoanStatus.RETURN_PENDING, LoanStatus.EXTENSION_PENDING, LoanStatus.DEFAULTED
             ])
         )

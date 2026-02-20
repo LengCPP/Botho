@@ -305,6 +305,14 @@ export type LoanCreate = {
     end_date: string;
 };
 
+export type InterestSignalPublic = {
+    id: string;
+    item_id: string;
+    user_id: string;
+    created_at: string;
+    user: UserPublic;
+};
+
 export type LoanPublic = {
     id: string;
     item_id: string;
@@ -325,6 +333,7 @@ export type LoanPublic = {
     community: (CommunityPublic | null);
     has_review?: boolean;
     other_admins_exist?: boolean;
+    interest_signals?: Array<InterestSignalPublic>;
 };
 
 export type LoansPublic = {
@@ -332,7 +341,7 @@ export type LoansPublic = {
     count: number;
 };
 
-export type LoanStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED' | 'ACTIVE' | 'EXTENSION_PENDING' | 'RETURN_PENDING' | 'RETURNED' | 'DEFAULTED';
+export type LoanStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED' | 'ACTIVE' | 'EXTENSION_PENDING' | 'RETURN_PENDING' | 'RETURNED' | 'DEFAULTED' | 'BACKLOGGED';
 
 export type Message = {
     message: string;
@@ -507,6 +516,8 @@ export type UserReputationSchema = {
     ai_honor_summary?: (string | null);
     ai_improvement_tips?: (Array<(string)> | null);
     review_count: number;
+    returned_count?: number;
+    total_borrows?: number;
 };
 
 export type UserReviewCreate = {
@@ -1211,6 +1222,24 @@ export type LoansSendReturnReminderData = {
 };
 
 export type LoansSendReturnReminderResponse = (Message);
+
+export type LoansSignalItemInterestData = {
+    itemId: string;
+};
+
+export type LoansSignalItemInterestResponse = (Message);
+
+export type LoansCancelItemInterestData = {
+    itemId: string;
+};
+
+export type LoansCancelItemInterestResponse = (Message);
+
+export type LoansGetMyInterestSignalsData = Record<string, never>;
+
+export type LoansGetMyInterestSignalsResponse = {
+    data: Array<{ id: string; item_id: string }>;
+};
 
 export type LoginLoginAccessTokenData = {
     formData: Body_login_login_access_token;

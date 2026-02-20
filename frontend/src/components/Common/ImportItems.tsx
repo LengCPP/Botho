@@ -43,6 +43,8 @@ import {
 } from "react-icons/fa"
 import * as XLSX from "xlsx"
 
+const STAGING_CHUNK_SIZE = 500
+
 interface ImportItemsProps {
   communityId?: string
   isArchiveImport?: boolean
@@ -57,6 +59,8 @@ interface EditableCellProps {
   isMultiline?: boolean
   isFocused: boolean
   onFocus: () => void
+  onConfirm?: () => void
+  onTabNext?: (shiftKey: boolean) => void
 }
 
 const EditableCell = ({
@@ -67,6 +71,8 @@ const EditableCell = ({
   isMultiline = false,
   isFocused,
   onFocus,
+  onConfirm,
+  onTabNext,
 }: EditableCellProps) => {
   const [isEditing, setIsEditing] = useState(false)
   const [currentValue, setCurrentValue] = useState(value)
@@ -90,26 +96,42 @@ const EditableCell = ({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !isMultiline) {
-      if (isEditing) {
+    if (isEditing) {
+      if (e.key === "Escape") {
+        setCurrentValue(value)
+        setIsEditing(false)
+        e.stopPropagation()
+        e.preventDefault()
+      } else if (e.key === "Enter" && !isMultiline) {
+        // Confirm edit then let parent move focus down
         handleBlur()
-      } else {
-        setIsEditing(true)
+        e.stopPropagation()
+        e.preventDefault()
+        onConfirm?.()
+      } else if (e.key === "Tab") {
+        // Confirm edit then let parent move focus left/right
+        handleBlur()
+        e.stopPropagation()
+        e.preventDefault()
+        onTabNext?.(e.shiftKey)
+      } else if (
+        isMultiline &&
+        ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)
+      ) {
+        // Arrows inside a textarea move the cursor — don't let them navigate cells
+        e.stopPropagation()
       }
-      e.stopPropagation()
-    }
-    if (e.key === "Escape") {
-      setCurrentValue(value)
-      setIsEditing(false)
-      e.stopPropagation()
-    }
-    // Prevent arrow navigation while typing in a multiline textarea
-    if (
-      isEditing &&
-      isMultiline &&
-      ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)
-    ) {
-      e.stopPropagation()
+    } else {
+      if (e.key === "Enter" || e.key === "F2") {
+        setIsEditing(true)
+        e.stopPropagation()
+        e.preventDefault()
+      } else if (
+        ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)
+      ) {
+        // Prevent page scroll; bubble up so handleTableKeyDown can navigate
+        e.preventDefault()
+      }
     }
   }
 
@@ -141,13 +163,11 @@ const EditableCell = ({
     <Box
       ref={inputRef as any}
       tabIndex={0}
-      onClick={() => {
-        onFocus()
-        setIsEditing(true)
-      }}
+      onClick={onFocus}
+      onDoubleClick={() => setIsEditing(true)}
       onFocus={onFocus}
       onKeyDown={handleKeyDown}
-      cursor="text"
+      cursor="default"
       bg={isFocused ? "ui.hover/10" : "transparent"}
       outline={isFocused ? "2px solid" : "none"}
       outlineColor="ui.hover"
@@ -217,6 +237,12 @@ export const ImportItems = ({
     row: number
     col: number
   } | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [stagingProgress, setStagingProgress] = useState<{
+    current: number
+    total: number
+    stagedCount: number
+  } | null>(null)
 
   const limit = 100
   const { showSuccessToast, showErrorToast, showInfoToast } = useCustomToast()
@@ -278,6 +304,7 @@ export const ImportItems = ({
   }
 
   const handleTableKeyDown = (e: React.KeyboardEvent) => {
+    // When a cell input is focused (edit mode), EditableCell handles all keys
     if (
       !focusedCell ||
       (e.target as HTMLElement).tagName === "INPUT" ||
@@ -286,13 +313,29 @@ export const ImportItems = ({
       return
 
     const { row, col } = focusedCell
-    if (e.key === "ArrowUp" && row > 0) setFocusedCell({ row: row - 1, col })
-    else if (e.key === "ArrowDown" && row < items.length - 1)
+
+    if (e.key === "ArrowUp" && row > 0) {
+      setFocusedCell({ row: row - 1, col })
+      e.preventDefault()
+    } else if (e.key === "ArrowDown" && row < items.length - 1) {
       setFocusedCell({ row: row + 1, col })
-    else if (e.key === "ArrowLeft" && col > 0)
+      e.preventDefault()
+    } else if (e.key === "ArrowLeft" && col > 0) {
       setFocusedCell({ row, col: col - 1 })
-    else if (e.key === "ArrowRight" && col < columns.length - 1)
+      e.preventDefault()
+    } else if (e.key === "ArrowRight" && col < columns.length - 1) {
       setFocusedCell({ row, col: col + 1 })
+      e.preventDefault()
+    } else if (e.key === "Tab") {
+      if (e.shiftKey) {
+        if (col > 0) setFocusedCell({ row, col: col - 1 })
+        else if (row > 0) setFocusedCell({ row: row - 1, col: columns.length - 1 })
+      } else {
+        if (col < columns.length - 1) setFocusedCell({ row, col: col + 1 })
+        else if (row < items.length - 1) setFocusedCell({ row: row + 1, col: 0 })
+      }
+      e.preventDefault()
+    }
   }
 
   const bulkUpdateMutation = useMutation({
@@ -302,6 +345,10 @@ export const ImportItems = ({
       showSuccessToast("Changes saved.")
       setPendingEdits({})
       queryClient.invalidateQueries({ queryKey: ["stagedItems"] })
+    },
+    onError: (err: any) => {
+      const detail = err?.body?.detail || "Failed to save changes."
+      showErrorToast(detail)
     },
   })
 
@@ -315,6 +362,10 @@ export const ImportItems = ({
       setSelectedIds([])
       queryClient.invalidateQueries({ queryKey: ["stagedItems"] })
     },
+    onError: (err: any) => {
+      const detail = err?.body?.detail || "Failed to start processing."
+      showErrorToast(detail)
+    },
   })
 
   const deleteSelectedMutation = useMutation({
@@ -327,6 +378,10 @@ export const ImportItems = ({
       showSuccessToast(`Deleted ${selectedIds.length} items.`)
       setSelectedIds([])
       queryClient.invalidateQueries({ queryKey: ["stagedItems"] })
+    },
+    onError: (err: any) => {
+      const detail = err?.body?.detail || "Failed to delete items."
+      showErrorToast(detail)
     },
   })
 
@@ -360,12 +415,16 @@ export const ImportItems = ({
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    // Reset so re-uploading the same file triggers onChange again
+    e.target.value = ""
     if (!file) return
     const complete = (results: any) => {
       if (results.data.length > 0) {
         setHeaders(Object.keys(results.data[0]))
         setParsedData(results.data)
         setIsMappingOpen(true)
+      } else {
+        showErrorToast("No data found in file.")
       }
     }
     if (file.name.endsWith(".csv"))
@@ -378,6 +437,38 @@ export const ImportItems = ({
         complete({ data })
       }
       reader.readAsBinaryString(file)
+    }
+  }
+
+  const handleStartStaging = async () => {
+    const chunks: any[][] = []
+    for (let i = 0; i < parsedData.length; i += STAGING_CHUNK_SIZE) {
+      chunks.push(parsedData.slice(i, i + STAGING_CHUNK_SIZE))
+    }
+    setStagingProgress({ current: 0, total: chunks.length, stagedCount: 0 })
+    let totalStaged = 0
+    try {
+      for (let i = 0; i < chunks.length; i++) {
+        const result: any = await ImportsService.stageItems({
+          requestBody: chunks[i],
+          mapping: JSON.stringify(mapping),
+          communityId,
+        })
+        totalStaged += result?.count ?? 0
+        setStagingProgress({
+          current: i + 1,
+          total: chunks.length,
+          stagedCount: totalStaged,
+        })
+      }
+      showSuccessToast(`Staged ${totalStaged} items.`)
+      setIsMappingOpen(false)
+      queryClient.invalidateQueries({ queryKey: ["stagedItems"] })
+    } catch (err: any) {
+      const detail = err?.body?.detail || "Failed to stage items."
+      showErrorToast(detail)
+    } finally {
+      setStagingProgress(null)
     }
   }
 
@@ -396,9 +487,6 @@ export const ImportItems = ({
             <Heading size="md">
               {isArchiveImport ? "Global Archive Import" : "Bulk Import"}
             </Heading>
-            <Text fontSize="sm" color="gray.500">
-              Spreadsheet-style staging area. Use arrows to navigate.
-            </Text>
           </VStack>
           <HStack>
             {hasPendingEdits && (
@@ -412,26 +500,27 @@ export const ImportItems = ({
               </Button>
             )}
             <Button
-              as="label"
               variant="solid"
               colorPalette="accent"
               size="sm"
               cursor="pointer"
+              onClick={() => fileInputRef.current?.click()}
             >
               <Icon as={FaFileImport} mr={2} /> Upload File
-              <input
-                type="file"
-                hidden
-                accept=".csv, .xlsx, .xls"
-                onChange={handleFileChange}
-              />
             </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              hidden
+              accept=".csv, .xlsx, .xls"
+              onChange={handleFileChange}
+            />
           </HStack>
         </HStack>
 
         <DialogRoot
           open={isMappingOpen}
-          onOpenChange={(e) => setIsMappingOpen(e.open)}
+          onOpenChange={(e) => !stagingProgress && setIsMappingOpen(e.open)}
         >
           <DialogContent>
             <DialogHeader>
@@ -449,6 +538,7 @@ export const ImportItems = ({
                       onChange={(e) =>
                         setMapping({ ...mapping, [key]: e.target.value })
                       }
+                      disabled={!!stagingProgress}
                       style={{
                         width: "60%",
                         padding: "8px",
@@ -466,21 +556,53 @@ export const ImportItems = ({
                   </HStack>
                 ))}
               </Stack>
+
+              {stagingProgress && (
+                <Box mt={5}>
+                  <HStack justify="space-between" mb={1}>
+                    <Text fontSize="sm" fontWeight="medium">
+                      Uploading chunk {stagingProgress.current} of{" "}
+                      {stagingProgress.total}
+                    </Text>
+                    <Text fontSize="sm" color="fg.muted">
+                      {stagingProgress.stagedCount} rows staged
+                    </Text>
+                  </HStack>
+                  <Box
+                    w="full"
+                    h="6px"
+                    bg="bg.muted"
+                    borderRadius="full"
+                    overflow="hidden"
+                  >
+                    <Box
+                      h="full"
+                      bg="accent.500"
+                      borderRadius="full"
+                      style={{
+                        width: `${Math.round((stagingProgress.current / stagingProgress.total) * 100)}%`,
+                        transition: "width 0.3s ease",
+                      }}
+                    />
+                  </Box>
+                  <Text fontSize="xs" color="fg.subtle" mt={1}>
+                    {parsedData.length} total rows ·{" "}
+                    {STAGING_CHUNK_SIZE} rows per chunk
+                  </Text>
+                </Box>
+              )}
             </DialogBody>
             <DialogFooter>
               <Button
-                onClick={() => {
-                  ImportsService.stageItems({
-                    requestBody: parsedData,
-                    mapping: JSON.stringify(mapping),
-                    communityId,
-                  }).then(() => {
-                    showSuccessToast("Staged.")
-                    setIsMappingOpen(false)
-                    queryClient.invalidateQueries({ queryKey: ["stagedItems"] })
-                  })
-                }}
+                onClick={handleStartStaging}
                 bg="ui.hover"
+                loading={!!stagingProgress}
+                loadingText={
+                  stagingProgress
+                    ? `Staging ${stagingProgress.current}/${stagingProgress.total}…`
+                    : undefined
+                }
+                disabled={!!stagingProgress}
               >
                 Start Staging
               </Button>
@@ -594,6 +716,29 @@ export const ImportItems = ({
                               onFocus={() =>
                                 setFocusedCell({ row: rIdx, col: cIdx })
                               }
+                              onConfirm={() => {
+                                if (rIdx < items.length - 1)
+                                  setFocusedCell({
+                                    row: rIdx + 1,
+                                    col: cIdx,
+                                  })
+                              }}
+                              onTabNext={(shiftKey) => {
+                                if (!shiftKey) {
+                                  if (cIdx < columns.length - 1)
+                                    setFocusedCell({ row: rIdx, col: cIdx + 1 })
+                                  else if (rIdx < items.length - 1)
+                                    setFocusedCell({ row: rIdx + 1, col: 0 })
+                                } else {
+                                  if (cIdx > 0)
+                                    setFocusedCell({ row: rIdx, col: cIdx - 1 })
+                                  else if (rIdx > 0)
+                                    setFocusedCell({
+                                      row: rIdx - 1,
+                                      col: columns.length - 1,
+                                    })
+                                }
+                              }}
                             />
                           </Table.Cell>
                         ))}

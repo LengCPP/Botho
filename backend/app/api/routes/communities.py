@@ -1210,7 +1210,6 @@ def read_community_items(
                 Loan.status.in_(
                     [
                         LoanStatus.ACTIVE,
-                        LoanStatus.PENDING,
                         LoanStatus.ACCEPTED,
                         LoanStatus.RETURN_PENDING,
                         LoanStatus.EXTENSION_PENDING,
@@ -1856,7 +1855,10 @@ def read_community_loans(
 
     base_stmt = select(Loan).where(Loan.community_id == id)
 
-    if not is_staff:
+    if is_staff:
+        # Staff see all loans except BACKLOGGED (hidden until item returns)
+        base_stmt = base_stmt.where(Loan.status != LoanStatus.BACKLOGGED)
+    else:
         # Members only see their own loans in this community
         base_stmt = base_stmt.where(Loan.requester_id == current_user.id)
 

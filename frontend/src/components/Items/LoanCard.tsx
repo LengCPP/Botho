@@ -12,6 +12,7 @@ import {
 import { Link as RouterLink } from "@tanstack/react-router"
 import { format } from "date-fns"
 import {
+  FiBell,
   FiCheckCircle,
   FiClock,
   FiRepeat,
@@ -54,7 +55,8 @@ export function LoanCard({ loan, type, onReview, onAction }: LoanCardProps) {
   const isExtensionPending = loan.status === "EXTENSION_PENDING"
   const isDefaulted = loan.status === "DEFAULTED"
   const isReturned = loan.status === "RETURNED"
-  const canCancel = isPending || isAccepted
+  const isBacklogged = loan.status === "BACKLOGGED"
+  const canCancel = isPending || isAccepted || isBacklogged
 
   const isSelfRequested =
     type === "incoming" && loan.requester_id === currentUser?.id
@@ -169,10 +171,12 @@ export function LoanCard({ loan, type, onReview, onAction }: LoanCardProps) {
                       : loan.status === "RETURN_PENDING" ||
                           loan.status === "EXTENSION_PENDING"
                         ? "orange"
-                        : "gray"
+                        : loan.status === "BACKLOGGED"
+                          ? "purple"
+                          : "gray"
             }
           >
-            {loan.status.replace("_", " ").toUpperCase()}
+            {loan.status === "BACKLOGGED" ? "ON HOLD" : loan.status.replace("_", " ").toUpperCase()}
           </Badge>
           {restrictionApplies && (
             <Badge colorPalette="gray" variant="subtle" fontSize="2xs">
@@ -284,6 +288,52 @@ export function LoanCard({ loan, type, onReview, onAction }: LoanCardProps) {
           </VStack>
         </Box>
       )}
+
+      {type === "outgoing" && isBacklogged && (
+        <Box
+          mb={4}
+          p={2}
+          bg="purple.subtle"
+          borderWidth="1px"
+          borderColor="purple.muted"
+          borderRadius="md"
+        >
+          <Text fontSize="xs" fontWeight="bold" color="purple.fg">
+            <FiClock style={{ display: "inline", marginRight: 4 }} />
+            Your request is on hold
+          </Text>
+          <Text fontSize="xs" color="fg.muted" mt={1}>
+            This item is currently on loan to someone else. You'll be notified
+            automatically when it becomes available again.
+          </Text>
+        </Box>
+      )}
+
+      {type === "incoming" &&
+        (isActive || isReturnPending) &&
+        (loan as any).interest_signals?.length > 0 && (
+          <Box
+            mb={4}
+            p={2}
+            bg="blue.subtle"
+            borderWidth="1px"
+            borderColor="blue.muted"
+            borderRadius="md"
+          >
+            <Text fontSize="xs" fontWeight="bold" color="blue.fg" mb={1}>
+              <FiBell style={{ display: "inline", marginRight: 4 }} />
+              {(loan as any).interest_signals.length} user(s) waiting for this
+              item
+            </Text>
+            <VStack align="start" gap={0.5}>
+              {(loan as any).interest_signals.map((sig: any) => (
+                <Text key={sig.id} fontSize="xs" color="fg.muted">
+                  • {sig.user?.full_name || sig.user?.email || "A user"}
+                </Text>
+              ))}
+            </VStack>
+          </Box>
+        )}
 
       {isDefaulted && (
         <Box

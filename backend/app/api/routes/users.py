@@ -646,6 +646,22 @@ def read_user_report_card(
         import json
         summary = json.dumps(summary)
 
+    returned_count = session.exec(
+        select(func.count()).select_from(Loan).where(
+            Loan.requester_id == user_id, Loan.status == LoanStatus.RETURNED
+        )
+    ).one()
+
+    total_borrows = session.exec(
+        select(func.count()).select_from(Loan).where(
+            Loan.requester_id == user_id,
+            Loan.status.in_([
+                LoanStatus.RETURNED, LoanStatus.ACTIVE,
+                LoanStatus.RETURN_PENDING, LoanStatus.DEFAULTED
+            ])
+        )
+    ).one()
+
     return UserReportCardPublic(
         user=filter_user_privacy(user, current_user.id, is_admin=current_user.is_superuser),
         reviews=reviews,
@@ -655,6 +671,8 @@ def read_user_report_card(
             is_delinquent=user.is_delinquent,
             ai_honor_summary=summary,
             ai_improvement_tips=user.ai_improvement_tips or [],
-            review_count=len(user.reviews_received)
+            review_count=len(user.reviews_received),
+            returned_count=returned_count,
+            total_borrows=total_borrows,
         )
     )

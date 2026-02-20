@@ -30,6 +30,8 @@ import type React from "react"
 import { useState } from "react"
 import {
   FiArrowLeft,
+  FiBell,
+  FiBellOff,
   FiBookOpen,
   FiBookmark,
   FiCheck,
@@ -234,6 +236,37 @@ const ItemCard = ({
 
   const isBook = item.item_type === "book"
 
+  const { data: myInterestSignals } = useQuery({
+    queryKey: ["my-interest-signals"],
+    queryFn: () => LoansService.getMyInterestSignals({}),
+    enabled: !!user,
+  })
+  const hasInterestSignal = myInterestSignals?.data?.some(
+    (s: { id: string; item_id: string }) => s.item_id === item.id,
+  )
+
+  const signalInterestMutation = useMutation({
+    mutationFn: () => LoansService.signalItemInterest({ itemId: item.id }),
+    onSuccess: () => {
+      showSuccessToast("Interest signaled!")
+      queryClient.invalidateQueries({ queryKey: ["my-interest-signals"] })
+    },
+    onError: (err: any) => {
+      showErrorToast(err.body?.detail || "Failed to signal interest")
+    },
+  })
+
+  const cancelInterestMutation = useMutation({
+    mutationFn: () => LoansService.cancelItemInterest({ itemId: item.id }),
+    onSuccess: () => {
+      showSuccessToast("Interest removed.")
+      queryClient.invalidateQueries({ queryKey: ["my-interest-signals"] })
+    },
+    onError: (err: any) => {
+      showErrorToast(err.body?.detail || "Failed to remove interest signal")
+    },
+  })
+
   const { data: community } = useQuery({
     queryKey: ["community", communityId],
     queryFn: () => CommunitiesService.readCommunity({ id: communityId! }),
@@ -307,19 +340,56 @@ const ItemCard = ({
       )
     }
 
+    // Item available
+    if (item.is_available) {
+      return (
+        <Button
+          size="xs"
+          width="full"
+          colorPalette="accent"
+          onClick={(e) => {
+            e.stopPropagation()
+            onLoanRequest?.(item)
+          }}
+        >
+          <FiBookOpen /> Request Loan
+        </Button>
+      )
+    }
+
+    // Item on loan — already signaled interest
+    if (hasInterestSignal) {
+      return (
+        <Button
+          size="xs"
+          width="full"
+          colorPalette="gray"
+          variant="subtle"
+          onClick={(e) => {
+            e.stopPropagation()
+            cancelInterestMutation.mutate()
+          }}
+          loading={cancelInterestMutation.isPending}
+        >
+          <FiBell /> Interest Signaled ✓
+        </Button>
+      )
+    }
+
+    // Item on loan — can signal interest
     return (
       <Button
         size="xs"
         width="full"
-        colorPalette="accent"
+        colorPalette="orange"
+        variant="outline"
         onClick={(e) => {
           e.stopPropagation()
-          onLoanRequest?.(item)
+          signalInterestMutation.mutate()
         }}
-        disabled={!item.is_available}
+        loading={signalInterestMutation.isPending}
       >
-        <FiBookOpen />
-        {item.is_available ? "Request Loan" : "On Loan"}
+        <FiBellOff /> Signal Interest
       </Button>
     )
   }
@@ -534,6 +604,8 @@ const ItemCard = ({
             bg={bgColor}
             color={textColor}
             borderColor={borderColor}
+            opacity={!item.is_available && !isOwner ? 0.75 : 1}
+            filter={!item.is_available && !isOwner ? "grayscale(30%)" : "none"}
           >
             <Card.Body
               p={4}
