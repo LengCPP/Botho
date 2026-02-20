@@ -915,6 +915,50 @@ def read_community_item_facets(
                 }
             )
 
+    elif group_by == "ownership":
+        count_stmt = select(func.count(func.distinct(Item.owner_id))).where(base_filter)
+        if q:
+            count_stmt = count_stmt.outerjoin(User, User.id == Item.owner_id).where(
+                or_(User.full_name.ilike(f"%{q}%"), User.email.ilike(f"%{q}%"))
+            )
+        total_count = session.exec(count_stmt).one()
+
+        stmt = (
+            select(
+                Item.owner_id,
+                User.full_name,
+                User.email,
+                func.count(Item.id).label("count"),
+                func.array_agg(Item.image_url).label("sample_images"),
+            )
+            .outerjoin(User, User.id == Item.owner_id)
+            .where(base_filter)
+        )
+        if q:
+            stmt = stmt.where(
+                or_(User.full_name.ilike(f"%{q}%"), User.email.ilike(f"%{q}%"))
+            )
+        stmt = (
+            stmt.group_by(Item.owner_id, User.full_name, User.email)
+            .order_by(User.full_name.asc())
+            .offset(skip)
+            .limit(limit)
+        )
+
+        rows = session.exec(stmt).all()
+        for owner_id_val, full_name, email, count, imgs in rows:
+            valid_imgs = [img for img in (imgs or []) if img][:5]
+            if str(owner_id_val) == str(id):
+                display_name = "Community Library"
+            else:
+                display_name = full_name or email or "Unknown Member"
+            results.append({
+                "name": display_name,
+                "owner_id": str(owner_id_val),
+                "count": count,
+                "sample_images": valid_imgs,
+            })
+
     elif group_by == "subject":
         # 1. Tags query
         tags_expr = func.json_array_elements_text(WorkMetadata.tags)
@@ -1001,6 +1045,7 @@ def read_community_items(
     subject: str | None = None,
     author: str | None = None,
     item_type: str | None = None,
+    owner_filter: uuid.UUID | None = None,
     q: str | None = None,
 ) -> Any:
     """
@@ -1038,9 +1083,9 @@ def read_community_items(
             # Filter: item belongs to community (owned or pooled), exclude private/lost
             filters = [f'(owner_id = "{id}" OR pooled_in = "{id}")', "is_private = false", "is_lost = false"]
 
-            if category:
+            if category and category != "Others":
                 filters.append(f'category = "{category}"')
-            if genre:
+            if genre and genre != "Others":
                 filters.append(f'genre = "{genre}"')
             if subject:
                 filters.append(f'subject = "{subject}"')
@@ -1130,9 +1175,19 @@ def read_community_items(
 
         # Basic SQL filtering
         if category:
-            statement = statement.where(Item.category == category)
+            if category == "Others":
+                statement = statement.where(
+                    or_(Item.category.is_(None), Item.category == "")
+                )
+            else:
+                statement = statement.where(Item.category == category)
         if genre:
-            statement = statement.where(Item.genre == genre)
+            if genre == "Others":
+                statement = statement.where(
+                    or_(Item.genre.is_(None), Item.genre == "")
+                )
+            else:
+                statement = statement.where(Item.genre == genre)
         if subject:
             if subject == "Others":
                 statement = statement.join(
@@ -1158,6 +1213,8 @@ def read_community_items(
                 )
         if author:
             statement = statement.where(col(Item.author).ilike(f"%{author}%"))
+        if owner_filter:
+            statement = statement.where(Item.owner_id == owner_filter)
         if item_type:
             statement = statement.where(Item.item_type == item_type)
 
@@ -1644,7 +1701,7 @@ async def create_community_announcement(
         CommunityMember.role.in_(
             [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]
         ),
-        CommunityMemberStatus.ACCEPTED,
+        CommunityMember.status == CommunityMemberStatus.ACCEPTED,
     )
     membership = session.exec(statement).first()
     if not membership and not current_user.is_superuser:

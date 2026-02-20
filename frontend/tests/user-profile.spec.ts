@@ -56,27 +56,17 @@ test.describe("User Profile Features", () => {
       },
     })
 
-    // 4. Establish Friendship (Admin setup)
-    // We assume the admin is the one running the tests (from global setup)
-    await request.post("/api/v1/friends/request", {
-      data: { friend_id: targetUser.id },
-    })
-    // Accept as User B
-    await request.post("/api/v1/friends/accept", {
-      headers: userBHeaders,
-      data: { friend_id: process.env.FIRST_SUPERUSER_ID || "" }, // Need to find admin id or just accept all incoming
-    })
+    // 4. Establish Friendship (Admin sends request, User B accepts)
+    await request.post(`/api/v1/friends/request/${targetUser.id}`, {})
 
-    // Actually, it's easier to just make them friends via DB or direct API calls if IDs are known.
-    // Let's use the friend request flow. User B accepts.
+    // Accept as User B using incoming request ID
     const incomingRes = await request.get("/api/v1/friends/requests", {
       headers: userBHeaders,
     })
     const incoming = await incomingRes.json()
-    if (incoming.data.length > 0) {
-      await request.post("/api/v1/friends/accept", {
+    if (incoming.data && incoming.data.length > 0) {
+      await request.post(`/api/v1/friends/accept/${incoming.data[0].id}`, {
         headers: userBHeaders,
-        data: { friend_id: incoming.data[0].id },
       })
     }
   })
@@ -87,11 +77,8 @@ test.describe("User Profile Features", () => {
     await page.goto(`/users/${targetUser.id}`)
 
     // 1. Verify Default Item View (Flat List)
-    // We expect "Items (1)" or similar heading
-    await expect(
-      page.getByRole("heading", { name: /Items \(\d+\)/ }),
-    ).toBeVisible()
-    await expect(page.getByText("Dune")).toBeVisible()
+    // ItemsBrowser shows "Items" or "Books" heading (no count in heading)
+    await expect(page.getByText("Dune")).toBeVisible({ timeout: 15000 })
 
     // 2. Verify Smart Grouping (Subject View)
     // Click "Collection View" toggle button (FaFolder icon)

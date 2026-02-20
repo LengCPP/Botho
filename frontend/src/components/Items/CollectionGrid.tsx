@@ -7,12 +7,13 @@ export interface CollectionItem {
   item_type?: string
   sample_images?: string[]
   sample_image?: string | null
+  owner_id?: string
 }
 
 interface CollectionGridProps {
   items: CollectionItem[]
   type: string
-  onOpen: (name: string, itemType?: string) => void
+  onOpen: (name: string, itemType?: string, ownerId?: string) => void
 }
 
 export function CollectionGrid({ items, type, onOpen }: CollectionGridProps) {
@@ -27,7 +28,7 @@ export function CollectionGrid({ items, type, onOpen }: CollectionGridProps) {
           count={item.count}
           sample_image={item.sample_image}
           sample_images={item.sample_images}
-          onOpen={() => onOpen(item.name, item.item_type)}
+          onOpen={() => onOpen(item.name, item.item_type, item.owner_id)}
         />
       ))}
     </SimpleGrid>

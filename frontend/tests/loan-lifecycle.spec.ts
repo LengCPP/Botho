@@ -110,7 +110,7 @@ test.describe("Loan Lifecycle", () => {
       .locator("div")
       .filter({ hasText: itemToLoan.title })
       .filter({ hasText: /PENDING|ACCEPTED|ACTIVE|RETURN/ })
-      .last()
+      .first()
     await expect(loanCard).toBeVisible({ timeout: 15000 })
     await expect(loanCard).toContainText("PENDING")
 
@@ -127,7 +127,6 @@ test.describe("Loan Lifecycle", () => {
 
     // --- Phase 4: Owner sees loan is ACTIVE ---
     await page.reload()
-    await page.getByRole("tab", { name: /Incoming/i }).click()
     await expect(loanCard).toContainText("ACTIVE")
 
     // --- Phase 5: Borrower signals return (via API) ---
@@ -137,8 +136,7 @@ test.describe("Loan Lifecycle", () => {
 
     // --- Phase 6: Owner confirms return in UI ---
     await page.reload()
-    await page.getByRole("tab", { name: /Incoming/i }).click()
-    await expect(loanCard).toContainText("RETURN_PENDING")
+    await expect(loanCard).toContainText("RETURN PENDING")
 
     await loanCard.getByRole("button", { name: "Confirm Return" }).click()
     await expect(loanCard).toContainText("RETURNED")

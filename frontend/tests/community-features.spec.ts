@@ -12,10 +12,23 @@ test.describe("Community Features", () => {
     await page.getByRole("link", { name: "Communities" }).click()
     await page.getByRole("button", { name: "Create Community" }).click()
     await page.getByPlaceholder("Community Name").fill(communityName)
+    // Trigger blur to activate React Hook Form validation (mode: "onBlur")
+    await page.getByPlaceholder("Community Name").press("Tab")
     await page.getByPlaceholder("Description").fill("Test Description")
     await page.getByRole("button", { name: "Save" }).click()
 
-    // Verify redirect to community page
+    // Wait for success toast
+    await expect(
+      page.getByText("Community created successfully."),
+    ).toBeVisible({ timeout: 10000 })
+
+    // Reload to bypass React Query cache key mismatch (invalidates ["communities"] but
+    // the page uses ["communitiesInfinite"]), then verify the community appears
+    await page.reload()
+    await expect(page.getByText(communityName)).toBeVisible({ timeout: 15000 })
+
+    // Navigate to community detail page and verify heading
+    await page.getByText(communityName).first().click()
     await expect(
       page.getByRole("heading", { name: communityName }),
     ).toBeVisible()

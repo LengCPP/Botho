@@ -57,7 +57,8 @@ interface ItemsBrowserProps {
   onChangeQ: (v: string) => void
   onChangeCategory: (v: string | undefined) => void
   onChangeGenre: (v: string | undefined) => void
-  onOpenCollection: (name: string, itemType?: string) => void
+  onOpenCollection: (name: string, itemType?: string, ownerId?: string) => void
+  ownerFilter?: string
   onClearDrilldown: () => void
   onFetchNextItems: () => void
   onFetchNextFacets: () => void
@@ -112,6 +113,7 @@ export function ItemsBrowser({
   onClearDrilldown,
   onFetchNextItems,
   onFetchNextFacets,
+  ownerFilter,
   communityId,
   isAdmin,
   displayOwnerId,
@@ -127,7 +129,7 @@ export function ItemsBrowser({
 
   const isDrillDown =
     displayType === "collections"
-      ? !!(subject || author || genre || category)
+      ? !!(subject || author || genre || category || ownerFilter)
       : !!(subject || author)
 
   const isItemsMode = displayType === "items" || isDrillDown
@@ -136,6 +138,7 @@ export function ItemsBrowser({
   const currentFilterValue = subject || author || genre || category || ""
 
   const getDrilldownHeading = () => {
+    if (organizeBy === "ownership") return `Contributor's ${itemTypeLabel}`
     const isOthers = currentFilterValue?.toLowerCase() === "others"
     if (isOthers) {
       if (organizeBy === "author") return `${itemTypeLabel} by unknown authors`

@@ -51,6 +51,11 @@ test.describe("Dashboard Quick Search", () => {
     // It navigates to /items?q=... or similar
     await expect(page).toHaveURL(/\/items/)
 
+    // Items page defaults to "collections" view; force "items" view to see individual cards
+    const currentUrl = new URL(page.url())
+    currentUrl.searchParams.set("display_type", "items")
+    await page.goto(currentUrl.toString())
+
     // Wait for loading to finish
     await expect(page.locator(".chakra-skeleton")).not.toBeVisible({
       timeout: 30000,

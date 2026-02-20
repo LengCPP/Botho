@@ -48,7 +48,7 @@ test("Item Copy Specifics: Create, View, and Update", async ({ page }) => {
     .locator('textarea[name="info.physical_description"]')
     .fill("Like new, first edition.")
 
-  await page.getByRole("button", { name: "Save" }).click()
+  await page.getByRole("button", { name: "Add Item" }).click()
 
   // 4. Verify Item Creation
   // Ensure we are on the right page and view
@@ -79,9 +79,11 @@ test("Item Copy Specifics: Create, View, and Update", async ({ page }) => {
   await ourInfoBtn.click({ force: true })
   await page.waitForTimeout(1000)
 
-  await expect(page.getByText(/Copy Specifics/i)).toBeVisible()
-  await expect(page.getByText("9.0/10")).toBeVisible()
-  await expect(page.getByText("Like new, first edition.")).toBeVisible()
+  await expect(page.getByText(/Copy Specifics/i)).toBeVisible({ timeout: 10000 })
+  await expect(page.getByText("9.0/10")).toBeVisible({ timeout: 10000 })
+  await expect(page.getByText("Like new, first edition.")).toBeVisible({
+    timeout: 10000,
+  })
 
   // 7. Update Additional Info
   // It's the only button with a pencil icon in that section

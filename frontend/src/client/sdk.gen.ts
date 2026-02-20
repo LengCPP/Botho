@@ -356,6 +356,7 @@ export class CommunitiesService {
                 genre: data.genre,
                 subject: data.subject,
                 author: data.author,
+                owner_filter: data.ownerFilter,
                 q: data.q
             },
             errors: {
@@ -363,7 +364,7 @@ export class CommunitiesService {
             }
         });
     }
-    
+
     /**
      * Add Item To Community
      * Add an item to a community pool (Any member).

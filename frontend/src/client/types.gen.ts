@@ -711,6 +711,7 @@ export type CommunitiesReadCommunityItemsData = {
     genre?: (string | null);
     id: string;
     limit?: number;
+    ownerFilter?: (string | null);
     q?: (string | null);
     skip?: number;
     sortBy?: string;

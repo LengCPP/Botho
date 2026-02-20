@@ -69,6 +69,8 @@ export function GroupCard({
         return isBook ? "In this Genre" : "Genre Collection"
       case "category":
         return isBook ? "In this Category" : "Category Collection"
+      case "ownership":
+        return "Contributor's Collection"
       default:
         return `${type.toUpperCase()} COLLECTION`
     }

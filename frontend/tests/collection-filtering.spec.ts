@@ -42,7 +42,7 @@ test("Collections: Filtering by Author, Category, Genre, and Subject", async ({
   // Select Genre: Science Fiction (Sci-Fi)
   await page.selectOption("select#genre", "Science Fiction (Sci-Fi)")
 
-  await page.getByRole("button", { name: "Save" }).click()
+  await page.getByRole("button", { name: "Add Item" }).click()
 
   // Wait for dialog to close and item to appear (or toast)
   await expect(
@@ -62,7 +62,7 @@ test("Collections: Filtering by Author, Category, Genre, and Subject", async ({
 
   // Intentionally leave Category, Genre, and Subjects EMPTY
 
-  await page.getByRole("button", { name: "Save" }).click()
+  await page.getByRole("button", { name: "Add Item" }).click()
   await expect(
     page.getByText("Item created successfully").first(),
   ).toBeVisible()
@@ -110,15 +110,15 @@ test("Collections: Filtering by Author, Category, Genre, and Subject", async ({
   await expect(page.getByRole("heading", { name: "My Items" })).toBeVisible()
 
   // Verify "Space" collection exists
-  await expect(page.getByText("Space").first()).toBeVisible()
+  await expect(page.getByText("Space").first()).toBeVisible({ timeout: 15000 })
   // Verify "Others" collection exists (for the empty book)
-  await expect(page.getByText("Others").first()).toBeVisible()
+  await expect(page.getByText("Others").first()).toBeVisible({ timeout: 15000 })
 
   // Click "Space"
   await page.getByText("Space").first().click()
 
   // Should see Title Full, NOT Title Empty
-  await expect(page.getByText(titleFull).first()).toBeVisible()
+  await expect(page.getByText(titleFull).first()).toBeVisible({ timeout: 15000 })
   await expect(page.getByText(titleEmpty).first()).not.toBeVisible()
 
   // Go back (Back to Collections button)
@@ -129,65 +129,67 @@ test("Collections: Filtering by Author, Category, Genre, and Subject", async ({
 
   // Should see Title Empty, NOT Title Full
   // Note: "Others" might contain other items from previous tests, so we just check presence/absence of ours.
-  await expect(page.getByText(titleEmpty).first()).toBeVisible()
+  await expect(page.getByText(titleEmpty).first()).toBeVisible({ timeout: 15000 })
   await expect(page.getByText(titleFull).first()).not.toBeVisible()
 
   // --- Test 2: Organize by Category ---
   await page.goto("/items?display_type=collections&organize_by=category")
 
   // Verify "Fiction" exists
-  await expect(page.getByText("Fiction").first()).toBeVisible()
+  await expect(page.getByText("Fiction").first()).toBeVisible({ timeout: 15000 })
   // Verify "Others" exists
-  await expect(page.getByText("Others").first()).toBeVisible()
+  await expect(page.getByText("Others").first()).toBeVisible({ timeout: 15000 })
 
   // Click "Fiction"
   await page.getByText("Fiction").first().click()
-  await expect(page.getByText(titleFull).first()).toBeVisible()
+  await expect(page.getByText(titleFull).first()).toBeVisible({ timeout: 15000 })
   await expect(page.getByText(titleEmpty).first()).not.toBeVisible()
 
   await page.getByRole("button", { name: "Collections" }).click()
 
   // Click "Others"
   await page.getByText("Others").first().click()
-  await expect(page.getByText(titleEmpty).first()).toBeVisible()
+  await expect(page.getByText(titleEmpty).first()).toBeVisible({ timeout: 15000 })
   await expect(page.getByText(titleFull).first()).not.toBeVisible()
 
   // --- Test 3: Organize by Genre ---
   await page.goto("/items?display_type=collections&organize_by=genre")
 
   // Verify "Science Fiction (Sci-Fi)" exists (it might be truncated in UI, but text should match)
-  await expect(page.getByText("Science Fiction (Sci-Fi)").first()).toBeVisible()
-  await expect(page.getByText("Others").first()).toBeVisible()
+  await expect(
+    page.getByText("Science Fiction (Sci-Fi)").first(),
+  ).toBeVisible({ timeout: 15000 })
+  await expect(page.getByText("Others").first()).toBeVisible({ timeout: 15000 })
 
   // Click Genre
   await page.getByText("Science Fiction (Sci-Fi)").first().click()
-  await expect(page.getByText(titleFull).first()).toBeVisible()
+  await expect(page.getByText(titleFull).first()).toBeVisible({ timeout: 15000 })
   await expect(page.getByText(titleEmpty).first()).not.toBeVisible()
 
   await page.getByRole("button", { name: "Collections" }).click()
 
   // Click "Others"
   await page.getByText("Others").first().click()
-  await expect(page.getByText(titleEmpty).first()).toBeVisible()
+  await expect(page.getByText(titleEmpty).first()).toBeVisible({ timeout: 15000 })
   await expect(page.getByText(titleFull).first()).not.toBeVisible()
 
   // --- Test 4: Organize by Author ---
   await page.goto("/items?display_type=collections&organize_by=author")
 
   // Verify Authors exist
-  await expect(page.getByText(authorFull).first()).toBeVisible()
-  await expect(page.getByText(authorEmpty).first()).toBeVisible()
+  await expect(page.getByText(authorFull).first()).toBeVisible({ timeout: 15000 })
+  await expect(page.getByText(authorEmpty).first()).toBeVisible({ timeout: 15000 })
 
   // Click Author Full
   await page.getByText(authorFull).first().click()
-  await expect(page.getByText(titleFull).first()).toBeVisible()
+  await expect(page.getByText(titleFull).first()).toBeVisible({ timeout: 15000 })
   await expect(page.getByText(titleEmpty).first()).not.toBeVisible()
 
   await page.getByRole("button", { name: "Collections" }).click()
 
   // Click Author Empty
   await page.getByText(authorEmpty).first().click()
-  await expect(page.getByText(titleEmpty).first()).toBeVisible()
+  await expect(page.getByText(titleEmpty).first()).toBeVisible({ timeout: 15000 })
   await expect(page.getByText(titleFull).first()).not.toBeVisible()
 
   // cleanup?

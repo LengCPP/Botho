@@ -11,7 +11,7 @@ test.describe("Item Import Feature", () => {
 
   test("Verify import UI and file upload", async ({ page }) => {
     await expect(
-      page.getByRole("heading", { name: "Import to Global Archive" }),
+      page.getByRole("heading", { name: "Global Archive Import" }),
     ).toBeVisible()
 
     // Upload file

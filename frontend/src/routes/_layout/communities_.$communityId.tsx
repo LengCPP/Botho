@@ -124,6 +124,7 @@ const searchSchema = z.object({
     ),
   subject: z.string().optional(),
   author: z.string().optional(),
+  owner_filter: z.string().optional(),
   item_type: z.string().optional(),
   organize_by: z
     .enum(["subject", "genre", "category", "author", "ownership"])
@@ -158,6 +159,7 @@ function CommunityBoard() {
     display_type,
     subject,
     author,
+    owner_filter,
     item_type,
     organize_by,
   } = Route.useSearch()
@@ -189,7 +191,7 @@ function CommunityBoard() {
   } | null>(null)
 
   // Derived state
-  const isFiltered = !!subject || !!author || !!category || !!genre
+  const isFiltered = !!subject || !!author || !!category || !!genre || !!owner_filter
 
   // ========================================================================
   // EFFECTS
@@ -225,13 +227,14 @@ function CommunityBoard() {
     [navigate],
   )
 
-  const handleOrganizeClick = (name: string, iType?: string) =>
+  const handleOrganizeClick = (name: string, iType?: string, ownerId?: string) =>
     updateSearch({
       item_type: iType,
       author: organize_by === "author" ? name : undefined,
       genre: organize_by === "genre" ? name : undefined,
       category: organize_by === "category" ? name : undefined,
       subject: organize_by === "subject" ? name : undefined,
+      owner_filter: organize_by === "ownership" ? ownerId : undefined,
     })
 
   // ========================================================================
@@ -301,7 +304,7 @@ function CommunityBoard() {
     queryKey: [
       "communityItemsInfinite",
       cId,
-      { sort_by, sort_order, limit, category, genre, author, item_type, q: qP },
+      { sort_by, sort_order, limit, category, genre, author, owner_filter, item_type, q: qP },
     ],
     queryFn: ({ pageParam = 0 }) =>
       CommunitiesService.readCommunityItems({
@@ -313,6 +316,7 @@ function CommunityBoard() {
         category,
         genre,
         author,
+        ownerFilter: owner_filter,
         itemType: item_type,
         q: qP,
         excludeLost: true,
@@ -977,6 +981,7 @@ function CommunityBoard() {
                   genre={genre}
                   subject={subject}
                   author={author}
+                  ownerFilter={owner_filter}
                   itemType={item_type}
                   items={groupItems(allItems as any)}
                   facets={allCollections}
@@ -1002,6 +1007,7 @@ function CommunityBoard() {
                     updateSearch({
                       organize_by: v,
                       subject: undefined,
+                      owner_filter: undefined,
                       item_type: undefined,
                     })
                   }
@@ -1020,6 +1026,7 @@ function CommunityBoard() {
                       author: undefined,
                       genre: undefined,
                       category: undefined,
+                      owner_filter: undefined,
                       item_type: undefined,
                     })
                   }

@@ -14,6 +14,7 @@ from app.api.utils import (
     fetch_external_book_metadata,
     map_book_classification,
     normalize_isbn,
+    rebuild_collection_index_task,
 )
 from app.api.websocket_manager import notification_manager
 from app.core.db import engine
@@ -101,23 +102,26 @@ def clean_staged_items(*, session: SessionDep, current_user: CurrentUser, commun
     session.commit()
     return Message(message=f"Deleted {len(items)}")
 
-async def notify_import_finished(owner_id: uuid.UUID, type: str = "IMPORT_BATCH_COMPLETED"):
+async def notify_import_finished(owner_id: uuid.UUID, comm_id: uuid.UUID | None = None, type: str = "IMPORT_BATCH_COMPLETED"):
     from app.search import reindex_all_data
     with Session(engine) as session:
         reindex_all_data(session)
+    rebuild_collection_index_task(owner_id)
+    if comm_id:
+        rebuild_collection_index_task(comm_id)
     await notification_manager.send_personal_message({"type": type, "status": "COMPLETED"}, owner_id)
 
 @router.post("/process")
 async def process_staged_items(*, session: SessionDep, current_user: CurrentUser, background_tasks: BackgroundTasks, ids: list[uuid.UUID], community_id: uuid.UUID | None = None) -> Any:
     for i in ids: background_tasks.add_task(enrich_and_import_item, i, current_user.id, community_id)
-    background_tasks.add_task(notify_import_finished, current_user.id)
+    background_tasks.add_task(notify_import_finished, current_user.id, community_id)
     return {"message": "Queued"}
 
 @router.post("/process-all")
 async def process_all_staged_items(*, session: SessionDep, current_user: CurrentUser, background_tasks: BackgroundTasks, community_id: uuid.UUID | None = None) -> Any:
     items = session.exec(select(StagedItem).where(StagedItem.owner_id == current_user.id, StagedItem.status == StagedItemStatus.PENDING, StagedItem.community_id == community_id if community_id else StagedItem.community_id == None)).all()
     for i in items: background_tasks.add_task(enrich_and_import_item, i.id, current_user.id, community_id)
-    background_tasks.add_task(notify_import_finished, current_user.id)
+    background_tasks.add_task(notify_import_finished, current_user.id, community_id)
     return {"message": f"Queued {len(items)}"}
 
 @router.post("/sync-archive")
