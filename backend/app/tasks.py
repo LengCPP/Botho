@@ -1,54 +1,58 @@
 import asyncio
+import logging
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import update
 from sqlmodel import Session, select
 
+from app.core.config import settings
 from app.core.db import engine
 from app.models import Loan, LoanStatus, User
+
+logger = logging.getLogger(__name__)
 
 
 async def check_overdue_loans():
     """
     Background task to flag users with overdue loans.
-    Runs periodically.
+    Runs every hour. Uses bulk UPDATE statements to avoid N+1 queries.
     """
     while True:
-        print("Checking for overdue loans...")
-        with Session(engine) as session:
-            now = datetime.now(timezone.utc)
+        logger.info("Checking for overdue loans...")
+        try:
+            with Session(engine) as session:
+                now = datetime.now(timezone.utc)
+                cutoff = now - timedelta(days=settings.LOAN_OVERDUE_GRACE_DAYS)
 
-            # Find all active loans past their end_date
-            statement = select(Loan).where(
-                Loan.status == LoanStatus.ACTIVE,
-                Loan.end_date < now - timedelta(days=7) # 7 day grace period
-            )
-            overdue_loans = session.exec(statement).all()
+                # Subquery: distinct requester IDs with currently overdue active loans
+                overdue_user_ids = select(Loan.requester_id).where(
+                    Loan.status == LoanStatus.ACTIVE,
+                    Loan.end_date < cutoff,
+                )
 
-            for loan in overdue_loans:
-                borrower = session.get(User, loan.requester_id)
-                if borrower and not borrower.is_delinquent:
-                    borrower.is_delinquent = True
-                    session.add(borrower)
+                # Bulk-set is_delinquent = True for all overdue borrowers
+                session.execute(
+                    update(User)
+                    .where(User.id.in_(overdue_user_ids))
+                    .values(is_delinquent=True)
+                )
 
-            # Also clear flags for users who no longer have overdue items
-            # (In a more optimized version, this would be triggered by return)
-            # For now, we simple check all delinquent users
-            delinquent_stmt = select(User).where(User.is_delinquent)
-            delinquent_users = session.exec(delinquent_stmt).all()
-
-            for user in delinquent_users:
-                active_overdue = session.exec(
-                    select(Loan).where(
-                        Loan.requester_id == user.id,
-                        Loan.status == LoanStatus.ACTIVE,
-                        Loan.end_date < now - timedelta(days=7)
+                # Bulk-clear is_delinquent for users who no longer have overdue loans
+                session.execute(
+                    update(User)
+                    .where(
+                        User.is_delinquent == True,
+                        ~User.id.in_(overdue_user_ids),
                     )
-                ).first()
-                if not active_overdue:
-                    user.is_delinquent = False
-                    session.add(user)
+                    .values(is_delinquent=False)
+                )
 
-            session.commit()
+                session.commit()
+        except Exception:
+            logger.exception("Error in overdue loan check")
 
-        # Sleep for 1 hour before next check
-        await asyncio.sleep(3600)
+        try:
+            await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            logger.info("Overdue loan checker shutting down")
+            return

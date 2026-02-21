@@ -8,6 +8,9 @@ from sqlmodel import Session, and_, func, or_, select
 from app.models import (
     Community,
     CommunityItem,
+    CommunityMember,
+    CommunityMemberRole,
+    CommunityMemberStatus,
     Friendship,
     FriendshipStatus,
     Item,
@@ -1070,3 +1073,17 @@ def map_book_classification(raw_values: str | list[str] | None) -> tuple[str | N
         
     first_val = candidates[0] if candidates else None
     return None, None, str(first_val) if first_val else None
+
+
+def get_community_admin_count(session: Session, community_id: uuid.UUID) -> int:
+    """Get the number of accepted admins in a community."""
+    statement = (
+        select(func.count())
+        .select_from(CommunityMember)
+        .where(
+            CommunityMember.community_id == community_id,
+            CommunityMember.role == CommunityMemberRole.ADMIN,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+        )
+    )
+    return session.exec(statement).one()

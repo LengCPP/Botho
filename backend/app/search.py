@@ -1,6 +1,7 @@
 import uuid
 
 import meilisearch
+from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
 from app.core.config import settings
@@ -107,11 +108,9 @@ def reindex_all_data(session: Session) -> None:
     """Reindex all data into Meilisearch. Superuser only trigger."""
     configure_search()
 
-    # 1. Reindex Items
-    items = session.exec(select(Item)).all()
+    # 1. Reindex Items — eager-load communities to avoid N+1 lazy loads
+    items = session.exec(select(Item).options(selectinload(Item.communities))).all()
     for item in items:
-        # Trigger loading of communities relationship
-        _ = item.communities
         sync_item_to_search(item)
 
     # 2. Reindex Communities

@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 from sqlmodel import and_, func, or_, select
 
 from app.api.deps import CurrentUser, SessionDep
-from app.api.utils import check_item_availability, filter_loan_privacy
+from app.api.utils import check_item_availability, filter_loan_privacy, get_community_admin_count
 from app.models import (
     Community,
     CommunityItem,
@@ -35,20 +35,33 @@ from app.utils import generate_loan_reminder_email, send_email
 router = APIRouter(prefix="/loans", tags=["loans"])
 
 
-def get_community_admin_count(session: SessionDep, community_id: uuid.UUID) -> int:
-    """
-    Get the number of admins in a community.
-    """
-    statement = (
-        select(func.count())
-        .select_from(CommunityMember)
-        .where(
+async def _notify_community_admins(
+    session: SessionDep,
+    community_id: uuid.UUID,
+    title: str,
+    message: str,
+    notif_type: NotificationType = NotificationType.INFO,
+    link: str | None = None,
+    exclude_user_id: uuid.UUID | None = None,
+) -> None:
+    """Notify all ADMIN members of a community."""
+    admins = session.exec(
+        select(CommunityMember).where(
             CommunityMember.community_id == community_id,
             CommunityMember.role == CommunityMemberRole.ADMIN,
-            CommunityMember.status == CommunityMemberStatus.ACCEPTED
         )
-    )
-    return session.exec(statement).one()
+    ).all()
+    for admin in admins:
+        if exclude_user_id and admin.user_id == exclude_user_id:
+            continue
+        await notify_user(
+            session=session,
+            recipient_id=admin.user_id,
+            title=title,
+            message=message,
+            type=notif_type,
+            link=link,
+        )
 
 
 @router.post("/request", response_model=LoanPublic)
@@ -173,22 +186,14 @@ async def create_loan_request(
     if community_id and not owner_id:
         # Notify all admins of the community (Community-owned item)
         community = session.get(Community, community_id)
-        admin_statement = select(CommunityMember).where(
-            CommunityMember.community_id == community_id,
-            CommunityMember.role == CommunityMemberRole.ADMIN
+        await _notify_community_admins(
+            session=session,
+            community_id=community_id,
+            title="New Community Loan Request",
+            message=f"{current_user.full_name or current_user.email} wants to borrow '{item.title}' from {community.name}.",
+            link=f"/communities/{community_id}?tab=loans",
+            exclude_user_id=current_user.id,
         )
-        admins = session.exec(admin_statement).all()
-        for admin in admins:
-            if admin.user_id == current_user.id:
-                continue
-            await notify_user(
-                session=session,
-                recipient_id=admin.user_id,
-                title="New Community Loan Request",
-                message=f"{current_user.full_name or current_user.email} wants to borrow '{item.title}' from {community.name}.",
-                type=NotificationType.INFO,
-                link=f"/communities/{community_id}?tab=loans"
-            )
     elif owner_id:
         # Notify single owner (Personal or Pooled item)
         # Even if community_id is present, if owner_id exists, it's a personal loan
@@ -429,20 +434,14 @@ async def cancel_loan(
                 link="/loans"
             )
         elif loan.community_id:
-            admin_statement = select(CommunityMember).where(
-                CommunityMember.community_id == loan.community_id,
-                CommunityMember.role == CommunityMemberRole.ADMIN
+            await _notify_community_admins(
+                session=session,
+                community_id=loan.community_id,
+                title="Loan Request Cancelled",
+                message=f"{current_user.full_name or current_user.email} has cancelled their request for '{loan.item.title}'.",
+                notif_type=NotificationType.WARNING,
+                link=f"/communities/{loan.community_id}?tab=loans",
             )
-            admins = session.exec(admin_statement).all()
-            for admin in admins:
-                await notify_user(
-                    session=session,
-                    recipient_id=admin.user_id,
-                    title="Loan Request Cancelled",
-                    message=f"{current_user.full_name or current_user.email} has cancelled their request for '{loan.item.title}'.",
-                    type=NotificationType.WARNING,
-                    link=f"/communities/{loan.community_id}?tab=loans"
-                )
     else:
         # Owner/Admin cancelled, notify requester
         await notify_user(
@@ -512,20 +511,13 @@ async def ratify_loan(
             link="/loans"
         )
     elif loan.community_id:
-        admin_statement = select(CommunityMember).where(
-            CommunityMember.community_id == loan.community_id,
-            CommunityMember.role == CommunityMemberRole.ADMIN
+        await _notify_community_admins(
+            session=session,
+            community_id=loan.community_id,
+            title="Loan Ratified",
+            message=f"{current_user.full_name or current_user.email} confirmed receipt of '{loan.item.title}' from the community.",
+            link=f"/communities/{loan.community_id}?tab=loans",
         )
-        admins = session.exec(admin_statement).all()
-        for admin in admins:
-            await notify_user(
-                session=session,
-                recipient_id=admin.user_id,
-                title="Loan Ratified",
-                message=f"{current_user.full_name or current_user.email} confirmed receipt of '{loan.item.title}' from the community.",
-                type=NotificationType.INFO,
-                link=f"/communities/{loan.community_id}?tab=loans"
-            )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
 
@@ -561,20 +553,13 @@ async def signal_return(
             link="/loans"
         )
     elif loan.community_id:
-        admin_statement = select(CommunityMember).where(
-            CommunityMember.community_id == loan.community_id,
-            CommunityMember.role == CommunityMemberRole.ADMIN
+        await _notify_community_admins(
+            session=session,
+            community_id=loan.community_id,
+            title="Return Signaled",
+            message=f"{current_user.full_name or current_user.email} signaled that they have returned '{loan.item.title}' to the community.",
+            link=f"/communities/{loan.community_id}?tab=loans",
         )
-        admins = session.exec(admin_statement).all()
-        for admin in admins:
-            await notify_user(
-                session=session,
-                recipient_id=admin.user_id,
-                title="Return Signaled",
-                message=f"{current_user.full_name or current_user.email} signaled that they have returned '{loan.item.title}' to the community.",
-                type=NotificationType.INFO,
-                link=f"/communities/{loan.community_id}?tab=loans"
-            )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
 
@@ -739,20 +724,13 @@ async def create_extension_request(
             link="/loans"
         )
     elif loan.community_id:
-        admin_statement = select(CommunityMember).where(
-            CommunityMember.community_id == loan.community_id,
-            CommunityMember.role == CommunityMemberRole.ADMIN
+        await _notify_community_admins(
+            session=session,
+            community_id=loan.community_id,
+            title="Extension Requested",
+            message=message_text,
+            link=f"/communities/{loan.community_id}?tab=loans",
         )
-        admins = session.exec(admin_statement).all()
-        for admin in admins:
-            await notify_user(
-                session=session,
-                recipient_id=admin.user_id,
-                title="Extension Requested",
-                message=message_text,
-                type=NotificationType.INFO,
-                link=f"/communities/{loan.community_id}?tab=loans"
-            )
 
     return filter_loan_privacy(loan, current_user.id, is_admin=current_user.is_superuser, session=session)
 

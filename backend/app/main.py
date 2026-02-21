@@ -29,13 +29,14 @@ async def lifespan(app: FastAPI):
     try:
         configure_search()
     except Exception as e:
-        print(f"Search configuration failed: {e}")
+        logger.error("Search configuration failed: %s", e)
 
     # Start background tasks
     task = asyncio.create_task(check_overdue_loans())
     yield
-    # Cleanup if needed
+    # Cancel background task and wait for clean shutdown
     task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

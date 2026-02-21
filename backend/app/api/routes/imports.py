@@ -161,7 +161,7 @@ async def enrich_and_import_to_archive(staged_id: uuid.UUID, owner_id: uuid.UUID
                     a, i = ", ".join(g.get("authors", [])) or a, next((x["identifier"] for x in g.get("industryIdentifiers", []) if x["type"] in ["ISBN_13", "ISBN_10"]), i)
                     if not img and g.get("imageLinks"):
                         try: img = await upload_image_from_url(g["imageLinks"].get("medium") or g["imageLinks"].get("thumbnail"), "items")
-                        except: pass
+                        except Exception as e: logger.warning("Image upload skipped (Google): %s", e)
                     # Map category/genre from Google
                     if g.get("categories"):
                         c, gn, sj = map_book_classification(g["categories"])
@@ -172,7 +172,7 @@ async def enrich_and_import_to_archive(staged_id: uuid.UUID, owner_id: uuid.UUID
                     a = ", ".join([x["name"] if isinstance(x, dict) else x for x in ol.get("authors", [])] or ol.get("author_name", [])) or a
                     if not img:
                         try: img = await upload_image_from_url(ol.get("cover_url") or f"https://covers.openlibrary.org/b/id/{ol.get('cover_i')}-L.jpg", "items")
-                        except: pass
+                        except Exception as e: logger.warning("Image upload skipped (OpenLibrary): %s", e)
                     # Map category/genre from OpenLibrary
                     if ol.get("subject"):
                         c, gn, sj = map_book_classification(ol["subject"])
@@ -226,7 +226,7 @@ async def enrich_and_import_item(staged_id: uuid.UUID, owner_id: uuid.UUID, comm
                     a, i = ", ".join(g.get("authors", [])) or a, next((x["identifier"] for x in g.get("industryIdentifiers", []) if x["type"] in ["ISBN_13", "ISBN_10"]), i)
                     if g.get("imageLinks"):
                         try: img = await upload_image_from_url(g["imageLinks"].get("medium") or g["imageLinks"].get("thumbnail"), "items")
-                        except: pass
+                        except Exception as e: logger.warning("Image upload skipped (Google): %s", e)
                     if g.get("categories"):
                         c, gn, sj = map_book_classification(g["categories"])
                         cat, gen = c, gn
@@ -235,7 +235,7 @@ async def enrich_and_import_item(staged_id: uuid.UUID, owner_id: uuid.UUID, comm
                     t, desc = ol.get("title", t), ol.get("description")
                     a = ", ".join([x["name"] if isinstance(x, dict) else x for x in ol.get("authors", [])] or ol.get("author_name", [])) or a
                     try: img = await upload_image_from_url(ol.get("cover_url") or f"https://covers.openlibrary.org/b/id/{ol.get('cover_i')}-L.jpg", "items")
-                    except: pass
+                    except Exception as e: logger.warning("Image upload skipped (OpenLibrary): %s", e)
                     if ol.get("subject"):
                         c, gn, sj = map_book_classification(ol["subject"])
                         cat, gen = c, gn

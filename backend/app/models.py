@@ -1,9 +1,12 @@
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Annotated, Any, Literal, Optional
 
-from pydantic import EmailStr, field_validator
+from pydantic import BeforeValidator, EmailStr, field_validator
+
+# Reusable annotated type: normalises email to lowercase+stripped before EmailStr validation
+NormalizedEmail = Annotated[EmailStr, BeforeValidator(lambda v: v.lower().strip() if isinstance(v, str) else v)]
 from sqlalchemy import JSON, Column, DateTime, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
@@ -144,16 +147,9 @@ class CommunityFavorite(SQLModel, table=True):
 # Support Models
 class UserSettingsSchema(SQLModel):
     autocomplete_enabled: bool = Field(default=True)
-    theme_mode: str = Field(default="system")
+    theme_mode: Literal["light", "dark", "system"] = "system"
     show_contact_details: bool = Field(default=False)
     show_full_name: bool = Field(default=False)
-
-    @field_validator("theme_mode")
-    @classmethod
-    def validate_theme_mode(cls, v: str) -> str:
-        if v not in ["light", "dark", "system"]:
-            raise ValueError("theme_mode must be one of 'light', 'dark', 'system'")
-        return v
 
 
 class UserProfile(SQLModel, table=True):
@@ -275,35 +271,21 @@ class InterestCreate(SQLModel):
 
 # Shared properties
 class UserBase(SQLModel):
-    email: EmailStr = Field(unique=True, index=True, max_length=255)
+    email: NormalizedEmail = Field(unique=True, index=True, max_length=255)
     is_active: bool = True
     is_superuser: bool = False
     is_verified: bool = False
     full_name: str | None = Field(default=None, max_length=255)
     public_id: str | None = Field(default=None, unique=True, index=True, max_length=10)
 
-    @field_validator("email", mode="before")
-    @classmethod
-    def validate_email(cls, v: str) -> str:
-        if isinstance(v, str):
-            return v.lower().strip()
-        return v
-
 
 # Properties to receive via API on creation
 class UserCreate(SQLModel):
-    email: EmailStr = Field(max_length=255)
+    email: NormalizedEmail = Field(max_length=255)
     password: str = Field(min_length=8, max_length=40)
     is_active: bool = True
     is_superuser: bool = False
     full_name: str | None = Field(default=None, max_length=255)
-
-    @field_validator("email", mode="before")
-    @classmethod
-    def validate_email(cls, v: str) -> str:
-        if isinstance(v, str):
-            return v.lower().strip()
-        return v
 
     @field_validator("password", mode="after")
     @classmethod
@@ -325,16 +307,9 @@ class UserCreate(SQLModel):
 
 
 class UserRegister(SQLModel):
-    email: EmailStr = Field(max_length=255)
+    email: NormalizedEmail = Field(max_length=255)
     password: str = Field(min_length=8, max_length=40)
     full_name: str | None = Field(default=None, max_length=255)
-
-    @field_validator("email", mode="before")
-    @classmethod
-    def validate_email(cls, v: str) -> str:
-        if isinstance(v, str):
-            return v.lower().strip()
-        return v
 
     @field_validator("password", mode="after")
     @classmethod

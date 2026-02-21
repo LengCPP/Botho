@@ -123,6 +123,11 @@ class Settings(BaseSettings):
 
     VITE_GOOGLE_BOOKS_API_KEY: str | None = None
 
+    LOAN_OVERDUE_GRACE_DAYS: int = 7
+
+    OLLAMA_BASE_URL: str = "http://ollama:11434"
+    OLLAMA_MODEL: str = "gemma2:2b"
+
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
             message = (

@@ -10,6 +10,7 @@ from app.api.utils import (
     filter_loan_privacy,
     filter_owner_privacy,
     filter_user_privacy,
+    get_community_admin_count,
     invalidate_item_caches,
     rebuild_collection_index_task,
 )
@@ -67,22 +68,6 @@ def _get_accepted_membership(
             CommunityMember.status == CommunityMemberStatus.ACCEPTED,
         )
     ).first()
-
-
-def get_community_admin_count(session: SessionDep, community_id: uuid.UUID) -> int:
-    """
-    Get the number of admins in a community.
-    """
-    statement = (
-        select(func.count())
-        .select_from(CommunityMember)
-        .where(
-            CommunityMember.community_id == community_id,
-            CommunityMember.role == CommunityMemberRole.ADMIN,
-            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
-        )
-    )
-    return session.exec(statement).one()
 
 
 @router.get("/", response_model=CommunitiesPublic)

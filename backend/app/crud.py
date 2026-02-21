@@ -1,7 +1,10 @@
+import logging
 import uuid
 from typing import Any
 
 from sqlmodel import Session, func, select
+
+logger = logging.getLogger(__name__)
 
 from app.core.security import get_password_hash, verify_password
 from app.models import (
@@ -48,9 +51,14 @@ def create_notification(    *,
         type=type,
         link=link,
     )
-    session.add(db_notification)
-    session.commit()
-    session.refresh(db_notification)
+    try:
+        session.add(db_notification)
+        session.commit()
+        session.refresh(db_notification)
+    except Exception:
+        session.rollback()
+        logger.error("Failed to create notification for recipient %s", recipient_id, exc_info=True)
+        raise
     return db_notification
 
 

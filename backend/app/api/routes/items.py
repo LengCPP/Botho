@@ -1,6 +1,9 @@
 import json
+import logging
 import uuid
 from typing import Annotated, Any
+
+logger = logging.getLogger(__name__)
 
 from fastapi import (
     APIRouter,
@@ -549,6 +552,7 @@ def recommend_items(
         )
         hits = search_results["hits"]
     except Exception:
+        logger.warning("Meilisearch search failed, returning empty result", exc_info=True)
         return ItemsPublic(data=[], count=0)
 
     if not hits:
@@ -566,14 +570,46 @@ def recommend_items(
     ).all()
     item_map = {item.id: item for item in db_items}
 
+    # Bulk-fetch per-item data to avoid N+1 queries inside the result loop
+    item_ids_list = list(item_map.keys())
+
+    active_loan_item_ids = set(session.exec(
+        select(Loan.item_id).where(
+            Loan.item_id.in_(item_ids_list),
+            Loan.status.in_([
+                LoanStatus.ACTIVE, LoanStatus.ACCEPTED,
+                LoanStatus.RETURN_PENDING, LoanStatus.EXTENSION_PENDING,
+                LoanStatus.DEFAULTED,
+            ]),
+        )
+    ).all())
+
+    all_ratings = session.exec(
+        select(ItemConditionRating).where(ItemConditionRating.item_id.in_(item_ids_list))
+    ).all()
+    ratings_by_item: dict[uuid.UUID, list] = {}
+    for r in all_ratings:
+        ratings_by_item.setdefault(r.item_id, []).append(r)
+
+    possession_item_ids = set(session.exec(
+        select(Loan.item_id).where(
+            Loan.item_id.in_(item_ids_list),
+            Loan.requester_id == current_user.id,
+            Loan.status.in_([
+                LoanStatus.ACTIVE, LoanStatus.RETURN_PENDING,
+                LoanStatus.RETURNED, LoanStatus.EXTENSION_PENDING,
+            ]),
+        )
+    ).all())
+
     ordered_items = []
     for hit in hits:
         hid = uuid.UUID(hit["id"])
         if hid in item_map:
             item = item_map[hid]
 
-            # Enrich
-            is_avail = check_item_availability(session, item.id)
+            # Enrich using bulk-fetched data
+            is_avail = item.id not in active_loan_item_ids
             owner_pub = None
             community_pub = None
             if item.user_owner:
@@ -587,8 +623,22 @@ def recommend_items(
             elif item.community_owner:
                 community_pub = item.community_owner
 
-            cond_data = get_item_condition_data(session, item.id)
-            had_possession = check_possession(session, current_user.id, item.id)
+            item_ratings = ratings_by_item.get(item.id, [])
+            if item_ratings:
+                avg_grade = sum(r.grade for r in item_ratings) / len(item_ratings)
+                cond_notes = [
+                    {
+                        "user_id": str(r.user_id),
+                        "note": r.notes,
+                        "created_at": r.created_at.isoformat() if r.created_at else None,
+                    }
+                    for r in item_ratings if r.notes
+                ]
+            else:
+                avg_grade = 0.0
+                cond_notes = []
+            cond_data = {"average_grade": avg_grade, "notes": cond_notes}
+            had_possession = item.owner_id == current_user.id or item.id in possession_item_ids
 
             item_pub = ItemPublic(
                 id=item.id,
@@ -750,7 +800,7 @@ def read_item_facets(
 
             return {"data": results, "count": len(all_facets)}
         except Exception:
-            pass  # Fallback to SQL if Meilisearch fails
+            logger.warning("Meilisearch facets failed, falling back to SQL", exc_info=True)
 
     # SQL Fallback
     results = []
@@ -919,7 +969,7 @@ def read_item_facets(
                     {"name": name, "item_type": i_type, "count": count, "sample_images": valid_imgs}
                 )
         except Exception:
-            pass
+            logger.warning("Facet processing failed", exc_info=True)
 
     return {"data": results, "count": total_count}
 
@@ -1003,18 +1053,18 @@ def read_items(
         target_owner_id = current_user.id
 
     if feed_mode:
-        my_community_ids = session.exec(
-            select(CommunityMember.community_id).where(
-                CommunityMember.user_id == current_user.id,
-                CommunityMember.status == CommunityMemberStatus.ACCEPTED,
-            )
-        ).all()
+        from sqlalchemy import union as sql_union
 
-        public_community_ids = session.exec(
-            select(Community.id).where(Community.is_private == False)
-        ).all()
-
-        allowed_community_ids = list(set(my_community_ids + public_community_ids))
+        my_cids_stmt = select(CommunityMember.community_id).where(
+            CommunityMember.user_id == current_user.id,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+        )
+        public_cids_stmt = select(Community.id).where(Community.is_private == False)
+        # Single UNION query instead of two queries + Python set merge
+        allowed_community_ids = [
+            row[0]
+            for row in session.execute(sql_union(my_cids_stmt, public_cids_stmt))
+        ]
 
     from app.search import client as meili_client
 
@@ -1220,6 +1270,29 @@ def read_items(
                 )
             ).all()
 
+            # Bulk-fetch friendship status for all user-item owners to avoid N+1 queries
+            user_item_owner_ids = list({item.owner_id for item in items if item.user_owner})
+            if user_item_owner_ids:
+                friendship_records = session.exec(
+                    select(Friendship).where(
+                        or_(
+                            (Friendship.user_id == current_user.id)
+                            & (Friendship.friend_id.in_(user_item_owner_ids)),
+                            (Friendship.friend_id == current_user.id)
+                            & (Friendship.user_id.in_(user_item_owner_ids)),
+                        ),
+                        Friendship.status == FriendshipStatus.ACCEPTED,
+                    )
+                ).all()
+                friend_owner_ids = set()
+                for f in friendship_records:
+                    if f.user_id == current_user.id:
+                        friend_owner_ids.add(f.friend_id)
+                    else:
+                        friend_owner_ids.add(f.user_id)
+            else:
+                friend_owner_ids = set()
+
             # Map to Public
             items_public_data = []
             for item in items:
@@ -1232,23 +1305,7 @@ def read_items(
                     bypass = True
 
                 if item.user_owner:
-                    item_is_friend = (
-                        bypass
-                        or session.exec(
-                            select(Friendship).where(
-                                (
-                                    (Friendship.user_id == current_user.id)
-                                    & (Friendship.friend_id == item.owner_id)
-                                )
-                                | (
-                                    (Friendship.user_id == item.owner_id)
-                                    & (Friendship.friend_id == current_user.id)
-                                ),
-                                Friendship.status == FriendshipStatus.ACCEPTED,
-                            )
-                        ).first()
-                        is not None
-                    )
+                    item_is_friend = bypass or item.owner_id in friend_owner_ids
 
                     owner_pub = filter_owner_privacy(
                         item.user_owner,
@@ -1294,6 +1351,7 @@ def read_items(
                 facet_stats=facet_stats,
             )
         except Exception:
+            logger.warning("Meilisearch item listing failed, falling back to SQL", exc_info=True)
             meili_success = False
 
     if not meili_success:
@@ -1924,7 +1982,8 @@ async def update_item(
                     stored_url = await upload_image_from_url(image_url, folder="items")
                     if stored_url:
                         db_item.image_url = stored_url
-                except:
+                except Exception as e:
+                    logger.warning("Image upload failed, using original URL: %s", e)
                     db_item.image_url = image_url
             else:
                 db_item.image_url = image_url
@@ -2089,7 +2148,7 @@ def delete_item(
     try:
         delete_item_from_search(id)
     except Exception:
-        pass  # Meilisearch failure should not block a successful DB delete
+        logger.warning("Meilisearch delete failed for item %s", id, exc_info=True)
     return Message(message="Item deleted successfully")
 
 
@@ -2653,15 +2712,12 @@ def batch_sync_from_archive(
     """Sync items with the latest data from the WorkMetadata archive in the background."""
     from app.api.utils import sync_items_from_archive
 
-    valid_ids = []
-    for item_id in action.item_ids:
-        item = session.get(Item, item_id)
-        if (
-            item
-            and _is_owner_or_admin(item, current_user, session)
-            and item.item_type == ItemType.book
-        ):
-            valid_ids.append(item.id)
+    items = session.exec(select(Item).where(Item.id.in_(action.item_ids))).all()
+    valid_ids = [
+        item.id
+        for item in items
+        if _is_owner_or_admin(item, current_user, session) and item.item_type == ItemType.book
+    ]
 
     if not valid_ids:
         return Message(message="No valid books found for sync.")

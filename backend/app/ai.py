@@ -13,9 +13,9 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Providers
-OLLAMA_CHAT_URL = "http://ollama:11434/api/chat"
-LOCAL_MODEL = "gemma2:2b"
+# Providers — configured via settings
+OLLAMA_CHAT_URL = f"{settings.OLLAMA_BASE_URL}/api/chat"
+LOCAL_MODEL = settings.OLLAMA_MODEL
 
 
 def _sanitize_for_prompt(text: str | None, max_len: int = 200) -> str:

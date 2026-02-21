@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 
@@ -7,7 +8,7 @@ from sqlmodel import Session, select
 from app import crud
 from app.api.websocket_manager import notification_manager
 from app.models import NotificationType, PushSubscription
-from app.push import send_push_notification
+from app.push import send_push_notification_async
 
 logger = logging.getLogger(__name__)
 
@@ -42,14 +43,14 @@ async def notify_user(
         ws_message.update(ws_extra)
     await notification_manager.send_personal_message(ws_message, recipient_id)
 
-    # 3. Send Push Notifications
+    # 3. Send Push Notifications concurrently (non-blocking via thread-pool executor)
     subscriptions = session.exec(
         select(PushSubscription).where(PushSubscription.user_id == recipient_id)
     ).all()
 
-    for sub in subscriptions:
+    async def _push_one(sub: PushSubscription) -> None:
         try:
-            send_push_notification(sub, title, message, link)
+            await send_push_notification_async(sub, title, message, link)
         except WebPushException as ex:
             if ex.response and ex.response.status_code in [404, 410]:
                 logger.info(f"Removing expired subscription: {sub.endpoint}")
@@ -57,3 +58,6 @@ async def notify_user(
                 session.commit()
         except Exception as e:
             logger.error(f"Failed to send push notification: {e}")
+
+    if subscriptions:
+        await asyncio.gather(*[_push_one(sub) for sub in subscriptions])
