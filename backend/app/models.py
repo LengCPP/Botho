@@ -497,6 +497,10 @@ class CommunityAnnouncement(SQLModel, table=True):
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
+    updated_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    )
 
     community: "Community" = Relationship(back_populates="announcements")
     author: "User" = Relationship()
@@ -510,6 +514,10 @@ class CommunityMessage(SQLModel, table=True):
     created_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    )
+    updated_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     )
 
     community: "Community" = Relationship(back_populates="messages")
@@ -666,6 +674,7 @@ class CommunityAnnouncementPublic(CommunityAnnouncementBase):
     community_id: uuid.UUID
     author_id: uuid.UUID
     created_at: datetime
+    updated_at: datetime
     author: "UserPublic"
 
 
@@ -687,6 +696,7 @@ class CommunityMessagePublic(CommunityMessageBase):
     community_id: uuid.UUID
     author_id: uuid.UUID
     created_at: datetime
+    updated_at: datetime
     author: "UserPublic"
 
 

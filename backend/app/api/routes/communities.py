@@ -960,27 +960,28 @@ def read_community_item_facets(
             })
 
     elif group_by == "subject":
-        # 1. Tags query
-        tags_expr = func.json_array_elements_text(WorkMetadata.tags)
+        # Expand Item.subject (comma-separated) into individual tags via unnest
+        tag_expr = func.btrim(
+            func.unnest(func.string_to_array(Item.subject, ","))
+        )
+
+        # Items that have a subject set
         tags_stmt = (
             select(
-                tags_expr.label("name"),
+                tag_expr.label("name"),
                 Item.item_type,
                 func.count(Item.id).label("count"),
                 func.array_agg(Item.image_url).label("sample_images"),
             )
-            .join(
-                WorkMetadata,
-                (Item.author == WorkMetadata.author)
-                & (Item.title == WorkMetadata.title),
-            )
             .where(base_filter)
+            .where(Item.subject.is_not(None))
+            .where(Item.subject != "")
         )
         if q:
-            tags_stmt = tags_stmt.where(tags_expr.ilike(f"%{q}%"))
+            tags_stmt = tags_stmt.where(tag_expr.ilike(f"%{q}%"))
         tags_stmt = tags_stmt.group_by("name", Item.item_type)
 
-        # 2. Others query
+        # Items with no subject → "Others"
         others_stmt = (
             select(
                 cast("Others", String).label("name"),
@@ -988,23 +989,12 @@ def read_community_item_facets(
                 func.count(Item.id).label("count"),
                 func.array_agg(Item.image_url).label("sample_images"),
             )
-            .outerjoin(
-                WorkMetadata,
-                (Item.author == WorkMetadata.author)
-                & (Item.title == WorkMetadata.title),
-            )
             .where(base_filter)
-            .where(
-                or_(
-                    WorkMetadata.tags.is_(None),
-                    func.json_array_length(WorkMetadata.tags) == 0,
-                    WorkMetadata.author.is_(None),
-                )
-            )
+            .where(or_(Item.subject.is_(None), Item.subject == ""))
             .group_by(Item.item_type)
         )
 
-        if q and "others".find(q.lower()) == -1:
+        if q and "others" not in q.lower():
             full_stmt = tags_stmt
         else:
             full_stmt = tags_stmt.union_all(others_stmt)
@@ -1013,13 +1003,15 @@ def read_community_item_facets(
             total_count = session.exec(
                 select(func.count()).select_from(full_stmt.subquery())
             ).one()
-            rows = session.exec(
-                select(full_stmt.subquery())
+            subq = full_stmt.subquery()
+            rows = session.execute(
+                select(subq)
                 .order_by(text("item_type"), text("name ASC"))
                 .offset(skip)
                 .limit(limit)
             ).all()
-            for name, i_type, count, imgs in rows:
+            for row in rows:
+                name, i_type, count, imgs = row[0], row[1], row[2], row[3]
                 valid_imgs = [img for img in (imgs or []) if img][:5]
                 results.append(
                     {"name": name, "item_type": i_type, "count": count, "sample_images": valid_imgs}
@@ -1190,26 +1182,17 @@ def read_community_items(
                 statement = statement.where(Item.genre == genre)
         if subject:
             if subject == "Others":
-                statement = statement.join(
-                    WorkMetadata,
-                    (Item.author == WorkMetadata.author)
-                    & (Item.title == WorkMetadata.title),
-                    isouter=True,
-                )
                 statement = statement.where(
-                    or_(
-                        WorkMetadata.tags.is_(None),
-                        func.json_array_length(WorkMetadata.tags) == 0,
-                    )
+                    or_(Item.subject.is_(None), Item.subject == "")
                 )
             else:
-                statement = statement.join(
-                    WorkMetadata,
-                    (Item.author == WorkMetadata.author)
-                    & (Item.title == WorkMetadata.title),
-                )
                 statement = statement.where(
-                    cast(WorkMetadata.tags, String).ilike(f'%"{subject}"%')
+                    or_(
+                        Item.subject == subject,
+                        Item.subject.ilike(f"{subject},%"),
+                        Item.subject.ilike(f"%, {subject}"),
+                        Item.subject.ilike(f"%, {subject},%"),
+                    )
                 )
         if author:
             statement = statement.where(col(Item.author).ilike(f"%{author}%"))
@@ -1694,19 +1677,17 @@ async def create_community_announcement(
     if not community:
         raise HTTPException(status_code=404, detail="Community not found")
 
-    # Staff check
+    # Admin-only check
     statement = select(CommunityMember).where(
         CommunityMember.community_id == id,
         CommunityMember.user_id == current_user.id,
-        CommunityMember.role.in_(
-            [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]
-        ),
+        CommunityMember.role == CommunityMemberRole.ADMIN,
         CommunityMember.status == CommunityMemberStatus.ACCEPTED,
     )
     membership = session.exec(statement).first()
     if not membership and not current_user.is_superuser:
         raise HTTPException(
-            status_code=403, detail="Only staff can create announcements"
+            status_code=403, detail="Only admins can create announcements"
         )
 
     announcement = CommunityAnnouncement(
@@ -1735,6 +1716,78 @@ async def create_community_announcement(
         )
 
     return announcement
+
+
+@router.patch(
+    "/{id}/announcements/{announcement_id}", response_model=CommunityAnnouncementPublic
+)
+def update_community_announcement(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    announcement_id: uuid.UUID,
+    announcement_in: CommunityAnnouncementCreate,
+) -> Any:
+    """
+    Update an announcement (Admin only).
+    """
+    announcement = session.get(CommunityAnnouncement, announcement_id)
+    if not announcement or announcement.community_id != id:
+        raise HTTPException(status_code=404, detail="Announcement not found")
+
+    # Admin-only check
+    statement = select(CommunityMember).where(
+        CommunityMember.community_id == id,
+        CommunityMember.user_id == current_user.id,
+        CommunityMember.role == CommunityMemberRole.ADMIN,
+        CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+    )
+    membership = session.exec(statement).first()
+    if not membership and not current_user.is_superuser:
+        raise HTTPException(
+            status_code=403, detail="Only admins can edit announcements"
+        )
+
+    announcement.title = announcement_in.title
+    announcement.content = announcement_in.content
+    session.add(announcement)
+    session.commit()
+    session.refresh(announcement)
+    return announcement
+
+
+@router.delete("/{id}/announcements/{announcement_id}", response_model=Message)
+def delete_community_announcement(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    announcement_id: uuid.UUID,
+) -> Any:
+    """
+    Delete an announcement (Admin only).
+    """
+    announcement = session.get(CommunityAnnouncement, announcement_id)
+    if not announcement or announcement.community_id != id:
+        raise HTTPException(status_code=404, detail="Announcement not found")
+
+    # Admin-only check
+    statement = select(CommunityMember).where(
+        CommunityMember.community_id == id,
+        CommunityMember.user_id == current_user.id,
+        CommunityMember.role == CommunityMemberRole.ADMIN,
+        CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+    )
+    membership = session.exec(statement).first()
+    if not membership and not current_user.is_superuser:
+        raise HTTPException(
+            status_code=403, detail="Only admins can delete announcements"
+        )
+
+    session.delete(announcement)
+    session.commit()
+    return Message(message="Announcement deleted")
 
 
 @router.get("/{id}/messages", response_model=CommunityMessagesPublic)

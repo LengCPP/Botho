@@ -886,7 +886,13 @@ function CommunityBoard() {
                           <Text fontStyle="italic">No announcements.</Text>
                         ) : (
                           ann.data.map((a: any) => (
-                            <AnnouncementItem key={a.id} ann={a} />
+                            <AnnouncementItem
+                              key={a.id}
+                              ann={a}
+                              isAdmin={isAdmin}
+                              communityId={cId}
+                              queryClient={queryClient}
+                            />
                           ))
                         )}
                       </VStack>
@@ -1688,43 +1694,139 @@ function AddAnnouncementModal({
 // ANNOUNCEMENT ITEM
 // ============================================================================
 
-function AnnouncementItem({ ann }: { ann: any }) {
+function AnnouncementItem({
+  ann,
+  isAdmin,
+  communityId,
+  queryClient,
+}: {
+  ann: any
+  isAdmin: boolean
+  communityId: string
+  queryClient: any
+}) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [editTitle, setEditTitle] = useState(ann.title)
+  const [editContent, setEditContent] = useState(ann.content)
+  const { showErrorToast } = useCustomToast()
+
+  const wasEdited =
+    ann.updated_at && ann.created_at && ann.updated_at !== ann.created_at
+
+  const deleteAnnouncementMutation = useMutation({
+    mutationFn: () =>
+      CommunitiesService.deleteCommunityAnnouncement({
+        id: communityId,
+        announcementId: ann.id,
+      }),
+    onSuccess: () => {
+      setIsDeleting(false)
+      queryClient.invalidateQueries({
+        queryKey: ["communityAnnouncements", communityId],
+      })
+    },
+    onError: () => showErrorToast("Failed to delete announcement"),
+  })
+
+  const updateAnnouncementMutation = useMutation({
+    mutationFn: () =>
+      CommunitiesService.updateCommunityAnnouncement({
+        id: communityId,
+        announcementId: ann.id,
+        requestBody: { title: editTitle, content: editContent },
+      }),
+    onSuccess: () => {
+      setIsEditing(false)
+      queryClient.invalidateQueries({
+        queryKey: ["communityAnnouncements", communityId],
+      })
+    },
+    onError: () => showErrorToast("Failed to update announcement"),
+  })
 
   return (
-    <Box
-      p={4}
-      borderWidth="1px"
-      rounded="md"
-      bg="bg.panel"
-      borderColor={isExpanded ? "ui.hover" : "border.subtle"}
-      cursor="pointer"
-      onClick={() => setIsExpanded(!isExpanded)}
-      transition="all 0.2s"
-    >
-      <Flex justify="space-between" align="center" gap={4}>
+    <Box p={4} borderWidth="1px" rounded="md" bg="bg.panel" borderColor={isExpanded ? "ui.hover" : "border.subtle"} transition="all 0.2s">
+      <Flex justify="space-between" align="center" gap={4} cursor="pointer" onClick={() => !isEditing && setIsExpanded(!isExpanded)}>
         <Heading size="sm" lineClamp={isExpanded ? undefined : 1} flex={1}>
           {ann.title}
         </Heading>
 
-        <Text fontSize="2xs" color="fg.subtle" whiteSpace="nowrap">
-          {new Date(ann.created_at).toLocaleDateString()}
-        </Text>
+        <HStack gap={1} flexShrink={0}>
+          {wasEdited && (
+            <Text fontSize="2xs" color="fg.subtle" fontStyle="italic">
+              edited
+            </Text>
+          )}
+          <Text fontSize="2xs" color="fg.subtle" whiteSpace="nowrap">
+            {new Date(ann.created_at).toLocaleDateString()}
+          </Text>
+          {isAdmin && !isEditing && (
+            <HStack gap={0} onClick={(e) => e.stopPropagation()}>
+              <Button size="2xs" variant="ghost" onClick={() => { setIsExpanded(true); setIsEditing(true) }}>
+                <FiEdit2 size="10px" />
+              </Button>
+              <Button size="2xs" variant="ghost" colorPalette="red" onClick={() => setIsDeleting(true)} loading={deleteAnnouncementMutation.isPending}>
+                <FiTrash2 size="10px" />
+              </Button>
+            </HStack>
+          )}
+        </HStack>
       </Flex>
 
-      {isExpanded && (
+      {isExpanded && !isEditing && (
         <VStack align="start" mt={4} gap={3}>
           <Separator />
-
           <Text fontSize="sm" whiteSpace="pre-wrap" color="fg.muted">
             {ann.content}
           </Text>
-
           <Text fontSize="2xs" color="fg.subtle" fontWeight="bold">
             Posted by {ann.author.full_name || ann.author.email}
           </Text>
         </VStack>
       )}
+
+      {isEditing && (
+        <VStack align="stretch" mt={4} gap={3} onClick={(e) => e.stopPropagation()}>
+          <Separator />
+          <Input
+            size="sm"
+            value={editTitle}
+            onChange={(e) => setEditTitle(e.target.value)}
+            placeholder="Title"
+          />
+          <Textarea
+            size="sm"
+            value={editContent}
+            onChange={(e) => setEditContent(e.target.value)}
+            rows={4}
+            placeholder="Content"
+          />
+          <HStack justify="flex-end" gap={2}>
+            <Button size="xs" variant="ghost" onClick={() => { setIsEditing(false); setEditTitle(ann.title); setEditContent(ann.content) }}>
+              <FiX />
+            </Button>
+            <Button
+              size="xs"
+              colorPalette="accent"
+              onClick={() => editTitle.trim() && editContent.trim() && updateAnnouncementMutation.mutate()}
+              loading={updateAnnouncementMutation.isPending}
+            >
+              <FiCheck />
+            </Button>
+          </HStack>
+        </VStack>
+      )}
+
+      <ConfirmationModal
+        isOpen={isDeleting}
+        onClose={() => setIsDeleting(false)}
+        onConfirm={() => deleteAnnouncementMutation.mutate()}
+        title="Delete"
+        message="Delete this announcement?"
+        isLoading={deleteAnnouncementMutation.isPending}
+      />
     </Box>
   )
 }
@@ -1746,6 +1848,8 @@ function MessageItem({
   const { showErrorToast } = useCustomToast()
 
   const isAuthor = msg.author_id === currentUser?.id
+  const wasEdited =
+    msg.updated_at && msg.created_at && msg.updated_at !== msg.created_at
 
   const deleteMessageMutation = useMutation({
     mutationFn: () =>
@@ -1811,9 +1915,16 @@ function MessageItem({
           )}
         </HStack>
 
-        <Text fontSize="2xs" color="fg.subtle">
-          {new Date(msg.created_at).toLocaleString()}
-        </Text>
+        <HStack gap={1}>
+          {wasEdited && (
+            <Text fontSize="2xs" color="fg.subtle" fontStyle="italic">
+              edited
+            </Text>
+          )}
+          <Text fontSize="2xs" color="fg.subtle">
+            {new Date(msg.created_at).toLocaleString()}
+          </Text>
+        </HStack>
       </Flex>
 
       {isEditing ? (

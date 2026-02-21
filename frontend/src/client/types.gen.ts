@@ -71,6 +71,7 @@ export type CommunityAnnouncementPublic = {
     community_id: string;
     author_id: string;
     created_at: string;
+    updated_at: string;
     author: UserPublic;
 };
 
@@ -110,6 +111,7 @@ export type CommunityMessagePublic = {
     community_id: string;
     author_id: string;
     created_at: string;
+    updated_at: string;
     author: UserPublic;
 };
 
@@ -763,6 +765,21 @@ export type CommunitiesCreateCommunityAnnouncementData = {
 };
 
 export type CommunitiesCreateCommunityAnnouncementResponse = (CommunityAnnouncementPublic);
+
+export type CommunitiesUpdateCommunityAnnouncementData = {
+    id: string;
+    announcementId: string;
+    requestBody: CommunityAnnouncementCreate;
+};
+
+export type CommunitiesUpdateCommunityAnnouncementResponse = (CommunityAnnouncementPublic);
+
+export type CommunitiesDeleteCommunityAnnouncementData = {
+    id: string;
+    announcementId: string;
+};
+
+export type CommunitiesDeleteCommunityAnnouncementResponse = (Message);
 
 export type CommunitiesReadCommunityMessagesData = {
     id: string;
