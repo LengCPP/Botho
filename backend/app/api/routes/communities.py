@@ -1,7 +1,7 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from sqlmodel import String, cast, col, func, or_, select, text
 
 from app import crud
@@ -54,6 +54,19 @@ from app.search import delete_community_from_search, sync_community_to_search
 from app.utils import generate_donation_notification_email, send_email
 
 router = APIRouter()
+
+
+def _get_accepted_membership(
+    session: SessionDep, community_id: uuid.UUID, user_id: uuid.UUID
+) -> CommunityMember | None:
+    """Return the CommunityMember only if the user is an ACCEPTED member."""
+    return session.exec(
+        select(CommunityMember).where(
+            CommunityMember.community_id == community_id,
+            CommunityMember.user_id == user_id,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+        )
+    ).first()
 
 
 def get_community_admin_count(session: SessionDep, community_id: uuid.UUID) -> int:
@@ -229,15 +242,10 @@ def update_community(
     if not community:
         raise HTTPException(status_code=404, detail="Community not found")
 
-    # Check if user is admin
-    statement = select(CommunityMember).where(
-        CommunityMember.community_id == id,
-        CommunityMember.user_id == current_user.id,
-        CommunityMember.role == CommunityMemberRole.ADMIN,
-    )
-    membership = session.exec(statement).first()
-    if not membership and not current_user.is_superuser:
-        raise HTTPException(status_code=400, detail="Not enough permissions")
+    # Admins act on behalf of the community — must be an accepted admin
+    membership = _get_accepted_membership(session, id, current_user.id)
+    if not (membership and membership.role == CommunityMemberRole.ADMIN) and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
 
     update_dict = community_in.model_dump(exclude_unset=True)
     community.sqlmodel_update(update_dict)
@@ -259,15 +267,10 @@ def delete_community(
     if not community:
         raise HTTPException(status_code=404, detail="Community not found")
 
-    # Check if user is admin
-    statement = select(CommunityMember).where(
-        CommunityMember.community_id == id,
-        CommunityMember.user_id == current_user.id,
-        CommunityMember.role == CommunityMemberRole.ADMIN,
-    )
-    membership = session.exec(statement).first()
-    if not membership and not current_user.is_superuser:
-        raise HTTPException(status_code=400, detail="Not enough permissions")
+    # Admins act on behalf of the community — must be an accepted admin
+    membership = _get_accepted_membership(session, id, current_user.id)
+    if not (membership and membership.role == CommunityMemberRole.ADMIN) and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
 
     session.delete(community)
     session.commit()
@@ -493,15 +496,10 @@ def leave_community(
     target_user_id = user_id or current_user.id
 
     if target_user_id != current_user.id:
-        # Check if current user is admin
-        statement = select(CommunityMember).where(
-            CommunityMember.community_id == id,
-            CommunityMember.user_id == current_user.id,
-            CommunityMember.role == CommunityMemberRole.ADMIN,
-        )
-        membership = session.exec(statement).first()
-        if not membership and not current_user.is_superuser:
-            raise HTTPException(status_code=400, detail="Not enough permissions")
+        # Only accepted admins can remove other members
+        membership = _get_accepted_membership(session, id, current_user.id)
+        if not (membership and membership.role == CommunityMemberRole.ADMIN) and not current_user.is_superuser:
+            raise HTTPException(status_code=403, detail="Not enough permissions")
 
     crud.leave_community(session=session, community_id=id, user_id=target_user_id)
     return Message(message="Left community successfully")
@@ -531,8 +529,8 @@ def read_community_members(
     my_membership = session.exec(my_membership_stmt).first()
     is_staff = (
         my_membership
-        and my_membership.role
-        in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]
+        and my_membership.status == CommunityMemberStatus.ACCEPTED
+        and my_membership.role in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]
     ) or community.created_by == current_user.id
 
     # Privacy check for closed communities
@@ -642,14 +640,20 @@ async def update_community_member_role(
     )
     my_membership = session.exec(my_membership_stmt).first()
 
-    # Permission check: ADMIN or MODERATOR (for specific tasks)
+    # Permission check: must be an ACCEPTED admin or moderator
     is_admin = (
-        my_membership and my_membership.role == CommunityMemberRole.ADMIN
+        my_membership
+        and my_membership.status == CommunityMemberStatus.ACCEPTED
+        and my_membership.role == CommunityMemberRole.ADMIN
     ) or current_user.is_superuser
-    is_moderator = my_membership and my_membership.role == CommunityMemberRole.MODERATOR
+    is_moderator = (
+        my_membership
+        and my_membership.status == CommunityMemberStatus.ACCEPTED
+        and my_membership.role == CommunityMemberRole.MODERATOR
+    )
 
     if not is_admin and not is_moderator:
-        raise HTTPException(status_code=400, detail="Not enough permissions")
+        raise HTTPException(status_code=403, detail="Not enough permissions")
 
     # Target member
     target_membership_stmt = select(CommunityMember).where(
@@ -787,7 +791,7 @@ def read_community_item_facets(
     current_user: CurrentUser,
     id: uuid.UUID,
     group_by: str = "category",  # category, genre, author, subject
-    q: str | None = None,
+    q: str | None = Query(default=None, max_length=200),
     skip: int = 0,
     limit: int = 20,
 ) -> Any:
@@ -1038,7 +1042,7 @@ def read_community_items(
     author: str | None = None,
     item_type: str | None = None,
     owner_filter: uuid.UUID | None = None,
-    q: str | None = None,
+    q: str | None = Query(default=None, max_length=200),
 ) -> Any:
     """
     Get items belonging to a community.
@@ -1458,14 +1462,9 @@ async def ratify_donation(
     Ratify a donation (Admin only).
     Admins cannot ratify their own donations if there is more than 1 admin.
     """
-    # Admin check
-    statement = select(CommunityMember).where(
-        CommunityMember.community_id == id,
-        CommunityMember.user_id == current_user.id,
-        CommunityMember.role == CommunityMemberRole.ADMIN,
-    )
-    community_admin = session.exec(statement).first()
-    if not community_admin and not current_user.is_superuser:
+    # Admins act on behalf of the community — must be an accepted admin
+    community_admin = _get_accepted_membership(session, id, current_user.id)
+    if not (community_admin and community_admin.role == CommunityMemberRole.ADMIN) and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Only admins can ratify donations")
 
     community = session.get(Community, id)
@@ -1575,8 +1574,9 @@ def remove_item_from_community(
             status_code=403, detail="Must be a member to manage community items"
         )
 
-    is_admin = (
-        membership and membership.role == CommunityMemberRole.ADMIN
+    # Admins and moderators can remove any item; members can only remove items they added
+    is_staff = (
+        membership and membership.role in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]
     ) or current_user.is_superuser
 
     # Try to find pooling meta
@@ -1592,9 +1592,9 @@ def remove_item_from_community(
     if not comm_item and not is_owned:
         raise HTTPException(status_code=404, detail="Item not found in community")
 
-    # Permissions: Admin can remove anything. Members can only remove items they added.
+    # Permissions: staff can remove anything; members can only remove items they added.
     is_adder = comm_item and comm_item.added_by == current_user.id
-    if not is_admin and not is_adder:
+    if not is_staff and not is_adder:
         raise HTTPException(
             status_code=403, detail="Not enough permissions to remove this item"
         )
@@ -1677,17 +1677,13 @@ async def create_community_announcement(
     if not community:
         raise HTTPException(status_code=404, detail="Community not found")
 
-    # Admin-only check
-    statement = select(CommunityMember).where(
-        CommunityMember.community_id == id,
-        CommunityMember.user_id == current_user.id,
-        CommunityMember.role == CommunityMemberRole.ADMIN,
-        CommunityMember.status == CommunityMemberStatus.ACCEPTED,
-    )
-    membership = session.exec(statement).first()
-    if not membership and not current_user.is_superuser:
+    # Staff (admins and moderators) can create announcements
+    membership = _get_accepted_membership(session, id, current_user.id)
+    if not (
+        membership and membership.role in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]
+    ) and not current_user.is_superuser:
         raise HTTPException(
-            status_code=403, detail="Only admins can create announcements"
+            status_code=403, detail="Only staff can create announcements"
         )
 
     announcement = CommunityAnnouncement(
@@ -1736,17 +1732,13 @@ def update_community_announcement(
     if not announcement or announcement.community_id != id:
         raise HTTPException(status_code=404, detail="Announcement not found")
 
-    # Admin-only check
-    statement = select(CommunityMember).where(
-        CommunityMember.community_id == id,
-        CommunityMember.user_id == current_user.id,
-        CommunityMember.role == CommunityMemberRole.ADMIN,
-        CommunityMember.status == CommunityMemberStatus.ACCEPTED,
-    )
-    membership = session.exec(statement).first()
-    if not membership and not current_user.is_superuser:
+    # Staff (admins and moderators) can edit announcements
+    membership = _get_accepted_membership(session, id, current_user.id)
+    if not (
+        membership and membership.role in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]
+    ) and not current_user.is_superuser:
         raise HTTPException(
-            status_code=403, detail="Only admins can edit announcements"
+            status_code=403, detail="Only staff can edit announcements"
         )
 
     announcement.title = announcement_in.title
@@ -1772,17 +1764,13 @@ def delete_community_announcement(
     if not announcement or announcement.community_id != id:
         raise HTTPException(status_code=404, detail="Announcement not found")
 
-    # Admin-only check
-    statement = select(CommunityMember).where(
-        CommunityMember.community_id == id,
-        CommunityMember.user_id == current_user.id,
-        CommunityMember.role == CommunityMemberRole.ADMIN,
-        CommunityMember.status == CommunityMemberStatus.ACCEPTED,
-    )
-    membership = session.exec(statement).first()
-    if not membership and not current_user.is_superuser:
+    # Staff (admins and moderators) can delete announcements
+    membership = _get_accepted_membership(session, id, current_user.id)
+    if not (
+        membership and membership.role in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]
+    ) and not current_user.is_superuser:
         raise HTTPException(
-            status_code=403, detail="Only admins can delete announcements"
+            status_code=403, detail="Only staff can delete announcements"
         )
 
     session.delete(announcement)
@@ -1911,10 +1899,7 @@ def delete_community_message(
     # Permission check
     is_author = message.author_id == current_user.id
 
-    my_membership_stmt = select(CommunityMember).where(
-        CommunityMember.community_id == id, CommunityMember.user_id == current_user.id
-    )
-    my_membership = session.exec(my_membership_stmt).first()
+    my_membership = _get_accepted_membership(session, id, current_user.id)
     is_staff = my_membership and my_membership.role in [
         CommunityMemberRole.ADMIN,
         CommunityMemberRole.MODERATOR,

@@ -305,6 +305,15 @@ class UserCreate(SQLModel):
             return v.lower().strip()
         return v
 
+    @field_validator("password", mode="after")
+    @classmethod
+    def validate_password_complexity(cls, v: str) -> str:
+        if not any(c.isupper() for c in v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("Password must contain at least one digit")
+        return v
+
     @field_validator("full_name", mode="before")
     @classmethod
     def validate_full_name(cls, v: str | None) -> str | None:
@@ -325,6 +334,15 @@ class UserRegister(SQLModel):
     def validate_email(cls, v: str) -> str:
         if isinstance(v, str):
             return v.lower().strip()
+        return v
+
+    @field_validator("password", mode="after")
+    @classmethod
+    def validate_password_complexity(cls, v: str) -> str:
+        if not any(c.isupper() for c in v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("Password must contain at least one digit")
         return v
 
     @field_validator("full_name", mode="before")
@@ -816,11 +834,11 @@ class WorksMetadataPublic(SQLModel):
 
 
 class ItemBatchAction(SQLModel):
-    item_ids: list[uuid.UUID]
+    item_ids: list[uuid.UUID] = Field(min_length=1, max_length=100)
 
 
 class ItemBatchEnrich(SQLModel):
-    item_ids: list[uuid.UUID]
+    item_ids: list[uuid.UUID] = Field(min_length=1, max_length=100)
     fields_to_overwrite: list[str] = Field(default=["description", "isbn", "image_url", "category", "genre", "tags"])
 
 

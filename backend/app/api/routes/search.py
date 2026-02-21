@@ -1,7 +1,7 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from sqlmodel import col, or_, select
 
 from app.api.deps import CurrentUser, SessionDep
@@ -38,8 +38,8 @@ def search(
     *,
     session: SessionDep,
     current_user: CurrentUser,
-    q: str,
-    limit: int = 10,
+    q: str = Query(..., min_length=1, max_length=200),
+    limit: int = Query(default=10, ge=1, le=50),
 ) -> Any:
     """
     Search for users, items, and communities.

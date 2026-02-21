@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 import sentry_sdk
@@ -11,9 +12,12 @@ from app.core.config import settings
 from app.search import configure_search
 from app.tasks import check_overdue_loans
 
+logger = logging.getLogger(__name__)
+
 
 def custom_generate_unique_id(route: APIRoute) -> str:
-    return f"{route.tags[0]}-{route.name}"
+    tag = route.tags[0] if route.tags else route.name
+    return f"{tag}-{route.name}"
 
 
 if settings.SENTRY_DSN and settings.ENVIRONMENT != "local":
@@ -42,13 +46,13 @@ app = FastAPI(
 
 # Set all CORS enabled origins
 if settings.all_cors_origins:
-    print(f"DEBUG: Allowed CORS origins: {settings.all_cors_origins}")
+    logger.debug("Allowed CORS origins: %s", settings.all_cors_origins)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.all_cors_origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Accept"],
     )
 
 app.include_router(api_router, prefix=settings.API_V1_STR)

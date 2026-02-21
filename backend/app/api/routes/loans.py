@@ -1043,6 +1043,23 @@ async def signal_item_interest(
         raise HTTPException(status_code=404, detail="Item not found")
     if item.owner_id == current_user.id:
         raise HTTPException(status_code=400, detail="You own this item")
+
+    # If the item is owned by a community, require accepted membership
+    community_owner = session.get(Community, item.owner_id)
+    if community_owner and not current_user.is_superuser:
+        membership = session.exec(
+            select(CommunityMember).where(
+                CommunityMember.community_id == item.owner_id,
+                CommunityMember.user_id == current_user.id,
+                CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+            )
+        ).first()
+        if not membership:
+            raise HTTPException(
+                status_code=403,
+                detail="Must be a member of the community to signal interest in this item",
+            )
+
     if check_item_availability(session, item_id):
         raise HTTPException(status_code=400, detail="Item is available — request a loan directly")
     existing = session.exec(

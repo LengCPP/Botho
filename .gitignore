@@ -11,3 +11,4 @@ frontend/manual-testing-scripts/
 .env.prod
 .env.bak
 docker-compose.override.yml
+PLANS.md

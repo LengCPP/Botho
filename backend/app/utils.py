@@ -41,7 +41,8 @@ def send_email(
     subject: str = "",
     html_content: str = "",
 ) -> None:
-    assert settings.emails_enabled, "no provided configuration for email variables"
+    if not settings.emails_enabled:
+        raise ValueError("Email is not configured: set SMTP_HOST and EMAILS_FROM_EMAIL")
 
     # Use Mailtrap SDK if SMTP_HOST is a mailtrap address and we have a token
     if settings.SMTP_HOST and "mailtrap" in settings.SMTP_HOST and settings.SMTP_PASSWORD:

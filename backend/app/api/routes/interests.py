@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from sqlmodel import col, select
 
 from app.api.deps import CurrentUser, SessionDep
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/interests", tags=["interests"])
 
 @router.get("/", response_model=list[InterestPublic])
 def read_interests(
-    session: SessionDep, skip: int = 0, limit: int = 100, q: str | None = None
+    session: SessionDep, skip: int = 0, limit: int = 100, q: str | None = Query(default=None, max_length=200)
 ) -> Any:
     """
     Retrieve interests.

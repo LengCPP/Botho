@@ -1,5 +1,4 @@
 import json
-import secrets
 import warnings
 from typing import Annotated, Any, Literal
 
@@ -36,7 +35,7 @@ class Settings(BaseSettings):
     )
     API_V1_STR: str = "/api/v1"
     DOMAIN: str = "localhost"
-    SECRET_KEY: str = secrets.token_urlsafe(32)
+    SECRET_KEY: str
     # 24 hours
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
     FRONTEND_HOST: str = "http://localhost:5173"
@@ -142,6 +141,8 @@ class Settings(BaseSettings):
         self._check_default_secret(
             "FIRST_SUPERUSER_PASSWORD", self.FIRST_SUPERUSER_PASSWORD
         )
+        self._check_default_secret("MEILI_MASTER_KEY", self.MEILI_MASTER_KEY)
+        self._check_default_secret("MINIO_ROOT_PASSWORD", self.MINIO_ROOT_PASSWORD)
 
         return self
 

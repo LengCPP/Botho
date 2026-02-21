@@ -354,7 +354,10 @@ def list_book_registry(
 
 @router.get("/book-registry/search", response_model=list[WorkMetadataPublic])
 def search_book_registry(
-    session: SessionDep, current_user: CurrentUser, q: str, limit: int = 5
+    session: SessionDep,
+    current_user: CurrentUser,
+    q: str = Query(..., min_length=1, max_length=200),
+    limit: int = Query(default=5, ge=1, le=50),
 ) -> Any:
     """
     Search the global book registry by title or author using Meilisearch.
@@ -622,7 +625,7 @@ def read_item_facets(
     current_user: CurrentUser,
     group_by: str = "category",
     owner_id: uuid.UUID | None = None,
-    q: str | None = None,
+    q: str | None = Query(default=None, max_length=200),
     skip: int = 0,
     limit: int = 20,
 ) -> Any:
@@ -936,7 +939,7 @@ def read_items(
     author: str | None = None,
     item_type: ItemType | None = None,
     enable_feed: bool = False,
-    q: str | None = None,
+    q: str | None = Query(default=None, max_length=200),
     minimal: Annotated[bool, Query()] = False,
     exclude_lost: bool = False,
     exclude_private: bool = False,
@@ -2510,22 +2513,26 @@ def batch_delete_items(
 ) -> Any:
     """Delete multiple items. Only owner or community admin can delete."""
     items = session.exec(select(Item).where(Item.id.in_(action.item_ids))).all()
-    deleted_count = 0
+    for item in items:
+        if not _is_owner_or_admin(item, current_user, session):
+            raise HTTPException(
+                status_code=403,
+                detail="Not authorized to modify one or more items in this batch",
+            )
+
     owner_ids = set()
     for item in items:
-        if _is_owner_or_admin(item, current_user, session):
-            if item.image_url:
-                delete_image(item.image_url)
-            owner_ids.add(item.owner_id)
-            session.delete(item)
-            delete_item_from_search(item.id)
-            deleted_count += 1
+        if item.image_url:
+            delete_image(item.image_url)
+        owner_ids.add(item.owner_id)
+        session.delete(item)
+        delete_item_from_search(item.id)
 
     session.commit()
     for o_id in owner_ids:
         rebuild_collection_index_task(o_id)
 
-    return Message(message=f"Successfully deleted {deleted_count} items.")
+    return Message(message=f"Successfully deleted {len(items)} items.")
 
 
 @router.post("/batch/mark-lost", response_model=Message)
@@ -2534,16 +2541,20 @@ def batch_mark_lost(
 ) -> Any:
     """Mark multiple items as lost."""
     items = session.exec(select(Item).where(Item.id.in_(action.item_ids))).all()
-    updated_count = 0
     for item in items:
-        if _is_owner_or_admin(item, current_user, session):
-            item.is_lost = True
-            session.add(item)
-            sync_item_to_search(item)
-            updated_count += 1
+        if not _is_owner_or_admin(item, current_user, session):
+            raise HTTPException(
+                status_code=403,
+                detail="Not authorized to modify one or more items in this batch",
+            )
+
+    for item in items:
+        item.is_lost = True
+        session.add(item)
+        sync_item_to_search(item)
 
     session.commit()
-    return Message(message=f"Successfully marked {updated_count} items as lost.")
+    return Message(message=f"Successfully marked {len(items)} items as lost.")
 
 
 @router.post("/batch/mark-found", response_model=Message)
@@ -2552,16 +2563,20 @@ def batch_mark_found(
 ) -> Any:
     """Mark multiple lost items as found (move back to catalogue)."""
     items = session.exec(select(Item).where(Item.id.in_(action.item_ids))).all()
-    updated_count = 0
     for item in items:
-        if _is_owner_or_admin(item, current_user, session):
-            item.is_lost = False
-            session.add(item)
-            sync_item_to_search(item)
-            updated_count += 1
+        if not _is_owner_or_admin(item, current_user, session):
+            raise HTTPException(
+                status_code=403,
+                detail="Not authorized to modify one or more items in this batch",
+            )
+
+    for item in items:
+        item.is_lost = False
+        session.add(item)
+        sync_item_to_search(item)
 
     session.commit()
-    return Message(message=f"Successfully marked {updated_count} items as found.")
+    return Message(message=f"Successfully marked {len(items)} items as found.")
 
 
 @router.post("/batch/toggle-privacy", response_model=Message)
@@ -2570,16 +2585,20 @@ def batch_toggle_privacy(
 ) -> Any:
     """Toggle privacy status for multiple items."""
     items = session.exec(select(Item).where(Item.id.in_(action.item_ids))).all()
-    updated_count = 0
     for item in items:
-        if _is_owner_or_admin(item, current_user, session):
-            item.is_private = not item.is_private
-            session.add(item)
-            sync_item_to_search(item)
-            updated_count += 1
+        if not _is_owner_or_admin(item, current_user, session):
+            raise HTTPException(
+                status_code=403,
+                detail="Not authorized to modify one or more items in this batch",
+            )
+
+    for item in items:
+        item.is_private = not item.is_private
+        session.add(item)
+        sync_item_to_search(item)
 
     session.commit()
-    return Message(message=f"Successfully toggled privacy for {updated_count} items.")
+    return Message(message=f"Successfully toggled privacy for {len(items)} items.")
 
 
 @router.post("/batch/enrich", response_model=Message)

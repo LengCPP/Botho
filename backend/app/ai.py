@@ -17,6 +17,17 @@ logger = logging.getLogger(__name__)
 OLLAMA_CHAT_URL = "http://ollama:11434/api/chat"
 LOCAL_MODEL = "gemma2:2b"
 
+
+def _sanitize_for_prompt(text: str | None, max_len: int = 200) -> str:
+    """Strip control characters and truncate before embedding in an LLM prompt."""
+    if not text:
+        return "N/A"
+    # Remove ASCII control characters (keep printable + tab)
+    sanitized = "".join(c for c in text if c >= " " or c == "\t")
+    # Collapse runs of whitespace to single space
+    sanitized = " ".join(sanitized.split())
+    return sanitized[:max_len]
+
 def is_retryable_error(exception):
     """Check if the error is a temporary connection or timeout error."""
     return isinstance(exception, (httpx.ConnectError, httpx.TimeoutException))
@@ -83,7 +94,7 @@ async def classify_books(books: list[dict]) -> list[tuple[str | None, str | None
 
     classification_guide = json.dumps(BOOK_CLASSIFICATION, indent=2)
     books_text = "\n".join([
-        f"ID: {i} | TITLE: {b.get('title')} | AUTHOR: {b.get('author')} | DESC: {b.get('description', 'N/A')[:200]}"
+        f"ID: {i} | TITLE: {_sanitize_for_prompt(b.get('title'), 150)} | AUTHOR: {_sanitize_for_prompt(b.get('author'), 100)} | DESC: {_sanitize_for_prompt(b.get('description'), 200)}"
         for i, b in enumerate(books)
     ])
 

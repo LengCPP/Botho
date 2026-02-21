@@ -1,6 +1,8 @@
+import ipaddress
 import logging
 import uuid
 from io import BytesIO
+from urllib.parse import urlparse
 
 import httpx
 from minio import Minio
@@ -8,6 +10,38 @@ from minio import Minio
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+_ALLOWED_SCHEMES = {"http", "https"}
+_PRIVATE_NETS = [
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),  # link-local
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),         # IPv6 ULA / loopback
+]
+
+
+def _validate_image_url(url: str) -> None:
+    """Raise ValueError if the URL is unsafe for server-side fetching (SSRF guard)."""
+    parsed = urlparse(url)
+    if parsed.scheme not in _ALLOWED_SCHEMES:
+        raise ValueError(f"Image URL must use http or https, got: {parsed.scheme!r}")
+    hostname = parsed.hostname or ""
+    if not hostname:
+        raise ValueError("Image URL has no hostname")
+    try:
+        addr = ipaddress.ip_address(hostname)
+        for net in _PRIVATE_NETS:
+            if addr in net:
+                raise ValueError(f"Image URL points to a private/internal address: {hostname}")
+    except ValueError as exc:
+        # Re-raise our own private-IP errors; ignore "not a valid IP" (hostname is a domain)
+        if "private" in str(exc) or "internal" in str(exc):
+            raise
+
 
 # Initialize Minio client
 minio_client = Minio(
@@ -50,12 +84,19 @@ def upload_image(file_data: bytes, file_name: str, folder: str = "item-images") 
 async def upload_image_from_url(url: str, folder: str = "item-images") -> str | None:
     """
     Download an image from a URL and upload it to Minio.
+    Validates the URL to prevent SSRF before making any network request.
     """
+    try:
+        _validate_image_url(url)
+    except ValueError as e:
+        logger.warning("Blocked unsafe image URL: %s — %s", url, e)
+        return None
+
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
     try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
+        async with httpx.AsyncClient(follow_redirects=False) as client:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
 
