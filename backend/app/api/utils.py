@@ -245,8 +245,9 @@ async def maintenance_bulk_classify(user_id: uuid.UUID):
                     # Convert subjects string to tags list
                     tags = [s.strip() for s in sub_raw.split(",")] if sub_raw else []
 
-                    # Ensure WorkMetadata also gets updated
-                    ensure_work_metadata(session, book.author, book.title, category=cat, genre=gen, tags=tags)
+                    # Ensure WorkMetadata also gets updated (overwrite=True so AI results
+                    # replace stale archive data, not just fill empty fields)
+                    ensure_work_metadata(session, book.author, book.title, category=cat, genre=gen, tags=tags, overwrite=True)
                     classified_count += 1
                     chunk_classified += 1
 
@@ -1018,61 +1019,75 @@ def map_book_classification(raw_values: str | list[str] | None) -> tuple[str | N
     """
     Maps raw genre/category strings to the app's BOOK_CLASSIFICATION.
     Returns (category, genre, subject).
+
+    Pass order:
+      1. Identify explicit category names first (e.g. "Fiction", "Non-Fiction").
+      2. Exact genre match — restricted to the found category if one was identified,
+         otherwise searched across all categories.
+      3. Partial/substring genre match — same scope restriction as pass 2.
+      4. Fall back to found category alone, or treat the first value as a subject.
+
+    Anchoring genre search to an explicit category prevents cross-category
+    genre matches from overriding the category signal (e.g. "Religion & Spirituality"
+    must not win over an explicit "Fiction" tag for Christian fiction).
     """
     if not raw_values:
         return None, None, None
 
     from app.constants import BOOK_CLASSIFICATION
 
-    # Normalize inputs to a list of strings
     candidates = [raw_values] if isinstance(raw_values, str) else raw_values
-    
-    found_cat = None
-    found_gen = None
-    
-    # 1. First Pass: Try to find any EXACT Genre Match (most specific)
-    for val in candidates:
-        if not val or not isinstance(val, str): continue
-        val_strip = val.strip().strip('"').strip("'").strip("`").strip()
-        if not val_strip: continue
-        val_lower = val_strip.lower()
 
-        for cat, genres in BOOK_CLASSIFICATION.items():
-            for genre in genres:
-                if genre.lower() == val_lower:
-                    return cat, genre, None
+    def _clean(val: object) -> str | None:
+        if not val or not isinstance(val, str):
+            return None
+        s = val.strip().strip('"').strip("'").strip("`").strip()
+        return s if s else None
 
-    # 2. Second Pass: Try to find any EXACT Category Match
-    for val in candidates:
-        if not val or not isinstance(val, str): continue
-        val_strip = val.strip().strip('"').strip("'").strip("`").strip()
-        if not val_strip: continue
-        val_lower = val_strip.lower()
+    clean = [c for v in candidates if (c := _clean(v))]
+    if not clean:
+        return None, None, None
 
+    # Pass 1: Identify any explicit category name in the inputs.
+    # Doing this first lets us restrict genre search to the right category.
+    found_cat: str | None = None
+    for val in clean:
         for cat in BOOK_CLASSIFICATION.keys():
-            if cat.lower() == val_lower:
+            if cat.lower() == val.lower():
                 found_cat = cat
                 break
-        if found_cat: break
+        if found_cat:
+            break
 
-    # 3. Third Pass: Try to find any PARTIAL Genre Match
-    for val in candidates:
-        if not val or not isinstance(val, str): continue
-        val_strip = val.strip().strip('"').strip("'").strip("`").strip()
-        if not val_strip: continue
-        val_lower = val_strip.lower()
+    # Restrict genre search to found_cat if present; otherwise search everything.
+    search_space = (
+        {found_cat: BOOK_CLASSIFICATION[found_cat]} if found_cat else BOOK_CLASSIFICATION
+    )
 
-        for cat, genres in BOOK_CLASSIFICATION.items():
+    # Values that are themselves category names must not be used for genre matching —
+    # "Fiction" is not a genre and would falsely substring-match "Science Fiction (Sci-Fi)".
+    all_cats_lower = {c.lower() for c in BOOK_CLASSIFICATION.keys()}
+    genre_candidates = [v for v in clean if v.lower() not in all_cats_lower]
+
+    # Pass 2: Exact genre match within search space.
+    for val in genre_candidates:
+        for cat, genres in search_space.items():
             for genre in genres:
-                if val_lower in genre.lower() or genre.lower() in val_lower:
+                if genre.lower() == val.lower():
                     return cat, genre, None
 
-    # 4. No specific genre found, return found category or use first candidate as subject
+    # Pass 3: Partial/substring genre match within search space.
+    for val in genre_candidates:
+        for cat, genres in search_space.items():
+            for genre in genres:
+                if val.lower() in genre.lower() or genre.lower() in val.lower():
+                    return cat, genre, None
+
+    # Pass 4: No specific genre found.
     if found_cat:
         return found_cat, None, None
-        
-    first_val = candidates[0] if candidates else None
-    return None, None, str(first_val) if first_val else None
+
+    return None, None, str(clean[0])
 
 
 def get_community_admin_count(session: Session, community_id: uuid.UUID) -> int:
