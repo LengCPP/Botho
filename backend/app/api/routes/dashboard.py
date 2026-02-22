@@ -114,7 +114,7 @@ def get_recent_activity(
         CommunityMember.user_id == current_user.id,
         CommunityMember.status == CommunityMemberStatus.ACCEPTED
     )
-    community_ids = {cid for cid in session.exec(comm_stmt).all()}
+    community_ids = set(session.exec(comm_stmt).all())
 
     # 2. Query Items
     # owner_id IN friends OR owner_id IN communities OR id IN (pooled items of my communities)

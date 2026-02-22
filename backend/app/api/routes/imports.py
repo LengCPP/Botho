@@ -59,8 +59,24 @@ def read_staged_items(session: SessionDep, current_user: CurrentUser, community_
     base = select(StagedItem).where(StagedItem.owner_id == current_user.id, StagedItem.community_id == community_id if community_id else StagedItem.community_id == None)
     data_stmt = base.where(StagedItem.status != StagedItemStatus.COMPLETED)
     items = session.exec(data_stmt.offset(skip).limit(limit)).all()
-    cnt = lambda s: session.exec(select(func.count(StagedItem.id)).where(StagedItem.owner_id == current_user.id, StagedItem.community_id == community_id if community_id else StagedItem.community_id == None, StagedItem.status == s)).one()
-    return StagedItemsPublic(data=items, count=session.exec(select(func.count()).select_from(data_stmt.subquery())).one(), pending_count=cnt(StagedItemStatus.PENDING), processing_count=cnt(StagedItemStatus.PROCESSING), completed_count=cnt(StagedItemStatus.COMPLETED), failed_count=cnt(StagedItemStatus.FAILED))
+    counts_stmt = (
+        select(StagedItem.status, func.count(StagedItem.id))
+        .where(
+            StagedItem.owner_id == current_user.id,
+            StagedItem.community_id == community_id if community_id else StagedItem.community_id == None,
+        )
+        .group_by(StagedItem.status)
+    )
+    count_by_status = dict(session.exec(counts_stmt).all())
+    total = session.exec(select(func.count()).select_from(data_stmt.subquery())).one()
+    return StagedItemsPublic(
+        data=items,
+        count=total,
+        pending_count=count_by_status.get(StagedItemStatus.PENDING, 0),
+        processing_count=count_by_status.get(StagedItemStatus.PROCESSING, 0),
+        completed_count=count_by_status.get(StagedItemStatus.COMPLETED, 0),
+        failed_count=count_by_status.get(StagedItemStatus.FAILED, 0),
+    )
 
 @router.patch("/{id}", response_model=StagedItemPublic)
 def update_staged_item(*, session: SessionDep, current_user: CurrentUser, id: uuid.UUID, raw_data: dict[str, Any]) -> Any:
