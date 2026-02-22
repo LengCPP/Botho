@@ -12,11 +12,13 @@ from fastapi import (
     Form,
     HTTPException,
     Query,
+    Request,
     UploadFile,
 )
 from sqlmodel import String, cast, col, func, or_, select, text
 
 from app.api.deps import CurrentUser, SessionDep
+from app.limiter import limiter
 from app.api.utils import (
     ai_classify_specific_books,
     check_item_availability,
@@ -2565,8 +2567,10 @@ def _is_owner_or_admin(item: Item, user: User, session: SessionDep) -> bool:
 
 
 @router.post("/batch/delete", response_model=Message)
+@limiter.limit("20/minute")
 def batch_delete_items(
     *,
+    request: Request,
     session: SessionDep,
     current_user: CurrentUser,
     action: ItemBatchAction,
@@ -2597,8 +2601,9 @@ def batch_delete_items(
 
 
 @router.post("/batch/mark-lost", response_model=Message)
+@limiter.limit("20/minute")
 def batch_mark_lost(
-    *, session: SessionDep, current_user: CurrentUser, action: ItemBatchAction
+    *, request: Request, session: SessionDep, current_user: CurrentUser, action: ItemBatchAction
 ) -> Any:
     """Mark multiple items as lost."""
     items = session.exec(select(Item).where(Item.id.in_(action.item_ids))).all()
@@ -2619,8 +2624,9 @@ def batch_mark_lost(
 
 
 @router.post("/batch/mark-found", response_model=Message)
+@limiter.limit("20/minute")
 def batch_mark_found(
-    *, session: SessionDep, current_user: CurrentUser, action: ItemBatchAction
+    *, request: Request, session: SessionDep, current_user: CurrentUser, action: ItemBatchAction
 ) -> Any:
     """Mark multiple lost items as found (move back to catalogue)."""
     items = session.exec(select(Item).where(Item.id.in_(action.item_ids))).all()
@@ -2641,8 +2647,9 @@ def batch_mark_found(
 
 
 @router.post("/batch/toggle-privacy", response_model=Message)
+@limiter.limit("20/minute")
 def batch_toggle_privacy(
-    *, session: SessionDep, current_user: CurrentUser, action: ItemBatchAction
+    *, request: Request, session: SessionDep, current_user: CurrentUser, action: ItemBatchAction
 ) -> Any:
     """Toggle privacy status for multiple items."""
     items = session.exec(select(Item).where(Item.id.in_(action.item_ids))).all()
@@ -2663,8 +2670,10 @@ def batch_toggle_privacy(
 
 
 @router.post("/batch/enrich", response_model=Message)
+@limiter.limit("10/minute")
 def batch_enrich_metadata(
     *,
+    request: Request,
     session: SessionDep,
     current_user: CurrentUser,
     action: ItemBatchEnrich,
@@ -2704,8 +2713,10 @@ def batch_enrich_metadata(
 
 
 @router.post("/batch/sync-archive", response_model=Message)
+@limiter.limit("10/minute")
 def batch_sync_from_archive(
     *,
+    request: Request,
     session: SessionDep,
     current_user: CurrentUser,
     action: ItemBatchAction,

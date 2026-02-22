@@ -5,13 +5,20 @@ from contextlib import asynccontextmanager
 import sentry_sdk
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi import _rate_limit_exceeded_handler
 from starlette.middleware.cors import CORSMiddleware
 
 from app.api.main import api_router
 from app.core.config import settings
+from app.limiter import limiter
+from app.logging_config import configure_logging
 from app.push import check_vapid_config
 from app.search import configure_search
 from app.tasks import check_overdue_loans
+
+configure_logging(settings.ENVIRONMENT)
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +55,10 @@ app = FastAPI(
     generate_unique_id_function=custom_generate_unique_id,
     lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 # Set all CORS enabled origins
 if settings.all_cors_origins:

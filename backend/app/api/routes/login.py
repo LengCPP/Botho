@@ -4,12 +4,13 @@ from datetime import timedelta
 from typing import Annotated, Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app import crud
 from app.api.deps import CurrentUser, SessionDep, get_current_active_superuser
+from app.limiter import limiter
 from app.api.utils import filter_user_privacy
 from app.core import security
 from app.core.config import settings
@@ -23,16 +24,15 @@ from app.utils import (
     verify_password_reset_token,
 )
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["login"])
 
 
 @router.post("/login/access-token")
+@limiter.limit("10/minute")
 def login_access_token(
-    session: SessionDep, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
+    request: Request, session: SessionDep, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
 ) -> Token:
     """
     OAuth2 compatible token login, get an access token for future requests
@@ -201,7 +201,8 @@ def recover_password_html_content(email: str, session: SessionDep) -> Any:
 
 
 @router.get("/auth/google")
-def login_google_init():
+@limiter.limit("20/minute")
+def login_google_init(request: Request):
     """
     Initiate Google OAuth flow.
     """
@@ -232,8 +233,9 @@ def login_google_init():
 
 
 @router.get("/auth/google/callback")
+@limiter.limit("20/minute")
 async def login_google_callback(
-    code: str, session: SessionDep
+    request: Request, code: str, session: SessionDep
 ):
     """
     Handle Google OAuth callback.

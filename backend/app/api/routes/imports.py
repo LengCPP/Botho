@@ -5,10 +5,11 @@ import random
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from sqlmodel import Session, func, select
 
 from app.api.deps import CurrentUser, SessionDep
+from app.limiter import limiter
 from app.api.utils import (
     ensure_work_metadata,
     fetch_external_book_metadata,
@@ -128,20 +129,23 @@ async def notify_import_finished(owner_id: uuid.UUID, comm_id: uuid.UUID | None 
     await notification_manager.send_personal_message({"type": type, "status": "COMPLETED"}, owner_id)
 
 @router.post("/process")
-async def process_staged_items(*, session: SessionDep, current_user: CurrentUser, background_tasks: BackgroundTasks, ids: list[uuid.UUID], community_id: uuid.UUID | None = None) -> Any:
+@limiter.limit("5/minute")
+async def process_staged_items(*, request: Request, session: SessionDep, current_user: CurrentUser, background_tasks: BackgroundTasks, ids: list[uuid.UUID], community_id: uuid.UUID | None = None) -> Any:
     for i in ids: background_tasks.add_task(enrich_and_import_item, i, current_user.id, community_id)
     background_tasks.add_task(notify_import_finished, current_user.id, community_id)
     return {"message": "Queued"}
 
 @router.post("/process-all")
-async def process_all_staged_items(*, session: SessionDep, current_user: CurrentUser, background_tasks: BackgroundTasks, community_id: uuid.UUID | None = None) -> Any:
+@limiter.limit("5/minute")
+async def process_all_staged_items(*, request: Request, session: SessionDep, current_user: CurrentUser, background_tasks: BackgroundTasks, community_id: uuid.UUID | None = None) -> Any:
     items = session.exec(select(StagedItem).where(StagedItem.owner_id == current_user.id, StagedItem.status == StagedItemStatus.PENDING, StagedItem.community_id == community_id if community_id else StagedItem.community_id == None)).all()
     for i in items: background_tasks.add_task(enrich_and_import_item, i.id, current_user.id, community_id)
     background_tasks.add_task(notify_import_finished, current_user.id, community_id)
     return {"message": f"Queued {len(items)}"}
 
 @router.post("/sync-archive")
-async def sync_archive_items(*, session: SessionDep, current_user: CurrentUser, background_tasks: BackgroundTasks, ids: list[uuid.UUID]) -> Any:
+@limiter.limit("5/minute")
+async def sync_archive_items(*, request: Request, session: SessionDep, current_user: CurrentUser, background_tasks: BackgroundTasks, ids: list[uuid.UUID]) -> Any:
     if not current_user.is_superuser: raise HTTPException(403)
     for i in ids: background_tasks.add_task(enrich_and_import_to_archive, i, current_user.id)
     background_tasks.add_task(notify_import_finished, current_user.id, "BOOK_ARCHIVE_BATCH_COMPLETED")
