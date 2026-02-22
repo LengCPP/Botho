@@ -39,6 +39,7 @@ from app.core.config import settings
 from app.models import (
     BookEnrichmentRequest,
     Community,
+    CommunityInterest,
     CommunityItem,
     CommunityMember,
     CommunityMemberRole,
@@ -47,6 +48,7 @@ from app.models import (
     Friendship,
     FriendshipStatus,
     Interest,
+    InterestSignal,
     Item,
     ItemBatchAction,
     ItemBatchEnrich,
@@ -66,6 +68,8 @@ from app.models import (
     Loan,
     LoanStatus,
     Message,
+    ReadingLog,
+    ReadingLogStatus,
     User,
     UserInterest,
     WorkMetadata,
@@ -414,169 +418,209 @@ def recommend_items(
 ) -> Any:
     """
     Get recommended books based on user interests and social graph.
-    Uses Meilisearch for ranking and filtering.
+
+    Signal hierarchy (highest → lowest weight):
+      1. InterestSignal  — user explicitly clicked "notify me" on an item (weight ×3)
+      2. ReadingLog COMPLETED / ItemReview 5★ — strong positive taste signals (weight ×2)
+      3. ReadingLog READING / ItemReview 4★ / Loan history — moderate signals (weight ×1)
+      4. User interests (manual) — broad category preferences (weight ×1)
+      5. Community interests — cold-start fallback when user has no personal signals
+
+    ReadingLog DROPPED books: author excluded from results.
     """
+    from sqlalchemy import tuple_
     from app.search import client
 
-    # 1. Get Social Graph (Friends & Communities)
-    # Optimization: If user has 0 items and 0 interests, skip complex logic
-    if (
-        current_user.collection_index
-        and current_user.collection_index.get("total") == 0
-    ):
-        # Check interests
-        interests_count = session.exec(
-            select(func.count(UserInterest.interest_id)).where(
-                UserInterest.user_id == current_user.id
-            )
-        ).one()
-        if interests_count == 0:
-            return ItemsPublic(data=[], count=0)
-
-    # Friends (bidirectional)
+    # ── 1. Social graph ──────────────────────────────────────────────────────
     friends_stmt = select(Friendship).where(
-        (Friendship.user_id == current_user.id)
-        | (Friendship.friend_id == current_user.id),
+        (Friendship.user_id == current_user.id) | (Friendship.friend_id == current_user.id),
         Friendship.status == FriendshipStatus.ACCEPTED,
     )
-    friendships = session.exec(friends_stmt).all()
     friend_ids = set()
-    for f in friendships:
-        if f.user_id == current_user.id:
-            friend_ids.add(str(f.friend_id))
-        else:
-            friend_ids.add(str(f.user_id))
+    for f in session.exec(friends_stmt).all():
+        friend_ids.add(str(f.friend_id if f.user_id == current_user.id else f.user_id))
 
-    # Communities
     comm_stmt = select(CommunityMember.community_id).where(
         CommunityMember.user_id == current_user.id,
         CommunityMember.status == CommunityMemberStatus.ACCEPTED,
     )
     community_ids = {str(cid) for cid in session.exec(comm_stmt).all()}
+    community_uuids = {uuid.UUID(cid) for cid in community_ids}
 
-    # 2. Get Interests
-    interests = session.exec(
-        select(Interest.name)
-        .join(UserInterest)
-        .where(UserInterest.user_id == current_user.id)
+    allowed_owners = list(friend_ids | community_ids)
+    if not allowed_owners:
+        return ItemsPublic(data=[], count=0)
+
+    # ── 2. Signal collection ──────────────────────────────────────────────────
+
+    # 2a. InterestSignal — user explicitly flagged these items (weight ×3)
+    signal_rows = session.exec(
+        select(Item.author, Item.category, Item.genre)
+        .join(InterestSignal, InterestSignal.item_id == Item.id)
+        .where(InterestSignal.user_id == current_user.id)
+        .limit(20)
     ).all()
 
-    # 2.1 Get Past Loans (Subjects/History)
-    # Fetch last 20 items borrowed by the user
-    loan_items_stmt = (
+    # 2b. ReadingLog
+    completed_logs = session.exec(
+        select(ReadingLog.author, ReadingLog.title)
+        .where(ReadingLog.user_id == current_user.id, ReadingLog.status == ReadingLogStatus.COMPLETED)
+        .limit(20)
+    ).all()
+
+    reading_logs = session.exec(
+        select(ReadingLog.author, ReadingLog.title)
+        .where(ReadingLog.user_id == current_user.id, ReadingLog.status == ReadingLogStatus.READING)
+        .limit(10)
+    ).all()
+
+    dropped_logs = session.exec(
+        select(ReadingLog.author)
+        .where(ReadingLog.user_id == current_user.id, ReadingLog.status == ReadingLogStatus.DROPPED)
+        .limit(30)
+    ).all()
+
+    # 2c. Item reviews
+    rated_rows = session.exec(
+        select(ItemReview.author, ItemReview.title, ItemReview.rating)
+        .where(ItemReview.user_id == current_user.id, ItemReview.rating >= 4)
+        .limit(20)
+    ).all()
+
+    # 2d. Loan history (weight ×1)
+    loan_rows = session.exec(
         select(Item.author, Item.title)
         .join(Loan, Loan.item_id == Item.id)
         .where(Loan.requester_id == current_user.id)
         .order_by(Loan.created_at.desc())
-        .limit(20)
-    )
-    loan_items = session.exec(loan_items_stmt).all()
+        .limit(15)
+    ).all()
 
-    # 2.2 Get Highly Rated Items
-    # Fetch items rated 4 or 5 by the user
-    rated_items_stmt = (
-        select(ItemReview.author, ItemReview.title)
-        .where(ItemReview.user_id == current_user.id, ItemReview.rating >= 4)
-        .limit(20)
-    )
-    rated_items = session.exec(rated_items_stmt).all()
+    # 2e. User interests (manual)
+    interests = session.exec(
+        select(Interest.name).join(UserInterest).where(UserInterest.user_id == current_user.id)
+    ).all()
 
-    # 2.3 Get User's Own Items (to understand their taste)
-    owned_items_stmt = (
-        select(Item.author, Item.title)
-        .where(Item.owner_id == current_user.id)
-        .limit(20)
-    )
-    owned_items = session.exec(owned_items_stmt).all()
+    has_personal_signals = bool(signal_rows or completed_logs or reading_logs or rated_rows or loan_rows or interests)
 
-    # Collect unique work identifiers
-    work_keys = set()
-    for author, title in loan_items:
+    # ── 3. Weighted keyword pool ──────────────────────────────────────────────
+    # Repeat terms proportional to weight so Meilisearch BM25 ranks them higher.
+    weighted_terms: list[str] = []
+
+    # InterestSignal items (×3)
+    for author, category, genre in signal_rows:
+        if author:
+            weighted_terms.extend([author] * 3)
+        if category:
+            weighted_terms.extend([category] * 3)
+        if genre:
+            weighted_terms.extend([genre] * 2)
+
+    # ReadingLog COMPLETED (×2)
+    completed_work_keys = set()
+    for author, title in completed_logs:
+        if author:
+            weighted_terms.extend([author] * 2)
         if author and title:
-            work_keys.add((author, title))
-    for author, title in rated_items:
+            completed_work_keys.add((author, title))
+
+    # ReadingLog READING (×1)
+    reading_work_keys = set()
+    for author, title in reading_logs:
+        if author:
+            weighted_terms.append(author)
         if author and title:
-            work_keys.add((author, title))
-    for author, title in owned_items:
+            reading_work_keys.add((author, title))
+
+    # ItemReview 5★ (×2), 4★ (×1)
+    rated_work_keys = set()
+    for author, title, rating in rated_rows:
+        if author:
+            weighted_terms.extend([author] * (2 if rating == 5 else 1))
         if author and title:
-            work_keys.add((author, title))
+            rated_work_keys.add((author, title))
 
-    # Fetch metadata tags/categories for these works
-    extra_keywords = set()
-    if work_keys:
-        from sqlalchemy import tuple_
+    # Loan history (×1)
+    loan_work_keys = set()
+    for author, title in loan_rows:
+        if author:
+            weighted_terms.append(author)
+        if author and title:
+            loan_work_keys.add((author, title))
 
-        works_stmt = select(WorkMetadata).where(
-            tuple_(WorkMetadata.author, WorkMetadata.title).in_(list(work_keys))
-        )
-        works = session.exec(works_stmt).all()
+    # User interests (×1)
+    weighted_terms.extend(list(interests))
 
-        for work in works:
+    # Enrich from WorkMetadata (categories + tags) for all collected works
+    all_work_keys = completed_work_keys | reading_work_keys | rated_work_keys | loan_work_keys
+    if all_work_keys:
+        for work in session.exec(
+            select(WorkMetadata).where(
+                tuple_(WorkMetadata.author, WorkMetadata.title).in_(list(all_work_keys))
+            )
+        ).all():
             if work.category:
-                extra_keywords.add(work.category)
+                weighted_terms.append(work.category)
             if work.tags:
-                for tag in work.tags[:3]:
-                    extra_keywords.add(tag)
+                weighted_terms.extend(work.tags[:3])
 
-    # Combine Interests + Extra Keywords
-    query_parts = list(interests) + list(extra_keywords)
-    unique_query_parts = list(set(query_parts))
-    search_query = " ".join(unique_query_parts) if unique_query_parts else ""
+    # ── 4. Cold-start: use community interests when user has no personal signals ──
+    if not has_personal_signals and community_uuids:
+        community_interest_names = session.exec(
+            select(Interest.name)
+            .join(CommunityInterest)
+            .where(CommunityInterest.community_id.in_(community_uuids))
+        ).all()
+        weighted_terms.extend(community_interest_names)
 
-    # 3. Construct Meilisearch Filter
-    allowed_owners = list(friend_ids | community_ids)
-    allowed_pools = list(community_ids)
+    # ── 5. Build search query and filters ────────────────────────────────────
+    search_query = " ".join(weighted_terms) if weighted_terms else ""
 
-    filter_expression = ["item_type = 'book'", f"owner_id != '{current_user.id}'"]
+    filter_expression: list[str] = ["item_type = 'book'", f"owner_id != '{current_user.id}'"]
 
-    access_filters = []
+    access_parts: list[str] = []
     if allowed_owners:
-        owners_list = ", ".join([f"'{uid}'" for uid in allowed_owners])
-        access_filters.append(f"owner_id IN [{owners_list}]")
-    if allowed_pools:
-        pools_list = ", ".join([f"'{pid}'" for pid in allowed_pools])
-        access_filters.append(f"pooled_in IN [{pools_list}]")
+        access_parts.append(f"owner_id IN [{', '.join(f'{uid!r}' for uid in allowed_owners)}]")
+    if community_ids:
+        access_parts.append(f"pooled_in IN [{', '.join(f'{pid!r}' for pid in community_ids)}]")
+    filter_expression.append(f"({' OR '.join(access_parts)})")
 
-    if access_filters:
-        filter_expression.append(f"({' OR '.join(access_filters)})")
-    else:
-        return ItemsPublic(data=[], count=0)
+    # Exclude authors the user explicitly dropped
+    dropped_authors = {a for a in dropped_logs if a}
+    if dropped_authors:
+        filter_expression.append(
+            f"author NOT IN [{', '.join(f'{a!r}' for a in dropped_authors)}]"
+        )
 
-    # 4. Execute Search
+    # ── 6. Meilisearch query ─────────────────────────────────────────────────
     try:
-        index = client.index("items")
-        search_results = index.search(
+        hits = client.index("items").search(
             search_query,
             {
                 "filter": filter_expression,
-                "limit": limit,
+                "limit": limit * 2,  # over-fetch to absorb DB-level exclusions
                 "offset": skip,
             },
-        )
-        hits = search_results["hits"]
+        )["hits"]
     except Exception:
-        logger.warning("Meilisearch search failed, returning empty result", exc_info=True)
+        logger.warning("Meilisearch search failed for recommendations", exc_info=True)
         return ItemsPublic(data=[], count=0)
 
     if not hits:
         return ItemsPublic(data=[], count=0)
 
-    item_ids = [uuid.UUID(hit["id"]) for hit in hits]
+    hit_ids = [uuid.UUID(h["id"]) for h in hits]
 
-    # 5. Fetch DB Items
-    # Exclude items with DEFAULTED loans
-    defaulted_item_ids = select(Loan.item_id).where(Loan.status == LoanStatus.DEFAULTED)
+    # ── 7. Fetch items, exclude defaulted ────────────────────────────────────
+    defaulted_sub = select(Loan.item_id).where(Loan.status == LoanStatus.DEFAULTED)
     db_items = session.exec(
-        select(Item)
-        .where(Item.id.in_(item_ids))
-        .where(~Item.id.in_(defaulted_item_ids))
+        select(Item).where(Item.id.in_(hit_ids), ~Item.id.in_(defaulted_sub))
     ).all()
     item_map = {item.id: item for item in db_items}
-
-    # Bulk-fetch per-item data to avoid N+1 queries inside the result loop
     item_ids_list = list(item_map.keys())
 
-    active_loan_item_ids = set(session.exec(
+    # ── 8. Bulk-fetch enrichment data ────────────────────────────────────────
+    active_loan_ids = set(session.exec(
         select(Loan.item_id).where(
             Loan.item_id.in_(item_ids_list),
             Loan.status.in_([
@@ -587,14 +631,13 @@ def recommend_items(
         )
     ).all())
 
-    all_ratings = session.exec(
-        select(ItemConditionRating).where(ItemConditionRating.item_id.in_(item_ids_list))
-    ).all()
     ratings_by_item: dict[uuid.UUID, list] = {}
-    for r in all_ratings:
+    for r in session.exec(
+        select(ItemConditionRating).where(ItemConditionRating.item_id.in_(item_ids_list))
+    ).all():
         ratings_by_item.setdefault(r.item_id, []).append(r)
 
-    possession_item_ids = set(session.exec(
+    possession_ids = set(session.exec(
         select(Loan.item_id).where(
             Loan.item_id.in_(item_ids_list),
             Loan.requester_id == current_user.id,
@@ -605,69 +648,68 @@ def recommend_items(
         )
     ).all())
 
-    ordered_items = []
-    for hit in hits:
-        hid = uuid.UUID(hit["id"])
-        if hid in item_map:
-            item = item_map[hid]
-
-            # Enrich using bulk-fetched data
-            is_avail = item.id not in active_loan_item_ids
-            owner_pub = None
-            community_pub = None
-            if item.user_owner:
-                owner_pub = filter_owner_privacy(
-                    item.user_owner,
-                    current_user.id,
-                    is_admin=current_user.is_superuser,
-                    session=session,
-                )
-                owner_pub.is_available = is_avail
-            elif item.community_owner:
-                community_pub = item.community_owner
-
-            item_ratings = ratings_by_item.get(item.id, [])
-            if item_ratings:
-                avg_grade = sum(r.grade for r in item_ratings) / len(item_ratings)
-                cond_notes = [
-                    {
-                        "user_id": str(r.user_id),
-                        "note": r.notes,
-                        "created_at": r.created_at.isoformat() if r.created_at else None,
-                    }
-                    for r in item_ratings if r.notes
-                ]
-            else:
-                avg_grade = 0.0
-                cond_notes = []
-            cond_data = {"average_grade": avg_grade, "notes": cond_notes}
-            had_possession = item.owner_id == current_user.id or item.id in possession_item_ids
-
-            item_pub = ItemPublic(
-                id=item.id,
-                owner_id=item.owner_id,
-                title=item.title,
-                description=item.description,
-                author=item.author,
-                item_type=item.item_type,
-                image_url=item.image_url,
-                info={
-                    **(item.info or {}),
-                    "average_condition_grade": cond_data["average_grade"],
-                    "physical_notes": cond_data["notes"],
-                },
-                count=item.count,
-                created_at=item.created_at,
-                owner=owner_pub,
-                community_owner=community_pub,
-                is_available=is_avail,
-                work_metadata=get_work_metadata(session, item.author, item.title),
-                had_possession=had_possession,
-                category=item.category,
-                genre=item.genre,
-                subject=item.subject,
+    # Bulk-fetch WorkMetadata for result items (replaces per-item N+1 queries)
+    hit_work_keys = [
+        (item.author, item.title) for item in db_items if item.author and item.title
+    ]
+    work_meta_map: dict[tuple, WorkMetadata] = {}
+    if hit_work_keys:
+        for wm in session.exec(
+            select(WorkMetadata).where(
+                tuple_(WorkMetadata.author, WorkMetadata.title).in_(hit_work_keys)
             )
-            ordered_items.append(item_pub)
+        ).all():
+            work_meta_map[(wm.author, wm.title)] = wm
+
+    # ── 9. Assemble results in Meilisearch rank order ─────────────────────────
+    ordered_items: list[ItemPublic] = []
+    for hit in hits:
+        item = item_map.get(uuid.UUID(hit["id"]))
+        if item is None:
+            continue
+
+        is_avail = item.id not in active_loan_ids
+        owner_pub = None
+        community_pub = None
+        if item.user_owner:
+            owner_pub = filter_owner_privacy(
+                item.user_owner, current_user.id,
+                is_admin=current_user.is_superuser, session=session,
+            )
+            owner_pub.is_available = is_avail
+        elif item.community_owner:
+            community_pub = item.community_owner
+
+        item_ratings = ratings_by_item.get(item.id, [])
+        avg_grade = sum(r.grade for r in item_ratings) / len(item_ratings) if item_ratings else 0.0
+        cond_notes = [
+            {"user_id": str(r.user_id), "note": r.notes,
+             "created_at": r.created_at.isoformat() if r.created_at else None}
+            for r in item_ratings if r.notes
+        ]
+
+        ordered_items.append(ItemPublic(
+            id=item.id,
+            owner_id=item.owner_id,
+            title=item.title,
+            description=item.description,
+            author=item.author,
+            item_type=item.item_type,
+            image_url=item.image_url,
+            info={**(item.info or {}), "average_condition_grade": avg_grade, "physical_notes": cond_notes},
+            count=item.count,
+            created_at=item.created_at,
+            owner=owner_pub,
+            community_owner=community_pub,
+            is_available=is_avail,
+            work_metadata=work_meta_map.get((item.author, item.title)),
+            had_possession=item.owner_id == current_user.id or item.id in possession_ids,
+            category=item.category,
+            genre=item.genre,
+            subject=item.subject,
+        ))
+        if len(ordered_items) == limit:
+            break
 
     return ItemsPublic(data=ordered_items, count=len(ordered_items))
 
