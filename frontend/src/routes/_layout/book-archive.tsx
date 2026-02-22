@@ -35,6 +35,7 @@ import {
 import { z } from "zod"
 
 import { ItemsService } from "@/client"
+import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import { ImportItems } from "@/components/Common/ImportItems"
 import {
   DialogActionTrigger,
@@ -228,6 +229,8 @@ function BooksTable({
   )
   const totalCount = data?.pages?.[0]?.count || 0
 
+  const [pendingDelete, setPendingDelete] = useState<{ author: string; title: string } | null>(null)
+
   const deleteMutation = useMutation({
     mutationFn: ({ author, title }: { author: string; title: string }) =>
       ItemsService.deleteWorkMetadata({ author, title }),
@@ -239,19 +242,16 @@ function BooksTable({
     onError: () => {
       showErrorToast("Failed to delete book")
     },
+    onSettled: () => {
+      setPendingDelete(null)
+    },
   })
 
   const handleDelete = useCallback(
     (author: string, title: string) => {
-      if (
-        window.confirm(
-          `Are you sure you want to delete "${title}" by ${author}?`,
-        )
-      ) {
-        deleteMutation.mutate({ author, title })
-      }
+      setPendingDelete({ author, title })
     },
-    [deleteMutation],
+    [],
   )
 
   const handleSelectAll = (checked: boolean) => {
@@ -347,6 +347,22 @@ function BooksTable({
           You've reached the end of the archive.
         </Text>
       )}
+
+      <ConfirmationModal
+        isOpen={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={() => pendingDelete && deleteMutation.mutate(pendingDelete)}
+        title="Delete from Registry"
+        message={
+          pendingDelete
+            ? `Are you sure you want to delete "${pendingDelete.title}" by ${pendingDelete.author}? This will permanently remove it from the book registry.`
+            : ""
+        }
+        isLoading={deleteMutation.isPending}
+        showCheckbox={false}
+        confirmButtonText="Delete"
+        colorPalette="red"
+      />
     </VStack>
   )
 }
