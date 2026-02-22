@@ -32,6 +32,51 @@ def is_retryable_error(exception):
     """Check if the error is a temporary connection or timeout error."""
     return isinstance(exception, (httpx.ConnectError, httpx.TimeoutException))
 
+
+@retry(
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    stop=stop_after_attempt(3),
+    retry=retry_if_exception(is_retryable_error),
+    reraise=True,
+)
+async def _call_llm_snapshot(payload: dict) -> str:
+    """Send a single payload to Ollama and return the message content."""
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(OLLAMA_CHAT_URL, json=payload)
+        resp.raise_for_status()
+        return resp.json()["message"]["content"]
+
+
+@retry(
+    wait=wait_exponential(multiplier=2, min=4, max=20),
+    stop=stop_after_attempt(3),
+    retry=retry_if_exception(is_retryable_error),
+    before_sleep=lambda retry_state: logger.warning(
+        "Retrying classification (attempt %d)...", retry_state.attempt_number
+    ),
+    reraise=True,
+)
+async def _call_llm_classify(payload: dict) -> str:
+    """Send a classification payload to Ollama and return the message content."""
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(OLLAMA_CHAT_URL, json=payload)
+        resp.raise_for_status()
+        return resp.json()["message"]["content"]
+
+
+def _validate_classification(obj: dict) -> tuple[str | None, str | None, str | None]:
+    """Validate and extract classification fields; returns (None, None, None) if schema invalid."""
+    lowered = {k.lower(): v for k, v in obj.items() if isinstance(k, str)}
+    cat = lowered.get("category")
+    gen = lowered.get("genre")
+    sub = lowered.get("subjects") or lowered.get("subject")
+    if isinstance(sub, list):
+        sub = ", ".join(map(str, sub))
+    if not (isinstance(cat, str) and cat.strip() and isinstance(gen, str) and gen.strip()):
+        return None, None, None
+    return cat.strip(), gen.strip(), sub
+
+
 async def generate_honor_snapshot(reviews: list[str]) -> tuple[str | None, list[str]]:
     """Use Local LLM to synthesize a reputation summary and improvement tips."""
     if not reviews:
@@ -53,25 +98,13 @@ async def generate_honor_snapshot(reviews: list[str]) -> tuple[str | None, list[
     {reviews_text}
     """
     try:
-        @retry(
-            wait=wait_exponential(multiplier=1, min=2, max=10),
-            stop=stop_after_attempt(3),
-            retry=retry_if_exception(is_retryable_error),
-            reraise=True
-        )
-        async def _call_local_llm():
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                payload = {
-                    "model": LOCAL_MODEL,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "stream": False,
-                    "options": {"temperature": 0.1, "num_thread": 6}
-                }
-                resp = await client.post(OLLAMA_CHAT_URL, json=payload)
-                resp.raise_for_status()
-                return resp.json()["message"]["content"]
-
-        text = await _call_local_llm()
+        payload = {
+            "model": LOCAL_MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+            "options": {"temperature": 0.1, "num_thread": 6}
+        }
+        text = await _call_llm_snapshot(payload)
         summary, tips = "", []
         if "SUMMARY:" in text and "TIPS:" in text:
             parts = text.split("TIPS:")
@@ -119,30 +152,17 @@ async def classify_books(books: list[dict]) -> list[tuple[str | None, str | None
     ]
     """
     try:
-        @retry(
-            wait=wait_exponential(multiplier=2, min=4, max=20),
-            stop=stop_after_attempt(3),
-            retry=retry_if_exception(is_retryable_error),
-            before_sleep=lambda retry_state: logger.warning(f"Retrying classification (attempt {retry_state.attempt_number})..."),
-            reraise=True
-        )
-        async def _call_local_llm():
-            async with httpx.AsyncClient(timeout=600.0) as client:
-                payload = {
-                    "model": LOCAL_MODEL,
-                    "messages": [
-                        {"role": "system", "content": "You are a professional librarian. Respond ONLY with a valid JSON list of objects matching the guide exactly. For 'subjects', provide 2-3 descriptive keywords about the themes or topics, NEVER the book title."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "format": "json",
-                    "stream": False,
-                    "options": {"temperature": 0.0, "num_thread": 6}
-                }
-                resp = await client.post(OLLAMA_CHAT_URL, json=payload)
-                resp.raise_for_status()
-                return resp.json()["message"]["content"]
-
-        text = await _call_local_llm()
+        payload = {
+            "model": LOCAL_MODEL,
+            "messages": [
+                {"role": "system", "content": "You are a professional librarian. Respond ONLY with a valid JSON list of objects matching the guide exactly. For 'subjects', provide 2-3 descriptive keywords about the themes or topics, NEVER the book title."},
+                {"role": "user", "content": prompt}
+            ],
+            "format": "json",
+            "stream": False,
+            "options": {"temperature": 0.0, "num_thread": 6}
+        }
+        text = await _call_llm_classify(payload)
         logger.info(f"Local LLM Response: {text}")
         
         results = [(None, None, None)] * len(books)
@@ -155,16 +175,6 @@ async def classify_books(books: list[dict]) -> list[tuple[str | None, str | None
                     clean_text = clean_text.replace("json", "", 1).strip()
             
             data = json.loads(clean_text)
-            
-            def extract_item_data(obj):
-                """Helper to extract classification from varied object shapes."""
-                lowered = {k.lower(): v for k, v in obj.items() if isinstance(k, str)}
-                cat = lowered.get("category")
-                gen = lowered.get("genre")
-                sub = lowered.get("subjects") or lowered.get("subject")
-                if isinstance(sub, list):
-                    sub = ", ".join(map(str, sub))
-                return cat, gen, sub
 
             if isinstance(data, list):
                 for item in data:
@@ -173,21 +183,21 @@ async def classify_books(books: list[dict]) -> list[tuple[str | None, str | None
                     if idx is not None:
                         idx_int = int(idx)
                         if 0 <= idx_int < len(books):
-                            results[idx_int] = extract_item_data(item)
+                            results[idx_int] = _validate_classification(item)
             elif isinstance(data, dict):
                 for k, v in data.items():
                     if isinstance(v, dict) and k.isdigit():
                         idx_int = int(k)
                         if 0 <= idx_int < len(books):
-                            results[idx_int] = extract_item_data(v)
+                            results[idx_int] = _validate_classification(v)
                     elif k.lower() in ["id", "category", "genre"]:
                         idx = data.get("id") or data.get("ID") or 0
                         idx_int = int(idx)
                         if 0 <= idx_int < len(books):
-                            results[idx_int] = extract_item_data(data)
+                            results[idx_int] = _validate_classification(data)
                         break
         except Exception as e:
-            logger.error(f"Failed to parse LLM JSON: {e}. Raw response: {text[:200]}")
+            logger.error("Failed to parse LLM JSON: %s. Full raw response: %s", e, text)
             for line in text.split("\n"):
                 if "CATEGORY:" in line and "|" in line:
                     try:
