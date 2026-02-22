@@ -12,6 +12,29 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 _ALLOWED_SCHEMES = {"http", "https"}
+
+# Magic-bytes → MIME type map for supported image formats
+_MIME_TO_EXT: dict[str, str] = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/gif": "gif",
+    "image/webp": "webp",
+}
+
+
+def _detect_mime_type(data: bytes) -> str:
+    """Detect image MIME type from magic bytes. Raises ValueError for unsupported types."""
+    if data[:4] == b"\x89PNG":
+        return "image/png"
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    raise ValueError("Unsupported image format. Allowed types: PNG, JPEG, GIF, WebP")
+
+
 _PRIVATE_NETS = [
     ipaddress.ip_network("10.0.0.0/8"),
     ipaddress.ip_network("172.16.0.0/12"),
@@ -54,15 +77,19 @@ minio_client = Minio(
 def upload_image(file_data: bytes, file_name: str, folder: str = "item-images") -> str | None:
     """
     Upload an image to Minio and return the INTERNAL proxy URL.
+    Validates file size and MIME type from magic bytes before uploading.
     """
     try:
+        # Size guard
+        if len(file_data) > settings.max_image_size_bytes:
+            raise ValueError(f"Image exceeds maximum allowed size of {settings.MAX_IMAGE_SIZE_MB} MB")
+
+        # MIME type detection from magic bytes (rejects non-image content regardless of extension)
+        content_type = _detect_mime_type(file_data)
+        ext = _MIME_TO_EXT[content_type]
+
         if not minio_client.bucket_exists(settings.MINIO_STORAGE_BUCKET):
             minio_client.make_bucket(settings.MINIO_STORAGE_BUCKET)
-
-        # Generate a unique filename using UUID, preserving extension if possible
-        ext = "png"
-        if file_name and "." in file_name:
-            ext = file_name.split(".")[-1].lower()
 
         unique_name = f"{uuid.uuid4()}.{ext}"
         file_path = f"{folder}/{unique_name}"
@@ -73,12 +100,12 @@ def upload_image(file_data: bytes, file_name: str, folder: str = "item-images") 
             file_path,
             data,
             len(file_data),
-            content_type="image/png"
+            content_type=content_type,
         )
 
         return f"/api/v1/storage/image/{file_path}"
     except Exception as e:
-        logger.error(f"Minio upload failed: {e}")
+        logger.error("Minio upload failed: %s", e)
         return None
 
 async def upload_image_from_url(url: str, folder: str = "item-images") -> str | None:
@@ -118,13 +145,15 @@ def delete_image(file_path: str) -> bool:
     Delete an image from Minio.
     """
     try:
-        if "/api/v1/storage/image/" in file_path:
-            file_path = file_path.split("/api/v1/storage/image/")[-1]
+        _PREFIX = "/api/v1/storage/image/"
+        parsed_path = urlparse(file_path).path
+        if parsed_path.startswith(_PREFIX):
+            file_path = parsed_path[len(_PREFIX):]
 
         minio_client.remove_object(settings.MINIO_STORAGE_BUCKET, file_path)
         return True
     except Exception as e:
-        logger.error(f"Minio delete failed: {e}")
+        logger.error("Minio delete failed: %s", e)
         return False
 
 def get_proxy_url(file_path: str) -> str:

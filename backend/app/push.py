@@ -9,6 +9,24 @@ from app.models import PushSubscription
 
 logger = logging.getLogger(__name__)
 
+# Web Push API hard limit is ~4 KB; keep well within it
+_MAX_PUSH_TITLE = 100
+_MAX_PUSH_BODY = 200
+
+
+def check_vapid_config() -> None:
+    """Log a single startup warning if VAPID keys are not fully configured."""
+    missing = [
+        k for k in ("VAPID_PRIVATE_KEY", "VAPID_PUBLIC_KEY", "VAPID_MAILTO")
+        if not getattr(settings, k)
+    ]
+    if missing:
+        logger.warning(
+            "Push notifications disabled: VAPID settings not configured (%s). "
+            "Set these in .env to enable browser push notifications.",
+            ", ".join(missing),
+        )
+
 
 def _do_webpush(endpoint: str, p256dh: str, auth: str, payload_json: str) -> None:
     """Internal sync helper that performs the actual webpush HTTP call."""
@@ -32,7 +50,7 @@ def send_push_notification(subscription: PushSubscription, title: str, message: 
         logger.warning("VAPID keys not configured, push notification skipped")
         return
 
-    payload = {"title": title, "body": message}
+    payload = {"title": title[:_MAX_PUSH_TITLE], "body": message[:_MAX_PUSH_BODY]}
     if link:
         payload["data"] = {"url": link}
 
@@ -55,7 +73,7 @@ async def send_push_notification_async(
         logger.warning("VAPID keys not configured, push notification skipped")
         return
 
-    payload = {"title": title, "body": message}
+    payload = {"title": title[:_MAX_PUSH_TITLE], "body": message[:_MAX_PUSH_BODY]}
     if link:
         payload["data"] = {"url": link}
 

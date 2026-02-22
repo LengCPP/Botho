@@ -9,6 +9,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from app.api.main import api_router
 from app.core.config import settings
+from app.push import check_vapid_config
 from app.search import configure_search
 from app.tasks import check_overdue_loans
 
@@ -30,6 +31,9 @@ async def lifespan(app: FastAPI):
         configure_search()
     except Exception as e:
         logger.error("Search configuration failed: %s", e)
+
+    # Warn once at startup if push notifications are not configured
+    check_vapid_config()
 
     # Start background tasks
     task = asyncio.create_task(check_overdue_loans())

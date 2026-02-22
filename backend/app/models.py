@@ -4,12 +4,12 @@ from enum import Enum
 from typing import Annotated, Any, Literal, Optional
 
 from pydantic import BeforeValidator, EmailStr, field_validator
-
-# Reusable annotated type: normalises email to lowercase+stripped before EmailStr validation
-NormalizedEmail = Annotated[EmailStr, BeforeValidator(lambda v: v.lower().strip() if isinstance(v, str) else v)]
 from sqlalchemy import JSON, Column, DateTime, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
+
+# Reusable annotated type: normalises email to lowercase+stripped before EmailStr validation
+NormalizedEmail = Annotated[EmailStr, BeforeValidator(lambda v: v.lower().strip() if isinstance(v, str) else v)]
 
 # Enums
 

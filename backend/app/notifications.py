@@ -48,16 +48,19 @@ async def notify_user(
         select(PushSubscription).where(PushSubscription.user_id == recipient_id)
     ).all()
 
+    # 400/401/403 indicate the subscription is invalid/revoked, not a transient error
+    _STALE_CODES = {400, 401, 403, 404, 410}
+
     async def _push_one(sub: PushSubscription) -> None:
         try:
             await send_push_notification_async(sub, title, message, link)
         except WebPushException as ex:
-            if ex.response and ex.response.status_code in [404, 410]:
-                logger.info(f"Removing expired subscription: {sub.endpoint}")
+            if ex.response and ex.response.status_code in _STALE_CODES:
+                logger.info("Removing stale subscription (HTTP %s): %s", ex.response.status_code, sub.endpoint)
                 session.delete(sub)
                 session.commit()
         except Exception as e:
-            logger.error(f"Failed to send push notification: {e}")
+            logger.error("Failed to send push notification: %s", e)
 
     if subscriptions:
         await asyncio.gather(*[_push_one(sub) for sub in subscriptions])

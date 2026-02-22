@@ -87,10 +87,22 @@ def delete_community_from_search(community_id: uuid.UUID):
     index = client.index("communities")
     index.delete_document(str(community_id))
 
+def _work_search_id(author: str, title: str) -> str:
+    """Stable Meilisearch document ID derived from the WorkMetadata composite PK."""
+    return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{author}:{title}"))
+
+
+def delete_work_metadata_from_search(author: str, title: str) -> None:
+    """Remove a WorkMetadata document from Meilisearch. Safe to call even if doc doesn't exist."""
+    try:
+        client.index("works").delete_document(_work_search_id(author, title))
+    except Exception as e:
+        logger.warning("Failed to delete work from search index (%s / %s): %s", author, title, e)
+
+
 def sync_work_metadata_to_search(meta: WorkMetadata):
     index = client.index("works")
-    # Use deterministic UUID based on author and title for safe Meilisearch ID
-    safe_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{meta.author}:{meta.title}"))
+    safe_id = _work_search_id(meta.author, meta.title)
     document = {
         "id": safe_id,
         "author": meta.author,

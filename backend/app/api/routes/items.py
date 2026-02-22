@@ -73,6 +73,7 @@ from app.models import (
 )
 from app.search import (
     delete_item_from_search,
+    delete_work_metadata_from_search,
     sync_item_to_search,
 )
 from app.storage import delete_image, upload_image, upload_image_from_url
@@ -2309,6 +2310,7 @@ def delete_work_metadata(
 
     session.delete(meta)
     session.commit()
+    delete_work_metadata_from_search(author, title)
     return Message(message="Work metadata deleted successfully")
 
 
