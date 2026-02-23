@@ -21,6 +21,7 @@ import {
   VStack,
   useBreakpointValue,
 } from "@chakra-ui/react"
+import { Tooltip } from "@/components/ui/tooltip"
 import {
   useInfiniteQuery,
   useMutation,
@@ -28,21 +29,25 @@ import {
   useQueryClient,
 } from "@tanstack/react-query"
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
-import { isPast, isToday } from "date-fns"
+import { formatDistanceToNow, isPast, isToday } from "date-fns"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   FiBell,
   FiBellOff,
+  FiBook,
   FiBox,
   FiCheck,
   FiClock,
   FiEdit2,
+  FiList,
   FiLogOut,
+  FiMapPin,
   FiMessageSquare,
   FiPlus,
   FiSend,
   FiSettings,
   FiShield,
+  FiSlash,
   FiTrash2,
   FiUserCheck,
   FiUserMinus,
@@ -172,6 +177,10 @@ function CommunityBoard() {
 
   // Local state
   const [msg, setMsg] = useState("")
+  const [showRules, setShowRules] = useState(false)
+  const [showLog, setShowLog] = useState(false)
+  const [isEditRulesOpen, setIsEditRulesOpen] = useState(false)
+  const [rulesText, setRulesText] = useState("")
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false)
   const [isRemoveModalOpen, setIsRemoveModalOpen] = useState(false)
   const [removeMember, setRemoveMember] = useState<any>(null)
@@ -188,6 +197,20 @@ function CommunityBoard() {
     message: string
     onConfirm: () => void
     isLoading: boolean
+  } | null>(null)
+
+  // Governance modals
+  const [suspendTarget, setSuspendTarget] = useState<any>(null)
+  const [banTarget, setBanTarget] = useState<any>(null)
+  const [banReason, setBanReason] = useState("")
+  const [isBanModalOpen, setIsBanModalOpen] = useState(false)
+  const [isResignModalOpen, setIsResignModalOpen] = useState(false)
+  const [isDisbandModalOpen, setIsDisbandModalOpen] = useState(false)
+  const [isDisbandVoteModalOpen, setIsDisbandVoteModalOpen] = useState(false)
+  const [memberActionConfig, setMemberActionConfig] = useState<{
+    title: string
+    message: string
+    onConfirm: () => void
   } | null>(null)
 
   // Derived state
@@ -263,7 +286,7 @@ function CommunityBoard() {
     comm?.current_user_role === "ADMIN"
   const isStaff = isAdmin || comm?.current_user_role === "MODERATOR"
 
-  // Community members
+  // Community members (ACCEPTED for general display; all statuses for staff settings)
   const { data: members, isLoading: isLoadingMembers } = useQuery({
     queryKey: ["communityMembers", cId],
     queryFn: () =>
@@ -272,6 +295,22 @@ function CommunityBoard() {
         status: "ACCEPTED" as any,
       }),
     enabled: !!isMember,
+  })
+
+  // Staff view: also load banned/suspended members
+  const { data: bannedSuspended } = useQuery({
+    queryKey: ["communityMembersBannedSuspended", cId],
+    queryFn: async () => {
+      const [banned, suspended] = await Promise.all([
+        CommunitiesService.readCommunityMembers({ id: cId, status: "BANNED" as any }),
+        CommunitiesService.readCommunityMembers({ id: cId, status: "SUSPENDED" as any }),
+      ])
+      return {
+        data: [...(banned.data ?? []), ...(suspended.data ?? [])],
+        count: (banned.count ?? 0) + (suspended.count ?? 0),
+      }
+    },
+    enabled: !!isStaff,
   })
 
   const otherAdminsExist = useMemo(
@@ -397,6 +436,13 @@ function CommunityBoard() {
     enabled: !!isMember,
   })
 
+  // Community log
+  const { data: logData } = useQuery({
+    queryKey: ["communityLog", cId],
+    queryFn: () => CommunitiesService.readCommunityLog({ id: cId, limit: 50 }),
+    enabled: !!isMember && showLog,
+  })
+
   // ========================================================================
   // COMPUTED
   // ========================================================================
@@ -486,7 +532,9 @@ function CommunityBoard() {
         requestBody: {
           role: data.role,
           status: data.status,
-        },
+          suspension_until: data.suspension_until,
+          action_reason: data.action_reason,
+        } as any,
       }),
     onSuccess: () => {
       showSuccessToast("Updated")
@@ -496,7 +544,7 @@ function CommunityBoard() {
         })
       }
     },
-    onError: () => showErrorToast("Failed"),
+    onError: (e: any) => showErrorToast(e?.body?.detail || "Failed"),
   })
 
   const removeMemberMutation = useMutation({
@@ -530,6 +578,84 @@ function CommunityBoard() {
     onError: () => showErrorToast("Failed"),
   })
 
+  // Admin count for guard checks
+  const adminCount = useMemo(
+    () => members?.data?.filter((m: any) => m.community_role === "ADMIN").length ?? 0,
+    [members],
+  )
+  const myRole = comm?.current_user_role ?? null
+  const isLastAdmin = myRole === "ADMIN" && adminCount === 1
+
+  // Disband vote status
+  const { data: disbandVote, refetch: refetchDisbandVote } = useQuery({
+    queryKey: ["disbandVote", cId],
+    queryFn: () =>
+      fetch(`/api/v1/communities/${cId}/disband-vote`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
+      }).then((r) => (r.ok ? r.json() : null)),
+    enabled: !!isAdmin && !!isMember,
+  })
+
+  const castDisbandVoteMutation = useMutation({
+    mutationFn: (vote: boolean) =>
+      fetch(`/api/v1/communities/${cId}/disband-vote?vote=${vote}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
+      }).then((r) => r.json()),
+    onSuccess: (data) => {
+      if (data?.message?.includes("disbanded")) {
+        showSuccessToast("Community disbanded")
+        navigate({ to: "/communities" })
+      } else if (data?.message?.includes("cancelled")) {
+        showSuccessToast("Vote withdrawn")
+        refetchDisbandVote()
+      } else {
+        showSuccessToast("Vote cast")
+        refetchDisbandVote()
+      }
+    },
+    onError: () => showErrorToast("Failed"),
+  })
+
+  const resignMutation = useMutation({
+    mutationFn: () =>
+      fetch(`/api/v1/communities/${cId}/resign`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
+      }).then(async (r) => {
+        const data = await r.json()
+        if (!r.ok) throw new Error(data.detail || "Failed")
+        return data
+      }),
+    onSuccess: () => {
+      showSuccessToast("Resigned successfully")
+      queryClient.invalidateQueries({ queryKey: ["community", cId] })
+      queryClient.invalidateQueries({ queryKey: ["communityMembers", cId] })
+    },
+    onError: (e: any) => showErrorToast(e.message || "Failed"),
+  })
+
+  const castDemotionVoteMutation = useMutation({
+    mutationFn: ({ userId, vote }: { userId: string; vote: boolean }) =>
+      fetch(`/api/v1/communities/${cId}/members/${userId}/demotion-vote?vote=${vote}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
+      }).then(async (r) => {
+        const data = await r.json()
+        if (!r.ok) throw new Error(data.detail || "Failed")
+        return data
+      }),
+    onSuccess: (data) => {
+      if (data?.message) {
+        showSuccessToast(data.message)
+      } else {
+        showSuccessToast("Vote cast")
+      }
+      queryClient.invalidateQueries({ queryKey: ["communityMembers", cId] })
+    },
+    onError: (e: any) => showErrorToast(e.message || "Failed"),
+  })
+
   const joinMutation = useMutation({
     mutationFn: () => CommunitiesService.joinCommunity({ id: cId }),
     onSuccess: (data) => {
@@ -539,6 +665,17 @@ function CommunityBoard() {
       })
     },
     onError: () => showErrorToast("Failed to join"),
+  })
+
+  const updateRulesMutation = useMutation({
+    mutationFn: (rules: string | null) =>
+      CommunitiesService.updateCommunityRules({ id: cId, requestBody: { rules } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["community", cId] })
+      setIsEditRulesOpen(false)
+      showSuccessToast("Rules updated")
+    },
+    onError: () => showErrorToast("Failed to update rules"),
   })
 
   const createFriendRequestMutation = useMutation({
@@ -745,6 +882,26 @@ function CommunityBoard() {
                     <FiLogOut /> Leave
                   </Button>
                 )}
+                {isAdmin && (
+                  <Tooltip
+                    content={
+                      isLastAdmin
+                        ? "Promote another admin before leaving"
+                        : undefined
+                    }
+                  >
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      colorPalette="red"
+                      disabled={isLastAdmin}
+                      onClick={() => setIsLeaveModalOpen(true)}
+                      loading={leaveCommunityMutation.isPending}
+                    >
+                      <FiLogOut /> Leave
+                    </Button>
+                  </Tooltip>
+                )}
               </>
             ) : (
               <Button
@@ -769,6 +926,63 @@ function CommunityBoard() {
         <Text color="fg.muted" fontSize="lg">
           {comm.description || "No description."}
         </Text>
+
+        {/* Rules panel */}
+        {(comm.rules || isStaff) && (
+          <Box>
+            <HStack gap={2}>
+              {comm.rules ? (
+                <Button size="xs" variant="ghost" onClick={() => setShowRules(r => !r)}>
+                  <FiList size="12px" /> {showRules ? "Hide Rules" : "Show Rules"}
+                </Button>
+              ) : isStaff ? (
+                <Button size="xs" variant="ghost" onClick={() => { setRulesText(""); setIsEditRulesOpen(true) }}>
+                  <FiPlus size="12px" /> Add Rules
+                </Button>
+              ) : null}
+              {isStaff && comm.rules && (
+                <Button size="xs" variant="ghost" onClick={() => { setRulesText(comm.rules ?? ""); setIsEditRulesOpen(true) }}>
+                  <FiEdit2 size="12px" /> Edit Rules
+                </Button>
+              )}
+            </HStack>
+            {showRules && comm.rules && (
+              <Box mt={2} p={3} bg="bg.subtle" borderRadius="md" whiteSpace="pre-wrap">
+                <Text fontSize="sm">{comm.rules}</Text>
+              </Box>
+            )}
+          </Box>
+        )}
+
+        {/* Edit Rules dialog */}
+        <DialogRoot open={isEditRulesOpen} onOpenChange={(e) => setIsEditRulesOpen(e.open)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Community Rules</DialogTitle>
+            </DialogHeader>
+            <DialogBody>
+              <Textarea
+                value={rulesText}
+                onChange={(e) => setRulesText(e.target.value)}
+                rows={8}
+                maxLength={5000}
+                placeholder="Write your community rules here..."
+              />
+              <Text fontSize="xs" color="fg.muted" mt={1}>{rulesText.length}/5000</Text>
+            </DialogBody>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setIsEditRulesOpen(false)}>Cancel</Button>
+              <Button
+                colorPalette="accent"
+                onClick={() => updateRulesMutation.mutate(rulesText || null)}
+                loading={updateRulesMutation.isPending}
+              >
+                Save
+              </Button>
+            </DialogFooter>
+            <DialogCloseTrigger />
+          </DialogContent>
+        </DialogRoot>
 
         {!isMember && (
           <Box
@@ -927,6 +1141,7 @@ function CommunityBoard() {
                               msg={m}
                               communityId={cId}
                               isStaff={isStaff}
+                              isAdmin={isAdmin}
                               currentUser={currU}
                               queryClient={queryClient}
                             />
@@ -961,6 +1176,40 @@ function CommunityBoard() {
                   </VStack>
                 </GridItem>
               </SimpleGrid>
+
+              {/* Community Log */}
+              <Box mt={6}>
+                <Button size="xs" variant="ghost" onClick={() => setShowLog(l => !l)}>
+                  <FiList size="12px" /> {showLog ? "Hide Activity Log" : "Show Activity Log"}
+                </Button>
+                {showLog && (
+                  <Box mt={2} maxH="300px" overflowY="auto" borderWidth="1px" rounded="md" p={3} bg="bg.panel">
+                    {!logData?.data?.length ? (
+                      <Text fontSize="sm" color="fg.muted" fontStyle="italic">No activity yet.</Text>
+                    ) : (
+                      <VStack align="stretch" gap={2}>
+                        {logData.data.map((entry: any) => (
+                          <HStack key={entry.id} gap={2} align="start">
+                            <Box pt="2px" color="fg.muted" flexShrink={0}>
+                              {entry.event_type.startsWith("BOOK") ? <FiBook size="12px" /> :
+                               entry.event_type === "RULES_UPDATED" ? <FiEdit2 size="12px" /> :
+                               <FiUsers size="12px" />}
+                            </Box>
+                            <Box flex={1}>
+                              <Text fontSize="xs">
+                                {formatLogEntry(entry)}
+                              </Text>
+                              <Text fontSize="2xs" color="fg.subtle">
+                                {entry.created_at ? formatDistanceToNow(new Date(entry.created_at), { addSuffix: true }) : ""}
+                              </Text>
+                            </Box>
+                          </HStack>
+                        ))}
+                      </VStack>
+                    )}
+                  </Box>
+                )}
+              </Box>
             </Tabs.Content>
 
             {/* Items Tab */}
@@ -1351,7 +1600,6 @@ function CommunityBoard() {
                       <Heading size="md" mb={4} color="ui.hover">
                         Pending ({apps?.count})
                       </Heading>
-
                       <VStack align="stretch" gap={3}>
                         {apps?.data?.map((m: any) => (
                           <Flex
@@ -1368,12 +1616,10 @@ function CommunityBoard() {
                               <Text fontWeight="bold">
                                 {m.full_name || m.email}
                               </Text>
-
                               <Badge size="xs" colorPalette="yellow">
                                 APPLICANT
                               </Badge>
                             </VStack>
-
                             <HStack gap={2}>
                               <Button
                                 size="xs"
@@ -1387,7 +1633,6 @@ function CommunityBoard() {
                               >
                                 Approve
                               </Button>
-
                               <Button
                                 size="xs"
                                 colorPalette="red"
@@ -1413,13 +1658,15 @@ function CommunityBoard() {
                     <Heading size="md" mb={4}>
                       Members
                     </Heading>
-
                     {isLoadingMembers ? (
                       <Text>...</Text>
                     ) : (
                       <VStack align="stretch" gap={3}>
-                        {members?.data
-                          .filter((m: any) => m.community_status === "ACCEPTED")
+                        {[...(members?.data ?? []), ...(bannedSuspended?.data ?? [])]
+                          .filter(
+                            (m: any, idx: number, arr: any[]) =>
+                              arr.findIndex((x: any) => x.id === m.id) === idx,
+                          )
                           .map((m: any) => {
                             const isCreator = m.id === comm.created_by
                             const role =
@@ -1427,6 +1674,12 @@ function CommunityBoard() {
                               (isCreator ? "ADMIN" : "MEMBER")
                             const isStaffMember =
                               role === "ADMIN" || role === "MODERATOR"
+                            const isSelf = m.id === currU?.id
+                            const status = m.community_status
+                            const isBanned = status === "BANNED"
+                            const isSuspended = status === "SUSPENDED"
+                            const isActionedByAdmin =
+                              m.action_by_role === "ADMIN"
 
                             return (
                               <Flex
@@ -1436,64 +1689,203 @@ function CommunityBoard() {
                                 p={4}
                                 borderWidth="1px"
                                 rounded="md"
-                                bg="bg.panel"
+                                bg={
+                                  isBanned || isSuspended
+                                    ? "red.subtle"
+                                    : "bg.panel"
+                                }
+                                opacity={
+                                  isBanned || isSuspended ? 0.85 : 1
+                                }
                               >
-                                <VStack align="start" gap={0}>
+                                <VStack align="start" gap={1}>
                                   <Text fontWeight="bold">
                                     {m.full_name || m.email}
                                   </Text>
-
-                                  <Badge
-                                    size="xs"
-                                    colorPalette={
-                                      role === "ADMIN"
-                                        ? "purple"
-                                        : role === "MODERATOR"
-                                          ? "main"
-                                          : "gray"
-                                    }
-                                  >
-                                    {role}
-                                  </Badge>
+                                  <HStack gap={1} wrap="wrap">
+                                    <Badge
+                                      size="xs"
+                                      colorPalette={
+                                        role === "ADMIN"
+                                          ? "purple"
+                                          : role === "MODERATOR"
+                                            ? "main"
+                                            : "gray"
+                                      }
+                                    >
+                                      {role}
+                                    </Badge>
+                                    {isBanned && (
+                                      <Badge
+                                        size="xs"
+                                        colorPalette="red"
+                                        variant="solid"
+                                      >
+                                        BANNED
+                                      </Badge>
+                                    )}
+                                    {isSuspended && (
+                                      <Badge
+                                        size="xs"
+                                        colorPalette="orange"
+                                        variant="solid"
+                                      >
+                                        SUSPENDED
+                                        {m.suspension_until
+                                          ? ` until ${new Date(m.suspension_until).toLocaleDateString()}`
+                                          : ""}
+                                      </Badge>
+                                    )}
+                                  </HStack>
                                 </VStack>
 
-                                <HStack gap={2}>
-                                  {!isCreator && m.id !== currU?.id && (
+                                <HStack gap={2} flexWrap="wrap">
+                                  {/* Lift ban/suspend */}
+                                  {(isBanned || isSuspended) && !isSelf && (
+                                    <Tooltip
+                                      content={
+                                        isActionedByAdmin && !isAdmin
+                                          ? "Only an admin can lift this action"
+                                          : undefined
+                                      }
+                                    >
+                                      <Button
+                                        size="xs"
+                                        colorPalette="green"
+                                        variant="outline"
+                                        disabled={
+                                          isActionedByAdmin && !isAdmin
+                                        }
+                                        onClick={() =>
+                                          updateMemberMutation.mutate({
+                                            userId: m.id,
+                                            status: "ACCEPTED",
+                                          })
+                                        }
+                                        loading={updateMemberMutation.isPending}
+                                      >
+                                        <FiCheck /> Lift
+                                      </Button>
+                                    </Tooltip>
+                                  )}
+
+                                  {/* Actions for ACCEPTED members only */}
+                                  {status === "ACCEPTED" && !isSelf && !isCreator && (
                                     <>
-                                      {isAdmin && (
+                                      {/* Promote to ADMIN (admin only) */}
+                                      {isAdmin && role !== "ADMIN" && (
                                         <MenuRoot>
                                           <MenuTrigger asChild>
                                             <Button size="xs" variant="outline">
                                               <FiSettings /> Role
                                             </Button>
                                           </MenuTrigger>
-
                                           <MenuContent>
-                                            {[
-                                              "ADMIN",
-                                              "MODERATOR",
-                                              "MEMBER",
-                                            ].map((roleValue) => (
+                                            {role !== "ADMIN" && (
                                               <MenuItem
-                                                key={roleValue}
-                                                value={roleValue}
+                                                value="ADMIN"
                                                 onClick={() =>
-                                                  updateMemberMutation.mutate({
-                                                    userId: m.id,
-                                                    role: roleValue,
+                                                  setMemberActionConfig({
+                                                    title: "Promote to Admin",
+                                                    message: `Promote ${m.full_name || m.email} to Admin?`,
+                                                    onConfirm: () => updateMemberMutation.mutate({ userId: m.id, role: "ADMIN" }),
                                                   })
                                                 }
-                                                disabled={role === roleValue}
                                               >
-                                                {roleValue}
+                                                Promote to ADMIN
                                               </MenuItem>
-                                            ))}
+                                            )}
+                                            {role !== "MODERATOR" && (
+                                              <MenuItem
+                                                value="MODERATOR"
+                                                onClick={() =>
+                                                  setMemberActionConfig({
+                                                    title: role === "ADMIN" ? "Demote to Moderator" : "Promote to Moderator",
+                                                    message: role === "ADMIN"
+                                                      ? `Demote ${m.full_name || m.email} to Moderator (requires vote)?`
+                                                      : `Promote ${m.full_name || m.email} to Moderator?`,
+                                                    onConfirm: () => updateMemberMutation.mutate({ userId: m.id, role: "MODERATOR" }),
+                                                  })
+                                                }
+                                              >
+                                                {role === "ADMIN"
+                                                  ? "Demote to MODERATOR (vote)"
+                                                  : "Promote to MODERATOR"}
+                                              </MenuItem>
+                                            )}
+                                            {role !== "MEMBER" && role !== "ADMIN" && (
+                                              <MenuItem
+                                                value="MEMBER"
+                                                onClick={() =>
+                                                  setMemberActionConfig({
+                                                    title: "Demote to Member",
+                                                    message: `Demote ${m.full_name || m.email} to Member?`,
+                                                    onConfirm: () => updateMemberMutation.mutate({ userId: m.id, role: "MEMBER" }),
+                                                  })
+                                                }
+                                              >
+                                                Demote to MEMBER
+                                              </MenuItem>
+                                            )}
                                           </MenuContent>
                                         </MenuRoot>
                                       )}
 
+                                      {/* Initiate demotion vote (admin vs admin) */}
+                                      {isAdmin && role === "ADMIN" && (
+                                        <Button
+                                          size="xs"
+                                          variant="outline"
+                                          colorPalette="orange"
+                                          onClick={() =>
+                                            setMemberActionConfig({
+                                              title: "Vote to Demote",
+                                              message: `Cast your vote to demote ${m.full_name || m.email} from Admin?`,
+                                              onConfirm: () => castDemotionVoteMutation.mutate({ userId: m.id, vote: true }),
+                                            })
+                                          }
+                                          loading={
+                                            castDemotionVoteMutation.isPending
+                                          }
+                                        >
+                                          Vote Demote
+                                        </Button>
+                                      )}
+
+                                      {/* Suspend (admin or mod on non-staff) */}
                                       {(isAdmin ||
                                         (isStaff && !isStaffMember)) && (
+                                        <Button
+                                          size="xs"
+                                          variant="outline"
+                                          colorPalette="orange"
+                                          onClick={() =>
+                                            setSuspendTarget(m)
+                                          }
+                                        >
+                                          <FiClock /> Suspend
+                                        </Button>
+                                      )}
+
+                                      {/* Ban (admin or mod on non-staff) */}
+                                      {(isAdmin ||
+                                        (isStaff && !isStaffMember)) && (
+                                        <Button
+                                          size="xs"
+                                          colorPalette="red"
+                                          variant="outline"
+                                          onClick={() => {
+                                            setBanTarget(m)
+                                            setBanReason("")
+                                            setIsBanModalOpen(true)
+                                          }}
+                                        >
+                                          <FiSlash /> Ban
+                                        </Button>
+                                      )}
+
+                                      {/* Remove (admin only) */}
+                                      {isAdmin && (
                                         <Button
                                           size="xs"
                                           colorPalette="red"
@@ -1518,6 +1910,89 @@ function CommunityBoard() {
                       </VStack>
                     )}
                   </Box>
+
+                  {/* Resign button for staff */}
+                  {(myRole === "ADMIN" || myRole === "MODERATOR") && (
+                    <Box pt={2}>
+                      <Separator mb={6} />
+                      <Heading size="sm" mb={3}>
+                        My Position
+                      </Heading>
+                      <Tooltip
+                        content={
+                          isLastAdmin
+                            ? "Cannot resign as the last admin. Promote another member first."
+                            : undefined
+                        }
+                      >
+                        <Button
+                          variant="outline"
+                          colorPalette="orange"
+                          size="sm"
+                          disabled={isLastAdmin}
+                          onClick={() => setIsResignModalOpen(true)}
+                        >
+                          Resign Position
+                        </Button>
+                      </Tooltip>
+                    </Box>
+                  )}
+
+                  {/* Disband section (admin only) */}
+                  {isAdmin && (
+                    <Box pt={2}>
+                      <Separator mb={6} />
+                      <Heading size="sm" mb={3} color="red.500">
+                        Danger Zone
+                      </Heading>
+                      {adminCount === 1 ? (
+                        <Button
+                          colorPalette="red"
+                          size="sm"
+                          onClick={() => setIsDisbandModalOpen(true)}
+                        >
+                          Disband Community
+                        </Button>
+                      ) : (
+                        <VStack align="start" gap={3}>
+                          <Text fontSize="sm" color="fg.muted">
+                            Disbanding requires all admins to vote yes. A single
+                            no vote cancels the motion.
+                          </Text>
+                          {disbandVote && (
+                            <Text fontSize="sm">
+                              <strong>
+                                {disbandVote.voted_ids?.length ?? 0}/
+                                {disbandVote.total_admins}
+                              </strong>{" "}
+                              admins have voted to disband.
+                            </Text>
+                          )}
+                          {disbandVote?.voted_ids?.includes(currU?.id) ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                castDisbandVoteMutation.mutate(false)
+                              }
+                              loading={castDisbandVoteMutation.isPending}
+                            >
+                              Withdraw Vote
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              colorPalette="red"
+                              onClick={() => setIsDisbandVoteModalOpen(true)}
+                              loading={castDisbandVoteMutation.isPending}
+                            >
+                              Vote to Disband
+                            </Button>
+                          )}
+                        </VStack>
+                      )}
+                    </Box>
+                  )}
                 </VStack>
               </Tabs.Content>
             )}
@@ -1599,8 +2074,135 @@ function CommunityBoard() {
           isLoading={actionMutation.isPending}
         />
       )}
+
+      {/* Ban modal */}
+      {banTarget && (
+        <ConfirmationModal
+          isOpen={isBanModalOpen}
+          onClose={() => {
+            setIsBanModalOpen(false)
+            setBanTarget(null)
+          }}
+          onConfirm={() => {
+            updateMemberMutation.mutate({
+              userId: banTarget.id,
+              status: "BANNED",
+              action_reason: banReason || undefined,
+            })
+            setIsBanModalOpen(false)
+            setBanTarget(null)
+          }}
+          title="Ban Member"
+          message={`Ban ${banTarget.full_name || banTarget.email} from this community?`}
+          isLoading={updateMemberMutation.isPending}
+          showCheckbox={false}
+        />
+      )}
+
+      {/* Suspend dialog */}
+      {suspendTarget && (
+        <SuspendDialog
+          member={suspendTarget}
+          communityId={cId}
+          isAdmin={isAdmin}
+          onClose={() => setSuspendTarget(null)}
+          onConfirm={(suspensionUntil: string, reason?: string) => {
+            updateMemberMutation.mutate({
+              userId: suspendTarget.id,
+              status: "SUSPENDED",
+              suspension_until: suspensionUntil,
+              action_reason: reason,
+            })
+            setSuspendTarget(null)
+          }}
+          isLoading={updateMemberMutation.isPending}
+        />
+      )}
+
+      {/* Resign modal */}
+      <ConfirmationModal
+        isOpen={isResignModalOpen}
+        onClose={() => setIsResignModalOpen(false)}
+        onConfirm={() => {
+          resignMutation.mutate()
+          setIsResignModalOpen(false)
+        }}
+        title="Resign Position"
+        message="You will become a regular member. Continue?"
+        isLoading={resignMutation.isPending}
+      />
+
+      {/* Disband modal (solo admin) */}
+      <ConfirmationModal
+        isOpen={isDisbandModalOpen}
+        onClose={() => setIsDisbandModalOpen(false)}
+        onConfirm={() => {
+          castDisbandVoteMutation.mutate(true)
+          setIsDisbandModalOpen(false)
+        }}
+        title="Disband Community"
+        message={`Permanently disband "${comm?.name}"? This cannot be undone.`}
+        isLoading={castDisbandVoteMutation.isPending}
+        showCheckbox={false}
+      />
+
+      {/* Disband vote modal (multi-admin) */}
+      <ConfirmationModal
+        isOpen={isDisbandVoteModalOpen}
+        onClose={() => setIsDisbandVoteModalOpen(false)}
+        onConfirm={() => {
+          castDisbandVoteMutation.mutate(true)
+          setIsDisbandVoteModalOpen(false)
+        }}
+        title="Vote to Disband"
+        message={`Cast your vote to disband "${comm?.name}"? All admins must vote yes for it to take effect.`}
+        isLoading={castDisbandVoteMutation.isPending}
+        showCheckbox={false}
+      />
+
+      {/* Promote/Demote/Vote-demote confirmation modal */}
+      {memberActionConfig && (
+        <ConfirmationModal
+          isOpen={!!memberActionConfig}
+          onClose={() => setMemberActionConfig(null)}
+          onConfirm={() => {
+            memberActionConfig.onConfirm()
+            setMemberActionConfig(null)
+          }}
+          title={memberActionConfig.title}
+          message={memberActionConfig.message}
+          isLoading={updateMemberMutation.isPending || castDemotionVoteMutation.isPending}
+          showCheckbox={false}
+        />
+      )}
     </Container>
   )
+}
+
+// ============================================================================
+// LOG ENTRY FORMATTER
+// ============================================================================
+
+function formatLogEntry(entry: any): string {
+  const { event_type, actor_name, target_name, extra } = entry
+  switch (event_type) {
+    case "BOOK_LOANED": return `${actor_name ?? "Community"} lent '${extra ?? "a book"}' to ${target_name ?? "a member"}`
+    case "BOOK_RETURNED": return `${actor_name ?? "Member"} returned '${extra ?? "a book"}'`
+    case "BOOK_DEFAULTED": return `${actor_name ?? "Member"} defaulted on '${extra ?? "a book"}'`
+    case "BOOK_ADDED": return `${actor_name ?? "Member"} added '${extra ?? "a book"}' to the pool`
+    case "BOOK_REMOVED": return `${actor_name ?? "Member"} removed '${extra ?? "a book"}' from the pool`
+    case "MEMBER_JOINED": return `${actor_name ?? "Someone"} joined the community`
+    case "MEMBER_LEFT": return `${actor_name ?? "Someone"} left the community`
+    case "MEMBER_PROMOTED": return `${target_name ?? "Member"} was promoted to ${extra ?? "a role"} by ${actor_name ?? "staff"}`
+    case "MEMBER_DEMOTED": return `${target_name ?? "Member"} was demoted${extra ? ` ${extra}` : ""} by ${actor_name ?? "staff"}`
+    case "MEMBER_RESIGNED": return `${actor_name ?? "Staff"} resigned from ${extra ?? "a staff role"}`
+    case "MEMBER_BANNED": return `${target_name ?? "Member"} was banned by ${actor_name ?? "staff"}`
+    case "MEMBER_UNBANNED": return `${target_name ?? "Member"} was unbanned by ${actor_name ?? "staff"}`
+    case "MEMBER_SUSPENDED": return `${target_name ?? "Member"} was suspended${extra ? ` ${extra}` : ""} by ${actor_name ?? "staff"}`
+    case "MEMBER_UNSUSPENDED": return `${target_name ?? "Member"}'s suspension was lifted by ${actor_name ?? "system"}`
+    case "RULES_UPDATED": return `Community rules were updated by ${actor_name ?? "staff"}`
+    default: return `${event_type.replace(/_/g, " ").toLowerCase()}`
+  }
 }
 
 // ============================================================================
@@ -1746,12 +2348,26 @@ function AnnouncementItem({
     onError: () => showErrorToast("Failed to update announcement"),
   })
 
+  const pinAnnouncementMutation = useMutation({
+    mutationFn: (is_pinned: boolean) =>
+      CommunitiesService.pinCommunityAnnouncement({
+        id: communityId,
+        announcementId: ann.id,
+        requestBody: { is_pinned },
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["communityAnnouncements", communityId] }),
+    onError: () => showErrorToast("Failed"),
+  })
+
   return (
-    <Box p={4} borderWidth="1px" rounded="md" bg="bg.panel" borderColor={isExpanded ? "ui.hover" : "border.subtle"} transition="all 0.2s">
+    <Box p={4} borderWidth="1px" rounded="md" bg="bg.panel" borderColor={ann.is_pinned ? "yellow.500" : isExpanded ? "ui.hover" : "border.subtle"} transition="all 0.2s">
       <Flex justify="space-between" align="center" gap={4} cursor="pointer" onClick={() => !isEditing && setIsExpanded(!isExpanded)}>
-        <Heading size="sm" lineClamp={isExpanded ? undefined : 1} flex={1}>
-          {ann.title}
-        </Heading>
+        <HStack gap={2} flex={1} minW={0}>
+          {ann.is_pinned && <Badge colorPalette="yellow" variant="subtle" size="xs" flexShrink={0}>Pinned</Badge>}
+          <Heading size="sm" lineClamp={isExpanded ? undefined : 1} flex={1}>
+            {ann.title}
+          </Heading>
+        </HStack>
 
         <HStack gap={1} flexShrink={0}>
           {wasEdited && (
@@ -1764,10 +2380,25 @@ function AnnouncementItem({
           </Text>
           {isAdmin && !isEditing && (
             <HStack gap={0} onClick={(e) => e.stopPropagation()}>
+              <Button
+                size="2xs"
+                variant="ghost"
+                aria-label={ann.is_pinned ? "Unpin" : "Pin"}
+                onClick={() => pinAnnouncementMutation.mutate(!ann.is_pinned)}
+                loading={pinAnnouncementMutation.isPending}
+              >
+                <FiMapPin size="10px" style={{ fill: ann.is_pinned ? "currentColor" : "none" }} />
+              </Button>
               <Button size="2xs" variant="ghost" onClick={() => { setIsExpanded(true); setIsEditing(true) }}>
                 <FiEdit2 size="10px" />
               </Button>
-              <Button size="2xs" variant="ghost" colorPalette="red" onClick={() => setIsDeleting(true)} loading={deleteAnnouncementMutation.isPending}>
+              <Button size="2xs" variant="ghost" colorPalette="red" onClick={() => {
+                if (localStorage.getItem(`skip_delete_announcement_${communityId}`)) {
+                  deleteAnnouncementMutation.mutate()
+                } else {
+                  setIsDeleting(true)
+                }
+              }} loading={deleteAnnouncementMutation.isPending}>
                 <FiTrash2 size="10px" />
               </Button>
             </HStack>
@@ -1822,7 +2453,10 @@ function AnnouncementItem({
       <ConfirmationModal
         isOpen={isDeleting}
         onClose={() => setIsDeleting(false)}
-        onConfirm={() => deleteAnnouncementMutation.mutate()}
+        onConfirm={(dontShowAgain) => {
+          if (dontShowAgain) localStorage.setItem(`skip_delete_announcement_${communityId}`, "1")
+          deleteAnnouncementMutation.mutate()
+        }}
         title="Delete"
         message="Delete this announcement?"
         isLoading={deleteAnnouncementMutation.isPending}
@@ -1839,6 +2473,7 @@ function MessageItem({
   msg,
   communityId,
   isStaff,
+  isAdmin,
   currentUser,
   queryClient,
 }: any) {
@@ -1882,16 +2517,39 @@ function MessageItem({
     onError: () => showErrorToast("Failed"),
   })
 
+  const pinMessageMutation = useMutation({
+    mutationFn: (is_pinned: boolean) =>
+      CommunitiesService.pinCommunityMessage({
+        id: communityId,
+        messageId: msg.id,
+        requestBody: { is_pinned },
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["communityMessages", communityId] }),
+    onError: () => showErrorToast("Failed"),
+  })
+
   return (
-    <Box p={3} bg="bg.muted" rounded="lg">
+    <Box p={3} bg={msg.is_pinned ? "yellow.subtle" : "bg.muted"} rounded="lg" borderWidth={msg.is_pinned ? "1px" : 0} borderColor="yellow.500">
       <Flex justify="space-between" align="baseline" mb={1}>
-        <HStack gap={2}>
+        <HStack gap={2} flexWrap="wrap">
+          {msg.is_pinned && <Badge colorPalette="yellow" variant="subtle" size="xs">Pinned</Badge>}
           <Text fontWeight="bold" fontSize="xs" color="ui.hover">
             {msg.author.full_name || msg.author.email}
           </Text>
 
           {(isAuthor || isStaff) && !isEditing && (
             <HStack gap={1}>
+              {isAdmin && (
+                <Button
+                  size="2xs"
+                  variant="ghost"
+                  aria-label={msg.is_pinned ? "Unpin" : "Pin"}
+                  onClick={() => pinMessageMutation.mutate(!msg.is_pinned)}
+                  loading={pinMessageMutation.isPending}
+                >
+                  <FiMapPin size="10px" style={{ fill: msg.is_pinned ? "currentColor" : "none" }} />
+                </Button>
+              )}
               {isAuthor && (
                 <Button
                   size="2xs"
@@ -1906,7 +2564,13 @@ function MessageItem({
                 size="2xs"
                 variant="ghost"
                 colorPalette="red"
-                onClick={() => setIsDeleting(true)}
+                onClick={() => {
+                  if (localStorage.getItem(`skip_delete_message_${communityId}`)) {
+                    deleteMessageMutation.mutate()
+                  } else {
+                    setIsDeleting(true)
+                  }
+                }}
                 loading={deleteMessageMutation.isPending}
               >
                 <FiTrash2 size="10px" />
@@ -1965,7 +2629,10 @@ function MessageItem({
       <ConfirmationModal
         isOpen={isDeleting}
         onClose={() => setIsDeleting(false)}
-        onConfirm={() => deleteMessageMutation.mutate()}
+        onConfirm={(dontShowAgain) => {
+          if (dontShowAgain) localStorage.setItem(`skip_delete_message_${communityId}`, "1")
+          deleteMessageMutation.mutate()
+        }}
         title="Delete"
         message="Delete message?"
         isLoading={deleteMessageMutation.isPending}
@@ -2056,6 +2723,78 @@ function DonationManagement({
         })}
       </VStack>
     </Box>
+  )
+}
+
+// ============================================================================
+// SUSPEND DIALOG
+// ============================================================================
+
+function SuspendDialog({
+  member,
+  onClose,
+  onConfirm,
+  isLoading,
+}: {
+  member: any
+  communityId: string
+  isAdmin: boolean
+  onClose: () => void
+  onConfirm: (suspensionUntil: string, reason?: string) => void
+  isLoading: boolean
+}) {
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const minDate = tomorrow.toISOString().split("T")[0]
+
+  const [until, setUntil] = useState(minDate)
+  const [reason, setReason] = useState("")
+
+  return (
+    <DialogRoot open onOpenChange={(e) => !e.open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            Suspend {member.full_name || member.email}
+          </DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          <VStack gap={4}>
+            <Field label="Suspended until" required>
+              <Input
+                type="date"
+                min={minDate}
+                value={until}
+                onChange={(e) => setUntil(e.target.value)}
+              />
+            </Field>
+            <Field label="Reason (optional)">
+              <Textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                maxLength={500}
+                rows={3}
+                placeholder="Reason for suspension..."
+              />
+            </Field>
+          </VStack>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            colorPalette="orange"
+            loading={isLoading}
+            disabled={!until || until < minDate}
+            onClick={() => onConfirm(new Date(until).toISOString(), reason || undefined)}
+          >
+            Suspend
+          </Button>
+        </DialogFooter>
+        <DialogCloseTrigger />
+      </DialogContent>
+    </DialogRoot>
   )
 }
 

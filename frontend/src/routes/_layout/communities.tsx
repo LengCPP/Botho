@@ -41,12 +41,10 @@ function CommunitySection({
   title,
   communities,
   onJoinRequest,
-  onDisbandRequest,
 }: {
   title: string
   communities: CommunityPublicExtended[]
   onJoinRequest: (c: CommunityPublicExtended) => void
-  onDisbandRequest: (c: CommunityPublicExtended) => void
 }) {
   if (communities.length === 0) return null
   return (
@@ -60,7 +58,6 @@ function CommunitySection({
             key={community.id}
             community={community}
             onJoinRequest={onJoinRequest}
-            onDisbandRequest={onDisbandRequest}
           />
         ))}
       </Grid>
@@ -72,8 +69,6 @@ function Communities() {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const [selectedCommunityForJoin, setSelectedCommunityForJoin] =
-    useState<CommunityPublicExtended | null>(null)
-  const [selectedCommunityForDisband, setSelectedCommunityForDisband] =
     useState<CommunityPublicExtended | null>(null)
 
   // My communities (member_only=true)
@@ -129,17 +124,6 @@ function Communities() {
       queryClient.invalidateQueries({ queryKey: ["browseCommunitiesInfinite"] })
     },
     onError: () => showErrorToast("Failed to join community"),
-  })
-
-  const disbandMutation = useMutation({
-    mutationFn: (id: string) => CommunitiesService.deleteCommunity({ id }),
-    onSuccess: () => {
-      showSuccessToast("Community disbanded")
-      setSelectedCommunityForDisband(null)
-      queryClient.invalidateQueries({ queryKey: ["communitiesInfinite"] })
-      queryClient.invalidateQueries({ queryKey: ["browseCommunitiesInfinite"] })
-    },
-    onError: () => showErrorToast("Failed to disband community"),
   })
 
   const allMyCommunities =
@@ -203,19 +187,16 @@ function Communities() {
                 title="Favorites"
                 communities={favorites}
                 onJoinRequest={setSelectedCommunityForJoin}
-                onDisbandRequest={setSelectedCommunityForDisband}
               />
               <CommunitySection
                 title="Managed by Me"
                 communities={managedByMe}
                 onJoinRequest={setSelectedCommunityForJoin}
-                onDisbandRequest={setSelectedCommunityForDisband}
               />
               <CommunitySection
                 title="Joined"
                 communities={otherJoined}
                 onJoinRequest={setSelectedCommunityForJoin}
-                onDisbandRequest={setSelectedCommunityForDisband}
               />
 
               {myHasNext && (
@@ -264,7 +245,6 @@ function Communities() {
                     key={community.id}
                     community={community}
                     onJoinRequest={setSelectedCommunityForJoin}
-                    onDisbandRequest={setSelectedCommunityForDisband}
                   />
                 ))}
               </Grid>
@@ -298,18 +278,6 @@ function Communities() {
         />
       )}
 
-      {selectedCommunityForDisband && (
-        <ConfirmationModal
-          isOpen={!!selectedCommunityForDisband}
-          onClose={() => setSelectedCommunityForDisband(null)}
-          onConfirm={() =>
-            disbandMutation.mutate(selectedCommunityForDisband.id)
-          }
-          title="Disband Community"
-          message={`Are you sure you want to disband ${selectedCommunityForDisband.name}? This action is permanent and cannot be undone.`}
-          isLoading={disbandMutation.isPending}
-        />
-      )}
     </Container>
   )
 }

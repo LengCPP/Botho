@@ -11,7 +11,7 @@ import {
 } from "@chakra-ui/react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
-import { FiStar, FiTrash2 } from "react-icons/fi"
+import { FiStar } from "react-icons/fi"
 
 import { CommunitiesService } from "@/client"
 import EditCommunity from "@/components/Communities/EditCommunity"
@@ -23,13 +23,11 @@ import useCustomToast from "@/hooks/useCustomToast"
 interface CommunityCardProps {
   community: CommunityPublicExtended
   onJoinRequest?: (community: CommunityPublicExtended) => void
-  onDisbandRequest?: (community: CommunityPublicExtended) => void
 }
 
 const CommunityCard = ({
   community,
   onJoinRequest,
-  onDisbandRequest,
 }: CommunityCardProps) => {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
@@ -143,17 +141,7 @@ const CommunityCard = ({
               />
             </IconButton>
             {isAdmin && (
-              <>
-                <EditCommunity community={community} />
-                <Button
-                  size="xs"
-                  variant={"danger" as any}
-                  onClick={() => onDisbandRequest?.(community)}
-                  title="Disband Community"
-                >
-                  <FiTrash2 />
-                </Button>
-              </>
+              <EditCommunity community={community} />
             )}
           </Flex>
         </Flex>

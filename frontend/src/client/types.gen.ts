@@ -70,6 +70,7 @@ export type CommunityAnnouncementPublic = {
     id: string;
     community_id: string;
     author_id: string;
+    is_pinned?: boolean;
     created_at: string;
     updated_at: string;
     author: UserPublic;
@@ -87,8 +88,35 @@ export type CommunityCreate = {
     is_private?: boolean;
 };
 
+export type CommunityDemotionVoteStatus = {
+    target_user_id: string;
+    yes_votes: number;
+    needed: number;
+    voted_ids: Array<(string)>;
+};
+
+export type CommunityDisbandVoteStatus = {
+    voted_ids: Array<(string)>;
+    pending_ids: Array<(string)>;
+    total_admins: number;
+};
+
 export type CommunityInvitationCreate = {
     friend_id: string;
+};
+
+export type CommunityLogEntry = {
+    id: string;
+    event_type: string;
+    actor_name: (string | null);
+    target_name: (string | null);
+    extra: (string | null);
+    created_at: string;
+};
+
+export type CommunityLogPublic = {
+    data: Array<CommunityLogEntry>;
+    count: number;
 };
 
 export type CommunityMemberRole = 'ADMIN' | 'MODERATOR' | 'MEMBER' | 'APPLICANT';
@@ -99,6 +127,8 @@ export type CommunityMemberUpdate = {
     role?: (CommunityMemberRole | null);
     status?: (CommunityMemberStatus | null);
     notifications_enabled?: (boolean | null);
+    suspension_until?: (string | null);
+    action_reason?: (string | null);
 };
 
 export type CommunityMessageCreate = {
@@ -110,6 +140,7 @@ export type CommunityMessagePublic = {
     id: string;
     community_id: string;
     author_id: string;
+    is_pinned?: boolean;
     created_at: string;
     updated_at: string;
     author: UserPublic;
@@ -120,6 +151,10 @@ export type CommunityMessagesPublic = {
     count: number;
 };
 
+export type CommunityPinUpdate = {
+    is_pinned: boolean;
+};
+
 export type CommunityPublic = {
     name: string;
     description?: (string | null);
@@ -127,6 +162,7 @@ export type CommunityPublic = {
     is_private?: boolean;
     id: string;
     created_by: string;
+    rules?: (string | null);
     current_user_role?: (CommunityMemberRole | null);
     current_user_status?: (CommunityMemberStatus | null);
     notifications_enabled?: (boolean | null);
@@ -136,11 +172,16 @@ export type CommunityPublic = {
     is_favorited?: boolean;
 };
 
+export type CommunityRulesUpdate = {
+    rules?: (string | null);
+};
+
 export type CommunityUpdate = {
     name?: (string | null);
     description?: (string | null);
     requires_approval?: (boolean | null);
     is_private?: (boolean | null);
+    rules?: (string | null);
 };
 
 export type ForgivenessReason = 'GOOD_REASON' | 'FOUND_AND_RETURNED' | 'REPLACED_ITEM' | 'OTHER';
@@ -169,8 +210,21 @@ export type InterestPublic = {
     category: (string | null);
 };
 
+export type InterestSignalPublic = {
+    id: string;
+    item_id: string;
+    user_id: string;
+    created_at: string;
+    user: UserPublic;
+};
+
 export type ItemBatchAction = {
     item_ids: Array<(string)>;
+};
+
+export type ItemBatchEnrich = {
+    item_ids: Array<(string)>;
+    fields_to_overwrite?: Array<(string)>;
 };
 
 export type ItemConditionRatingCreate = {
@@ -307,14 +361,6 @@ export type LoanCreate = {
     end_date: string;
 };
 
-export type InterestSignalPublic = {
-    id: string;
-    item_id: string;
-    user_id: string;
-    created_at: string;
-    user: UserPublic;
-};
-
 export type LoanPublic = {
     id: string;
     item_id: string;
@@ -370,7 +416,7 @@ export type NotificationsPublic = {
     unread_count: number;
 };
 
-export type NotificationType = 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR';
+export type NotificationType = 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR' | 'ITEM_AVAILABLE';
 
 export type PrivateUserCreate = {
     email: string;
@@ -552,10 +598,12 @@ export type UserRoleReviewed = 'BORROWER' | 'OWNER';
 
 export type UserSettingsSchema = {
     autocomplete_enabled?: boolean;
-    theme_mode?: string;
+    theme_mode?: 'light' | 'dark' | 'system';
     show_contact_details?: boolean;
     show_full_name?: boolean;
 };
+
+export type theme_mode = 'light' | 'dark' | 'system';
 
 export type UsersPublic = {
     data: Array<UserPublic>;
@@ -647,6 +695,13 @@ export type CommunitiesDeleteCommunityData = {
 
 export type CommunitiesDeleteCommunityResponse = (Message);
 
+export type CommunitiesUpdateCommunityRulesData = {
+    id: string;
+    requestBody: CommunityRulesUpdate;
+};
+
+export type CommunitiesUpdateCommunityRulesResponse = (CommunityPublic);
+
 export type CommunitiesJoinCommunityData = {
     id: string;
 };
@@ -691,6 +746,40 @@ export type CommunitiesUpdateCommunityNotificationsData = {
 
 export type CommunitiesUpdateCommunityNotificationsResponse = (Message);
 
+export type CommunitiesResignFromCommunityData = {
+    id: string;
+};
+
+export type CommunitiesResignFromCommunityResponse = (Message);
+
+export type CommunitiesGetDisbandVoteData = {
+    id: string;
+};
+
+export type CommunitiesGetDisbandVoteResponse = (CommunityDisbandVoteStatus);
+
+export type CommunitiesCastDisbandVoteData = {
+    id: string;
+    vote: boolean;
+};
+
+export type CommunitiesCastDisbandVoteResponse = ((CommunityDisbandVoteStatus | Message));
+
+export type CommunitiesGetDemotionVoteData = {
+    id: string;
+    userId: string;
+};
+
+export type CommunitiesGetDemotionVoteResponse = (CommunityDemotionVoteStatus);
+
+export type CommunitiesCastDemotionVoteData = {
+    id: string;
+    userId: string;
+    vote: boolean;
+};
+
+export type CommunitiesCastDemotionVoteResponse = ((CommunityDemotionVoteStatus | Message));
+
 export type CommunitiesToggleFavoriteCommunityData = {
     id: string;
 };
@@ -712,6 +801,7 @@ export type CommunitiesReadCommunityItemsData = {
     category?: (string | null);
     genre?: (string | null);
     id: string;
+    itemType?: (string | null);
     limit?: number;
     ownerFilter?: (string | null);
     q?: (string | null);
@@ -767,19 +857,27 @@ export type CommunitiesCreateCommunityAnnouncementData = {
 export type CommunitiesCreateCommunityAnnouncementResponse = (CommunityAnnouncementPublic);
 
 export type CommunitiesUpdateCommunityAnnouncementData = {
-    id: string;
     announcementId: string;
+    id: string;
     requestBody: CommunityAnnouncementCreate;
 };
 
 export type CommunitiesUpdateCommunityAnnouncementResponse = (CommunityAnnouncementPublic);
 
 export type CommunitiesDeleteCommunityAnnouncementData = {
-    id: string;
     announcementId: string;
+    id: string;
 };
 
 export type CommunitiesDeleteCommunityAnnouncementResponse = (Message);
+
+export type CommunitiesPinCommunityAnnouncementData = {
+    announcementId: string;
+    id: string;
+    requestBody: CommunityPinUpdate;
+};
+
+export type CommunitiesPinCommunityAnnouncementResponse = (CommunityAnnouncementPublic);
 
 export type CommunitiesReadCommunityMessagesData = {
     id: string;
@@ -810,6 +908,22 @@ export type CommunitiesDeleteCommunityMessageData = {
 };
 
 export type CommunitiesDeleteCommunityMessageResponse = (Message);
+
+export type CommunitiesPinCommunityMessageData = {
+    id: string;
+    messageId: string;
+    requestBody: CommunityPinUpdate;
+};
+
+export type CommunitiesPinCommunityMessageResponse = (CommunityMessagePublic);
+
+export type CommunitiesReadCommunityLogData = {
+    id: string;
+    limit?: number;
+    skip?: number;
+};
+
+export type CommunitiesReadCommunityLogResponse = (CommunityLogPublic);
 
 export type CommunitiesReadCommunityLoansData = {
     id: string;
@@ -1151,6 +1265,12 @@ export type ItemsBatchTogglePrivacyData = {
 
 export type ItemsBatchTogglePrivacyResponse = (Message);
 
+export type ItemsBatchEnrichMetadataData = {
+    requestBody: ItemBatchEnrich;
+};
+
+export type ItemsBatchEnrichMetadataResponse = (Message);
+
 export type ItemsBatchSyncFromArchiveData = {
     requestBody: ItemBatchAction;
 };
@@ -1253,11 +1373,7 @@ export type LoansCancelItemInterestData = {
 
 export type LoansCancelItemInterestResponse = (Message);
 
-export type LoansGetMyInterestSignalsData = Record<string, never>;
-
-export type LoansGetMyInterestSignalsResponse = {
-    data: Array<{ id: string; item_id: string }>;
-};
+export type LoansGetMyInterestSignalsResponse = (unknown);
 
 export type LoginLoginAccessTokenData = {
     formData: Body_login_login_access_token;

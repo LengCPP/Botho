@@ -16,7 +16,7 @@ from app.limiter import limiter
 from app.logging_config import configure_logging
 from app.push import check_vapid_config
 from app.search import configure_search
-from app.tasks import check_overdue_loans
+from app.tasks import check_expired_board_content, check_expired_suspensions, check_overdue_loans
 
 configure_logging(settings.ENVIRONMENT)
 
@@ -44,10 +44,14 @@ async def lifespan(app: FastAPI):
 
     # Start background tasks
     task = asyncio.create_task(check_overdue_loans())
+    task2 = asyncio.create_task(check_expired_suspensions())
+    task3 = asyncio.create_task(check_expired_board_content())
     yield
-    # Cancel background task and wait for clean shutdown
+    # Cancel background tasks and wait for clean shutdown
     task.cancel()
-    await asyncio.gather(task, return_exceptions=True)
+    task2.cancel()
+    task3.cancel()
+    await asyncio.gather(task, task2, task3, return_exceptions=True)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

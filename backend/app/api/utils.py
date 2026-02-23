@@ -8,6 +8,7 @@ from sqlmodel import Session, and_, func, or_, select
 from app.models import (
     Community,
     CommunityItem,
+    CommunityLog,
     CommunityMember,
     CommunityMemberRole,
     CommunityMemberStatus,
@@ -25,6 +26,25 @@ from app.models import (
     UserReview,
     WorkMetadata,
 )
+
+
+def _write_log(
+    session: Session,
+    community_id: uuid.UUID,
+    event_type: str,
+    actor_name: str | None = None,
+    target_name: str | None = None,
+    extra: str | None = None,
+) -> None:
+    """Add a CommunityLog entry to the session. Caller is responsible for committing."""
+    log = CommunityLog(
+        community_id=community_id,
+        event_type=event_type,
+        actor_name=actor_name,
+        target_name=target_name,
+        extra=extra,
+    )
+    session.add(log)
 
 
 def _update_collection_index_logic(session: Session, owner_id: uuid.UUID):

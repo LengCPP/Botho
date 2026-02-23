@@ -113,6 +113,31 @@ class CommunityMember(SQLModel, table=True):
     invited_by: uuid.UUID | None = Field(
         default=None, foreign_key="user.id", ondelete="SET NULL"
     )
+    suspension_until: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    action_reason: str | None = Field(default=None, max_length=500)
+    action_by_role: str | None = Field(default=None, max_length=20)  # "ADMIN" | "MODERATOR"
+
+
+class CommunityDisbandVote(SQLModel, table=True):
+    community_id: uuid.UUID = Field(foreign_key="community.id", primary_key=True, ondelete="CASCADE")
+    voter_id: uuid.UUID = Field(foreign_key="user.id", primary_key=True, ondelete="CASCADE")
+    voted_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    )
+
+
+class CommunityDemotionVote(SQLModel, table=True):
+    community_id: uuid.UUID = Field(foreign_key="community.id", primary_key=True, ondelete="CASCADE")
+    target_user_id: uuid.UUID = Field(foreign_key="user.id", primary_key=True, ondelete="CASCADE")
+    voter_id: uuid.UUID = Field(foreign_key="user.id", primary_key=True, ondelete="CASCADE")
+    voted_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    )
 
 
 class Friendship(SQLModel, table=True):
@@ -450,11 +475,13 @@ class CommunityUpdate(SQLModel):
     description: str | None = Field(default=None, max_length=255)
     requires_approval: bool | None = Field(default=None)
     is_private: bool | None = Field(default=None)
+    rules: str | None = Field(default=None, max_length=5000)
 
 
 class Community(CommunityBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     created_by: uuid.UUID = Field(foreign_key="user.id", nullable=False, ondelete="CASCADE")
+    rules: str | None = Field(default=None, max_length=5000)
     members: list["User"] = Relationship(
         back_populates="communities",
         link_model=CommunityMember,
@@ -478,6 +505,7 @@ class Community(CommunityBase, table=True):
     )
     loans: list["Loan"] = Relationship(back_populates="community")
     collection_index: dict[str, Any] | None = Field(default={}, sa_column=Column(JSONB))
+    logs: list["CommunityLog"] = Relationship(back_populates="community", cascade_delete=True)
 
 
 class CommunityAnnouncement(SQLModel, table=True):
@@ -486,6 +514,7 @@ class CommunityAnnouncement(SQLModel, table=True):
     author_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
     title: str = Field(max_length=255)
     content: str = Field(max_length=5000)
+    is_pinned: bool = Field(default=False)
     created_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -504,6 +533,7 @@ class CommunityMessage(SQLModel, table=True):
     community_id: uuid.UUID = Field(foreign_key="community.id", ondelete="CASCADE")
     author_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
     content: str = Field(max_length=2000)
+    is_pinned: bool = Field(default=False)
     created_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -515,6 +545,21 @@ class CommunityMessage(SQLModel, table=True):
 
     community: "Community" = Relationship(back_populates="messages")
     author: "User" = Relationship()
+
+
+class CommunityLog(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    community_id: uuid.UUID = Field(foreign_key="community.id", ondelete="CASCADE", index=True)
+    event_type: str = Field(max_length=30)
+    actor_name: str | None = Field(default=None, max_length=255)
+    target_name: str | None = Field(default=None, max_length=255)
+    extra: str | None = Field(default=None, max_length=500)
+    created_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    )
+
+    community: "Community" = Relationship(back_populates="logs")
 
 
 class WorkMetadata(SQLModel, table=True):
@@ -646,6 +691,7 @@ class UserProfilePublic(SQLModel):
 class CommunityPublic(CommunityBase):
     id: uuid.UUID
     created_by: uuid.UUID
+    rules: str | None = None
     current_user_role: CommunityMemberRole | None = None
     current_user_status: CommunityMemberStatus | None = None
     notifications_enabled: bool | None = None
@@ -666,6 +712,7 @@ class CommunityAnnouncementPublic(CommunityAnnouncementBase):
     id: uuid.UUID
     community_id: uuid.UUID
     author_id: uuid.UUID
+    is_pinned: bool = False
     created_at: datetime
     updated_at: datetime
     author: "UserPublic"
@@ -688,6 +735,7 @@ class CommunityMessagePublic(CommunityMessageBase):
     id: uuid.UUID
     community_id: uuid.UUID
     author_id: uuid.UUID
+    is_pinned: bool = False
     created_at: datetime
     updated_at: datetime
     author: "UserPublic"
@@ -696,6 +744,28 @@ class CommunityMessagePublic(CommunityMessageBase):
 class CommunityMessagesPublic(SQLModel):
     data: list["CommunityMessagePublic"]
     count: int
+
+
+class CommunityLogEntry(SQLModel):
+    id: uuid.UUID
+    event_type: str
+    actor_name: str | None
+    target_name: str | None
+    extra: str | None
+    created_at: datetime
+
+
+class CommunityLogPublic(SQLModel):
+    data: list[CommunityLogEntry]
+    count: int
+
+
+class CommunityRulesUpdate(SQLModel):
+    rules: str | None = Field(default=None, max_length=5000)
+
+
+class CommunityPinUpdate(SQLModel):
+    is_pinned: bool
 
 
 class CommunitiesPublic(SQLModel):
@@ -728,6 +798,21 @@ class CommunityMemberUpdate(SQLModel):
     role: CommunityMemberRole | None = Field(default=None)
     status: CommunityMemberStatus | None = Field(default=None)
     notifications_enabled: bool | None = Field(default=None)
+    suspension_until: datetime | None = Field(default=None)
+    action_reason: str | None = Field(default=None, max_length=500)
+
+
+class CommunityDisbandVoteStatus(SQLModel):
+    voted_ids: list[uuid.UUID]
+    pending_ids: list[uuid.UUID]
+    total_admins: int
+
+
+class CommunityDemotionVoteStatus(SQLModel):
+    target_user_id: uuid.UUID
+    yes_votes: int
+    needed: int
+    voted_ids: list[uuid.UUID]
 
 
 class CommunityInvitationCreate(SQLModel):

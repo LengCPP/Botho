@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 from sqlmodel import and_, func, or_, select
 
 from app.api.deps import CurrentUser, SessionDep
-from app.api.utils import check_item_availability, filter_loan_privacy, get_community_admin_count
+from app.api.utils import _write_log, check_item_availability, filter_loan_privacy, get_community_admin_count
 from app.models import (
     Community,
     CommunityItem,
@@ -486,6 +486,21 @@ async def ratify_loan(
         session.add(other)
 
     session.add(loan)
+
+    if loan.community_id:
+        lender_name = (
+            session.get(Community, loan.community_id).name
+            if session.get(Community, loan.community_id)
+            else str(loan.community_id)
+        )
+        borrower_name = current_user.full_name or current_user.email
+        _write_log(
+            session, loan.community_id, "BOOK_LOANED",
+            actor_name=lender_name,
+            target_name=borrower_name,
+            extra=loan.item.title,
+        )
+
     session.commit()
     session.refresh(loan)
 
@@ -613,6 +628,15 @@ async def return_loan(
     loan.status = LoanStatus.RETURNED
     loan.returned_at = datetime.now(timezone.utc)
     session.add(loan)
+
+    if loan.community_id:
+        borrower = session.get(User, requester_id)
+        borrower_name = (borrower.full_name or borrower.email) if borrower else str(requester_id)
+        _write_log(
+            session, loan.community_id, "BOOK_RETURNED",
+            actor_name=borrower_name,
+            extra=item_title,
+        )
 
     # Collect interest signals before deleting them
     interest_signals = session.exec(
@@ -845,6 +869,16 @@ async def mark_loan_defaulted(
 
     loan.status = LoanStatus.DEFAULTED
     session.add(loan)
+
+    if loan.community_id:
+        borrower = session.get(User, loan.requester_id)
+        borrower_name = (borrower.full_name or borrower.email) if borrower else str(loan.requester_id)
+        _write_log(
+            session, loan.community_id, "BOOK_DEFAULTED",
+            actor_name=borrower_name,
+            extra=loan.item.title,
+        )
+
     session.commit()
     session.refresh(loan)
 

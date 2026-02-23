@@ -7,6 +7,7 @@ from sqlmodel import String, cast, col, func, or_, select, text
 from app import crud
 from app.api.deps import CurrentUser, SessionDep
 from app.api.utils import (
+    _write_log,
     filter_loan_privacy,
     filter_owner_privacy,
     filter_user_privacy,
@@ -22,9 +23,15 @@ from app.models import (
     CommunityAnnouncementPublic,
     CommunityAnnouncementsPublic,
     CommunityCreate,
+    CommunityDemotionVote,
+    CommunityDemotionVoteStatus,
+    CommunityDisbandVote,
+    CommunityDisbandVoteStatus,
     CommunityFavorite,
     CommunityInvitationCreate,
     CommunityItem,
+    CommunityLog,
+    CommunityLogPublic,
     CommunityMember,
     CommunityMemberRole,
     CommunityMemberStatus,
@@ -33,7 +40,9 @@ from app.models import (
     CommunityMessageCreate,
     CommunityMessagePublic,
     CommunityMessagesPublic,
+    CommunityPinUpdate,
     CommunityPublic,
+    CommunityRulesUpdate,
     CommunityUpdate,
     Friendship,
     FriendshipStatus,
@@ -68,6 +77,28 @@ def _get_accepted_membership(
             CommunityMember.status == CommunityMemberStatus.ACCEPTED,
         )
     ).first()
+
+
+def _is_last_admin(session: SessionDep, community_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+    """Return True if user_id is the only accepted ADMIN in the community."""
+    membership = session.exec(
+        select(CommunityMember).where(
+            CommunityMember.community_id == community_id,
+            CommunityMember.user_id == user_id,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+            CommunityMember.role == CommunityMemberRole.ADMIN,
+        )
+    ).first()
+    if not membership:
+        return False
+    admin_count = session.exec(
+        select(func.count()).where(
+            CommunityMember.community_id == community_id,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+            CommunityMember.role == CommunityMemberRole.ADMIN,
+        )
+    ).one()
+    return admin_count == 1
 
 
 @router.get("/", response_model=CommunitiesPublic)
@@ -241,21 +272,60 @@ def update_community(
     return community
 
 
-@router.delete("/{id}")
-def delete_community(
-    session: SessionDep, current_user: CurrentUser, id: uuid.UUID
-) -> Message:
+@router.patch("/{id}/rules", response_model=CommunityPublic)
+def update_community_rules(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    rules_in: CommunityRulesUpdate,
+) -> Any:
     """
-    Delete a community.
+    Update a community's rules text (Admin or Moderator only).
     """
     community = session.get(Community, id)
     if not community:
         raise HTTPException(status_code=404, detail="Community not found")
 
-    # Admins act on behalf of the community — must be an accepted admin
     membership = _get_accepted_membership(session, id, current_user.id)
-    if not (membership and membership.role == CommunityMemberRole.ADMIN) and not current_user.is_superuser:
+    if not (
+        membership and membership.role in [CommunityMemberRole.ADMIN, CommunityMemberRole.MODERATOR]
+    ) and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Not enough permissions")
+
+    community.rules = rules_in.rules
+    session.add(community)
+    _write_log(
+        session,
+        community_id=id,
+        event_type="RULES_UPDATED",
+        actor_name=current_user.full_name or current_user.email,
+    )
+    session.commit()
+    session.refresh(community)
+
+    comm_pub = CommunityPublic.model_validate(community)
+    if membership:
+        comm_pub.current_user_role = membership.role
+        comm_pub.current_user_status = membership.status
+        comm_pub.notifications_enabled = membership.notifications_enabled
+    return comm_pub
+
+
+@router.delete("/{id}")
+def delete_community(
+    session: SessionDep, current_user: CurrentUser, id: uuid.UUID
+) -> Message:
+    """
+    Delete a community (superuser emergency bypass only).
+    Admins should use the disband-vote endpoint.
+    """
+    community = session.get(Community, id)
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Use the disband vote endpoint to disband a community")
 
     session.delete(community)
     session.commit()
@@ -317,6 +387,7 @@ async def join_community(
                 membership.status = CommunityMemberStatus.ACCEPTED
                 membership.role = CommunityMemberRole.MEMBER
                 session.add(membership)
+                _write_log(session, id, "MEMBER_JOINED", actor_name=current_user.full_name or current_user.email)
                 session.commit()
                 return Message(message="Joined successfully via invitation")
             else:
@@ -346,6 +417,10 @@ async def join_community(
                 return Message(message="Application sent via referral")
 
     crud.join_community(session=session, community_id=id, user_id=current_user.id)
+
+    if not community.requires_approval:
+        _write_log(session, id, "MEMBER_JOINED", actor_name=current_user.full_name or current_user.email)
+        session.commit()
 
     # If closed, notify admins and moderators
     if community.requires_approval:
@@ -485,7 +560,23 @@ def leave_community(
         membership = _get_accepted_membership(session, id, current_user.id)
         if not (membership and membership.role == CommunityMemberRole.ADMIN) and not current_user.is_superuser:
             raise HTTPException(status_code=403, detail="Not enough permissions")
+        # Last-admin guard for removal target
+        if _is_last_admin(session, id, target_user_id):
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot remove the last admin. Promote another member first.",
+            )
+    else:
+        # Last-admin guard for self-leave
+        if _is_last_admin(session, id, current_user.id):
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot leave as the last admin. Promote another member first.",
+            )
 
+    leaving_user = session.get(User, target_user_id)
+    leaving_name = (leaving_user.full_name or leaving_user.email) if leaving_user else str(target_user_id)
+    _write_log(session, id, "MEMBER_LEFT", actor_name=leaving_name)
     crud.leave_community(session=session, community_id=id, user_id=target_user_id)
     return Message(message="Left community successfully")
 
@@ -670,6 +761,52 @@ async def update_community_member_role(
                 status_code=403, detail="Moderators cannot modify staff members"
             )
 
+    # Admin demotion requires majority vote — block direct demotion
+    if (
+        target_membership.role == CommunityMemberRole.ADMIN
+        and member_in.role in [CommunityMemberRole.MEMBER, CommunityMemberRole.MODERATOR]
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Admin demotion requires a majority vote. Use the demotion vote endpoint.",
+        )
+
+    # Last-admin guard: cannot demote/remove the last admin
+    if member_in.role and member_in.role != CommunityMemberRole.ADMIN:
+        if _is_last_admin(session, id, user_id):
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot demote the last admin. Promote another member first.",
+            )
+
+    # When lifting ban/suspend: moderator cannot undo an admin's action
+    if member_in.status == CommunityMemberStatus.ACCEPTED and target_membership.status in [
+        CommunityMemberStatus.BANNED,
+        CommunityMemberStatus.SUSPENDED,
+    ]:
+        if target_membership.action_by_role == "ADMIN" and not is_admin:
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot undo an action taken by an admin.",
+            )
+
+    # Determine action_by_role for ban/suspend
+    new_action_by_role: str | None = target_membership.action_by_role
+    new_action_reason: str | None = target_membership.action_reason
+    new_suspension_until = target_membership.suspension_until
+
+    if member_in.status in [CommunityMemberStatus.BANNED, CommunityMemberStatus.SUSPENDED]:
+        new_action_by_role = "ADMIN" if is_admin else "MODERATOR"
+        new_action_reason = member_in.action_reason
+        if member_in.status == CommunityMemberStatus.SUSPENDED:
+            new_suspension_until = member_in.suspension_until
+        else:
+            new_suspension_until = None
+    elif member_in.status == CommunityMemberStatus.ACCEPTED:
+        new_action_by_role = None
+        new_action_reason = None
+        new_suspension_until = None
+
     updated_member = crud.update_community_member(
         session=session,
         community_id=id,
@@ -683,8 +820,51 @@ async def update_community_member_role(
             status_code=404, detail="Member not found in this community"
         )
 
-    # Notify user of status/role change
-    if member_in.status == CommunityMemberStatus.ACCEPTED:
+    # Persist governance fields
+    updated_member.action_by_role = new_action_by_role
+    updated_member.action_reason = new_action_reason
+    updated_member.suspension_until = new_suspension_until
+    session.add(updated_member)
+
+    # Log the governance action
+    actor_label = current_user.full_name or current_user.email
+    target_user_obj = session.get(User, user_id)
+    target_label = (target_user_obj.full_name or target_user_obj.email) if target_user_obj else str(user_id)
+    prev_status = target_membership.status
+    if member_in.status == CommunityMemberStatus.ACCEPTED and prev_status == CommunityMemberStatus.BANNED:
+        _write_log(session, id, "MEMBER_UNBANNED", actor_name=actor_label, target_name=target_label)
+    elif member_in.status == CommunityMemberStatus.ACCEPTED and prev_status == CommunityMemberStatus.SUSPENDED:
+        _write_log(session, id, "MEMBER_UNSUSPENDED", actor_name=actor_label, target_name=target_label)
+    elif member_in.status == CommunityMemberStatus.ACCEPTED:
+        _write_log(session, id, "MEMBER_JOINED", actor_name=target_label)
+    elif member_in.status == CommunityMemberStatus.BANNED:
+        _write_log(session, id, "MEMBER_BANNED", actor_name=actor_label, target_name=target_label, extra=member_in.action_reason)
+    elif member_in.status == CommunityMemberStatus.SUSPENDED:
+        until_extra = f"until {member_in.suspension_until.strftime('%Y-%m-%d')}" if member_in.suspension_until else None
+        _write_log(session, id, "MEMBER_SUSPENDED", actor_name=actor_label, target_name=target_label, extra=until_extra)
+    elif member_in.role and member_in.role > target_membership.role:
+        _write_log(session, id, "MEMBER_PROMOTED", actor_name=actor_label, target_name=target_label, extra=str(member_in.role.value))
+    elif member_in.role and member_in.role < target_membership.role:
+        _write_log(session, id, "MEMBER_DEMOTED", actor_name=actor_label, target_name=target_label, extra=str(member_in.role.value))
+
+    session.commit()
+    session.refresh(updated_member)
+
+    # Notifications
+    if member_in.status == CommunityMemberStatus.ACCEPTED and prev_status in [
+        CommunityMemberStatus.BANNED,
+        CommunityMemberStatus.SUSPENDED,
+    ]:
+        action_word = "ban" if prev_status == CommunityMemberStatus.BANNED else "suspension"
+        await notify_user(
+            session=session,
+            recipient_id=user_id,
+            title=f"{'Ban' if prev_status == CommunityMemberStatus.BANNED else 'Suspension'} Lifted",
+            message=f"Your {action_word} in {community.name} has been lifted.",
+            type=NotificationType.SUCCESS,
+            link=f"/communities/{id}",
+        )
+    elif member_in.status == CommunityMemberStatus.ACCEPTED:
         await notify_user(
             session=session,
             recipient_id=user_id,
@@ -692,6 +872,29 @@ async def update_community_member_role(
             message=f"You are now a member of {community.name}.",
             type=NotificationType.SUCCESS,
             link=f"/communities/{id}",
+        )
+    elif member_in.status == CommunityMemberStatus.BANNED:
+        await notify_user(
+            session=session,
+            recipient_id=user_id,
+            title="Banned from Community",
+            message=f"You have been banned from {community.name}.",
+            type=NotificationType.WARNING,
+            link=None,
+        )
+    elif member_in.status == CommunityMemberStatus.SUSPENDED:
+        until_str = (
+            member_in.suspension_until.strftime("%Y-%m-%d")
+            if member_in.suspension_until
+            else "an unspecified date"
+        )
+        await notify_user(
+            session=session,
+            recipient_id=user_id,
+            title="Suspended from Community",
+            message=f"You have been suspended from {community.name} until {until_str}.",
+            type=NotificationType.WARNING,
+            link=None,
         )
     elif member_in.role:
         await notify_user(
@@ -735,6 +938,452 @@ def update_community_notifications(
     session.add(membership)
     session.commit()
     return Message(message=f"Notifications {'enabled' if enabled else 'disabled'}")
+
+
+@router.post("/{id}/resign", response_model=Message)
+async def resign_from_community(
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+) -> Any:
+    """
+    Resign from a staff role (ADMIN or MODERATOR) and become a regular MEMBER.
+    """
+    community = session.get(Community, id)
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    membership = _get_accepted_membership(session, id, current_user.id)
+    if not membership or membership.role == CommunityMemberRole.MEMBER:
+        raise HTTPException(status_code=403, detail="Only staff can resign a position")
+
+    if membership.role == CommunityMemberRole.ADMIN and _is_last_admin(session, id, current_user.id):
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot resign as the last admin. Promote another member first.",
+        )
+
+    old_role = membership.role
+    membership.role = CommunityMemberRole.MEMBER
+    session.add(membership)
+    _write_log(
+        session, id, "MEMBER_RESIGNED",
+        actor_name=current_user.full_name or current_user.email,
+        extra=str(old_role.value),
+    )
+    session.commit()
+
+    # Notify all community admins
+    admins = session.exec(
+        select(CommunityMember).where(
+            CommunityMember.community_id == id,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+            CommunityMember.role == CommunityMemberRole.ADMIN,
+        )
+    ).all()
+    name = current_user.full_name or current_user.email
+    for admin in admins:
+        await notify_user(
+            session=session,
+            recipient_id=admin.user_id,
+            title="Staff Resignation",
+            message=f"{name} has resigned from their {old_role} position in {community.name}.",
+            type=NotificationType.INFO,
+            link=f"/communities/{id}?tab=settings",
+        )
+
+    return Message(message="Resigned successfully")
+
+
+@router.get("/{id}/disband-vote", response_model=CommunityDisbandVoteStatus)
+def get_disband_vote(
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+) -> Any:
+    """
+    Get the current disband vote status (admin only).
+    """
+    community = session.get(Community, id)
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    membership = _get_accepted_membership(session, id, current_user.id)
+    if not (membership and membership.role == CommunityMemberRole.ADMIN) and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Only admins can view disband votes")
+
+    # All accepted admins
+    all_admins = session.exec(
+        select(CommunityMember).where(
+            CommunityMember.community_id == id,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+            CommunityMember.role == CommunityMemberRole.ADMIN,
+        )
+    ).all()
+    all_admin_ids = {m.user_id for m in all_admins}
+
+    # Who voted YES
+    votes = session.exec(
+        select(CommunityDisbandVote).where(CommunityDisbandVote.community_id == id)
+    ).all()
+    voted_ids = [v.voter_id for v in votes]
+    pending_ids = list(all_admin_ids - set(voted_ids))
+
+    return CommunityDisbandVoteStatus(
+        voted_ids=voted_ids,
+        pending_ids=pending_ids,
+        total_admins=len(all_admin_ids),
+    )
+
+
+@router.post("/{id}/disband-vote", response_model=CommunityDisbandVoteStatus | Message)
+async def cast_disband_vote(
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    vote: bool,
+) -> Any:
+    """
+    Cast a vote to disband the community (admin only).
+    vote=True  → add/keep YES vote
+    vote=False → cancel the motion (delete all votes)
+    """
+    community = session.get(Community, id)
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    membership = _get_accepted_membership(session, id, current_user.id)
+    if not (membership and membership.role == CommunityMemberRole.ADMIN) and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Only admins can vote to disband")
+
+    if not vote:
+        # Cancel the motion — delete all votes
+        votes = session.exec(
+            select(CommunityDisbandVote).where(CommunityDisbandVote.community_id == id)
+        ).all()
+        for v in votes:
+            session.delete(v)
+        session.commit()
+
+        # Notify all admins
+        all_admins = session.exec(
+            select(CommunityMember).where(
+                CommunityMember.community_id == id,
+                CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+                CommunityMember.role == CommunityMemberRole.ADMIN,
+            )
+        ).all()
+        name = current_user.full_name or current_user.email
+        for admin in all_admins:
+            if admin.user_id != current_user.id:
+                await notify_user(
+                    session=session,
+                    recipient_id=admin.user_id,
+                    title="Disband Motion Cancelled",
+                    message=f"The disband motion for {community.name} was cancelled by {name}.",
+                    type=NotificationType.INFO,
+                    link=f"/communities/{id}?tab=settings",
+                )
+        return Message(message="Disband vote cancelled")
+
+    # vote=True: upsert this admin's YES vote
+    existing_vote = session.exec(
+        select(CommunityDisbandVote).where(
+            CommunityDisbandVote.community_id == id,
+            CommunityDisbandVote.voter_id == current_user.id,
+        )
+    ).first()
+    if not existing_vote:
+        new_vote = CommunityDisbandVote(community_id=id, voter_id=current_user.id)
+        session.add(new_vote)
+        session.commit()
+
+    # Count
+    all_admins = session.exec(
+        select(CommunityMember).where(
+            CommunityMember.community_id == id,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+            CommunityMember.role == CommunityMemberRole.ADMIN,
+        )
+    ).all()
+    all_admin_ids = {m.user_id for m in all_admins}
+    total_admins = len(all_admin_ids)
+
+    all_votes = session.exec(
+        select(CommunityDisbandVote).where(CommunityDisbandVote.community_id == id)
+    ).all()
+    voted_ids = [v.voter_id for v in all_votes]
+    yes_count = len(voted_ids)
+
+    if yes_count >= total_admins:
+        # Unanimous — disband
+        # Notify all members first
+        all_members = session.exec(
+            select(CommunityMember).where(
+                CommunityMember.community_id == id,
+                CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+            )
+        ).all()
+        for member in all_members:
+            await notify_user(
+                session=session,
+                recipient_id=member.user_id,
+                title="Community Disbanded",
+                message=f"The community '{community.name}' has been disbanded by unanimous admin vote.",
+                type=NotificationType.WARNING,
+                link="/communities",
+            )
+        session.delete(community)
+        session.commit()
+        delete_community_from_search(id)
+        return Message(message="Community disbanded successfully")
+
+    # Not yet unanimous — notify admins who haven't voted
+    pending_ids = list(all_admin_ids - set(voted_ids))
+    for admin_id in pending_ids:
+        await notify_user(
+            session=session,
+            recipient_id=admin_id,
+            title="Disband Vote in Progress",
+            message=f"A disband vote is in progress for {community.name} — {yes_count}/{total_admins} admins have voted.",
+            type=NotificationType.WARNING,
+            link=f"/communities/{id}?tab=settings",
+        )
+
+    return CommunityDisbandVoteStatus(
+        voted_ids=voted_ids,
+        pending_ids=pending_ids,
+        total_admins=total_admins,
+    )
+
+
+@router.get(
+    "/{id}/members/{user_id}/demotion-vote",
+    response_model=CommunityDemotionVoteStatus,
+)
+def get_demotion_vote(
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> Any:
+    """
+    Get current demotion vote status for a target admin (admin only).
+    """
+    community = session.get(Community, id)
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    membership = _get_accepted_membership(session, id, current_user.id)
+    if not (membership and membership.role == CommunityMemberRole.ADMIN) and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Only admins can view demotion votes")
+
+    # Count eligible voters (all accepted admins except target)
+    eligible_voters = session.exec(
+        select(func.count()).where(
+            CommunityMember.community_id == id,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+            CommunityMember.role == CommunityMemberRole.ADMIN,
+            CommunityMember.user_id != user_id,
+        )
+    ).one()
+
+    votes = session.exec(
+        select(CommunityDemotionVote).where(
+            CommunityDemotionVote.community_id == id,
+            CommunityDemotionVote.target_user_id == user_id,
+        )
+    ).all()
+    voted_ids = [v.voter_id for v in votes]
+    needed = (eligible_voters // 2) + 1  # strict majority
+
+    return CommunityDemotionVoteStatus(
+        target_user_id=user_id,
+        yes_votes=len(voted_ids),
+        needed=needed,
+        voted_ids=voted_ids,
+    )
+
+
+@router.post(
+    "/{id}/members/{user_id}/demotion-vote",
+    response_model=CommunityDemotionVoteStatus | Message,
+)
+async def cast_demotion_vote(
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    user_id: uuid.UUID,
+    vote: bool,
+) -> Any:
+    """
+    Cast a vote to demote a target admin to member.
+    vote=True  → add YES vote
+    vote=False → cancel the motion for this target
+    """
+    community = session.get(Community, id)
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    membership = _get_accepted_membership(session, id, current_user.id)
+    if not (membership and membership.role == CommunityMemberRole.ADMIN) and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Only admins can vote on demotion")
+
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot vote to demote yourself")
+
+    target = session.exec(
+        select(CommunityMember).where(
+            CommunityMember.community_id == id,
+            CommunityMember.user_id == user_id,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+            CommunityMember.role == CommunityMemberRole.ADMIN,
+        )
+    ).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Target is not an accepted admin in this community")
+
+    if not vote:
+        # Cancel motion for this target
+        votes = session.exec(
+            select(CommunityDemotionVote).where(
+                CommunityDemotionVote.community_id == id,
+                CommunityDemotionVote.target_user_id == user_id,
+            )
+        ).all()
+        for v in votes:
+            session.delete(v)
+        session.commit()
+
+        target_user = session.get(User, user_id)
+        target_name = (target_user.full_name or target_user.email) if target_user else str(user_id)
+
+        all_admins = session.exec(
+            select(CommunityMember).where(
+                CommunityMember.community_id == id,
+                CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+                CommunityMember.role == CommunityMemberRole.ADMIN,
+            )
+        ).all()
+        for admin in all_admins:
+            if admin.user_id != current_user.id:
+                await notify_user(
+                    session=session,
+                    recipient_id=admin.user_id,
+                    title="Demotion Motion Cancelled",
+                    message=f"The demotion motion for {target_name} in {community.name} was cancelled.",
+                    type=NotificationType.INFO,
+                    link=f"/communities/{id}?tab=settings",
+                )
+        return Message(message="Demotion vote cancelled")
+
+    # vote=True: upsert
+    existing_votes_count = session.exec(
+        select(func.count()).where(
+            CommunityDemotionVote.community_id == id,
+            CommunityDemotionVote.target_user_id == user_id,
+        )
+    ).one()
+    is_first_vote = existing_votes_count == 0
+
+    existing_my_vote = session.exec(
+        select(CommunityDemotionVote).where(
+            CommunityDemotionVote.community_id == id,
+            CommunityDemotionVote.target_user_id == user_id,
+            CommunityDemotionVote.voter_id == current_user.id,
+        )
+    ).first()
+    if not existing_my_vote:
+        new_vote = CommunityDemotionVote(
+            community_id=id,
+            target_user_id=user_id,
+            voter_id=current_user.id,
+        )
+        session.add(new_vote)
+        session.commit()
+
+    # If first vote, notify target
+    if is_first_vote:
+        await notify_user(
+            session=session,
+            recipient_id=user_id,
+            title="Demotion Vote Initiated",
+            message=f"A demotion vote has been initiated against you in {community.name}.",
+            type=NotificationType.WARNING,
+            link=f"/communities/{id}",
+        )
+
+    # Count eligible voters (all accepted admins except target)
+    eligible_voters = session.exec(
+        select(func.count()).where(
+            CommunityMember.community_id == id,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+            CommunityMember.role == CommunityMemberRole.ADMIN,
+            CommunityMember.user_id != user_id,
+        )
+    ).one()
+
+    all_votes = session.exec(
+        select(CommunityDemotionVote).where(
+            CommunityDemotionVote.community_id == id,
+            CommunityDemotionVote.target_user_id == user_id,
+        )
+    ).all()
+    voted_ids = [v.voter_id for v in all_votes]
+    yes_count = len(voted_ids)
+    needed = (eligible_voters // 2) + 1
+
+    if yes_count > eligible_voters / 2:
+        # Majority reached — demote
+        target.role = CommunityMemberRole.MEMBER
+        session.add(target)
+
+        # Delete all votes for (community, target)
+        for v in all_votes:
+            session.delete(v)
+
+        target_user = session.get(User, user_id)
+        target_name = (target_user.full_name or target_user.email) if target_user else str(user_id)
+        _write_log(session, id, "MEMBER_DEMOTED", actor_name="vote", target_name=target_name, extra="to MEMBER")
+        session.commit()
+
+        target_user = session.get(User, user_id)
+        target_name = (target_user.full_name or target_user.email) if target_user else str(user_id)
+
+        # Notify target
+        await notify_user(
+            session=session,
+            recipient_id=user_id,
+            title="Demoted",
+            message=f"You have been demoted to Member in {community.name} by majority admin vote.",
+            type=NotificationType.WARNING,
+            link=f"/communities/{id}",
+        )
+        # Notify all admins
+        all_admins = session.exec(
+            select(CommunityMember).where(
+                CommunityMember.community_id == id,
+                CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+                CommunityMember.role == CommunityMemberRole.ADMIN,
+            )
+        ).all()
+        for admin in all_admins:
+            await notify_user(
+                session=session,
+                recipient_id=admin.user_id,
+                title="Demotion Passed",
+                message=f"Demotion of {target_name} to Member in {community.name} passed.",
+                type=NotificationType.INFO,
+                link=f"/communities/{id}?tab=settings",
+            )
+        return Message(message=f"{target_name} has been demoted to Member")
+
+    return CommunityDemotionVoteStatus(
+        target_user_id=user_id,
+        yes_votes=yes_count,
+        needed=needed,
+        voted_ids=voted_ids,
+    )
 
 
 @router.post("/{id}/favorite", response_model=Message)
@@ -1350,6 +1999,11 @@ def add_item_to_community(
         community_id=id, item_id=item_id, added_by=current_user.id
     )
     session.add(comm_item)
+    _write_log(
+        session, id, "BOOK_ADDED",
+        actor_name=current_user.full_name or current_user.email,
+        extra=item.title,
+    )
 
     session.commit()
 
@@ -1589,6 +2243,13 @@ def remove_item_from_community(
     # Update collection index for owner and pooled communities in background BEFORE deletion
     invalidate_item_caches(session, item_id, background_tasks)
 
+    item_title = item.title if item else str(item_id)
+    _write_log(
+        session, id, "BOOK_REMOVED",
+        actor_name=current_user.full_name or current_user.email,
+        extra=item_title,
+    )
+
     if is_owned:
         # If community owns it, delete the item itself (cascades to CommunityItem)
         item_id_to_del = item.id
@@ -1639,7 +2300,7 @@ def read_community_announcements(
     statement = (
         select(CommunityAnnouncement)
         .where(CommunityAnnouncement.community_id == id)
-        .order_by(CommunityAnnouncement.created_at.desc())
+        .order_by(CommunityAnnouncement.is_pinned.desc(), CommunityAnnouncement.created_at.desc())
         .offset(skip)
         .limit(limit)
     )
@@ -1734,6 +2395,35 @@ def update_community_announcement(
     return announcement
 
 
+@router.patch(
+    "/{id}/announcements/{announcement_id}/pin", response_model=CommunityAnnouncementPublic
+)
+def pin_community_announcement(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    announcement_id: uuid.UUID,
+    pin_in: CommunityPinUpdate,
+) -> Any:
+    """
+    Pin or unpin an announcement (Admin only).
+    """
+    announcement = session.get(CommunityAnnouncement, announcement_id)
+    if not announcement or announcement.community_id != id:
+        raise HTTPException(status_code=404, detail="Announcement not found")
+
+    membership = _get_accepted_membership(session, id, current_user.id)
+    if not (membership and membership.role == CommunityMemberRole.ADMIN) and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Only admins can pin announcements")
+
+    announcement.is_pinned = pin_in.is_pinned
+    session.add(announcement)
+    session.commit()
+    session.refresh(announcement)
+    return announcement
+
+
 @router.delete("/{id}/announcements/{announcement_id}", response_model=Message)
 def delete_community_announcement(
     *,
@@ -1795,7 +2485,7 @@ def read_community_messages(
     statement = (
         select(CommunityMessage)
         .where(CommunityMessage.community_id == id)
-        .order_by(CommunityMessage.created_at.desc())
+        .order_by(CommunityMessage.is_pinned.desc(), CommunityMessage.created_at.desc())
         .offset(skip)
         .limit(limit)
     )
@@ -1865,6 +2555,33 @@ def update_community_message(
     return message
 
 
+@router.patch("/{id}/messages/{message_id}/pin", response_model=CommunityMessagePublic)
+def pin_community_message(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    message_id: uuid.UUID,
+    pin_in: CommunityPinUpdate,
+) -> Any:
+    """
+    Pin or unpin a board message (Admin only).
+    """
+    message = session.get(CommunityMessage, message_id)
+    if not message or message.community_id != id:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    membership = _get_accepted_membership(session, id, current_user.id)
+    if not (membership and membership.role == CommunityMemberRole.ADMIN) and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Only admins can pin messages")
+
+    message.is_pinned = pin_in.is_pinned
+    session.add(message)
+    session.commit()
+    session.refresh(message)
+    return message
+
+
 @router.delete("/{id}/messages/{message_id}", response_model=Message)
 def delete_community_message(
     *,
@@ -1896,6 +2613,39 @@ def delete_community_message(
     session.delete(message)
     session.commit()
     return Message(message="Message deleted")
+
+
+@router.get("/{id}/log", response_model=CommunityLogPublic)
+def read_community_log(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    skip: int = 0,
+    limit: int = 50,
+) -> Any:
+    """
+    Get the community event log (accepted members only).
+    """
+    community = session.get(Community, id)
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    membership = _get_accepted_membership(session, id, current_user.id)
+    if not membership and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Must be a member to view the community log")
+
+    count = session.exec(
+        select(func.count()).where(CommunityLog.community_id == id)
+    ).one()
+    entries = session.exec(
+        select(CommunityLog)
+        .where(CommunityLog.community_id == id)
+        .order_by(CommunityLog.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    ).all()
+    return CommunityLogPublic(data=entries, count=count)
 
 
 @router.get("/{id}/loans", response_model=LoansPublic)
