@@ -3,11 +3,11 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, update
-from sqlmodel import Session, select
+from sqlmodel import Session, or_, select
 
 from app.core.config import settings
 from app.core.db import engine
-from app.models import Community, CommunityAnnouncement, CommunityLog, CommunityMember, CommunityMemberStatus, CommunityMessage, Loan, LoanStatus, NotificationType, User
+from app.models import Community, CommunityAnnouncement, CommunityLog, CommunityMember, CommunityMemberStatus, CommunityMessage, Item, ItemType, Loan, LoanStatus, NotificationType, User
 
 logger = logging.getLogger(__name__)
 
@@ -146,4 +146,166 @@ async def check_expired_board_content():
             await asyncio.sleep(86400)  # once per day
         except asyncio.CancelledError:
             logger.info("Board content expiry checker shutting down")
+            return
+
+
+async def classify_pending_books():
+    """
+    Persistent background worker: poll for books that are missing or have only
+    generic AI classification (category is None/'Fiction'/'Non-Fiction' or genre
+    is None) and classify them one at a time using the local Ollama model.
+
+    Processes a small batch per sweep with a pause between each LLM call so the
+    hardware is never overwhelmed. Results are committed independently per book
+    so a single failure does not block the rest.
+    """
+    # Tune these to match how fast/slow the local hardware is.
+    POLL_INTERVAL = 30        # seconds between sweeps when there is pending work
+    IDLE_INTERVAL = 60        # seconds to wait when nothing needs classifying
+    SLEEP_BETWEEN_BOOKS = 5   # pause between successive LLM calls within a sweep
+    MAX_PER_SWEEP = 5         # max books to attempt per sweep (spread load over time)
+
+    logger.info("Book classification worker started.")
+
+    while True:
+        try:
+            # Step aside while an admin bulk-classify job is running so they
+            # don't compete for Ollama on the same slow hardware.
+            from app.state import classification_state
+            if classification_state.bulk_running:
+                logger.debug("Classification worker: bulk task active, skipping sweep.")
+                try:
+                    await asyncio.sleep(POLL_INTERVAL)
+                except asyncio.CancelledError:
+                    logger.info("Book classification worker shutting down.")
+                    return
+                continue
+
+            # ------------------------------------------------------------------
+            # 1. Collect IDs + data of books that need classification.
+            #    We read everything we need from a short-lived session so that
+            #    per-book write sessions are fully independent.
+            # ------------------------------------------------------------------
+            with Session(engine) as session:
+                stmt = (
+                    select(Item)
+                    .where(
+                        Item.item_type == ItemType.book,
+                        or_(
+                            Item.category.is_(None),
+                            Item.genre.is_(None),
+                            Item.category.in_(["Fiction", "Non-Fiction"]),
+                        ),
+                    )
+                    .limit(MAX_PER_SWEEP)
+                )
+                pending_data = [
+                    {
+                        "id": b.id,
+                        "title": b.title,
+                        "author": b.author,
+                        "description": b.description,
+                    }
+                    for b in session.exec(stmt).all()
+                ]
+
+            if not pending_data:
+                try:
+                    await asyncio.sleep(IDLE_INTERVAL)
+                except asyncio.CancelledError:
+                    logger.info("Book classification worker shutting down.")
+                    return
+                continue
+
+            logger.info(
+                "Classification worker: %d book(s) to classify this sweep.",
+                len(pending_data),
+            )
+
+            # Lazy imports to avoid circular-import issues at module level.
+            from app.ai import classify_books
+            from app.api.utils import ensure_work_metadata, map_book_classification
+            from app.search import sync_item_to_search
+
+            # ------------------------------------------------------------------
+            # 2. Classify each book individually with its own write session.
+            # ------------------------------------------------------------------
+            for book_info in pending_data:
+                try:
+                    results = await classify_books(
+                        [
+                            {
+                                "title": book_info["title"],
+                                "author": book_info["author"] or "",
+                                "description": book_info["description"],
+                            }
+                        ]
+                    )
+
+                    if not results or not results[0] or not any(results[0]):
+                        logger.warning(
+                            "Classification worker: no result for %r, skipping.",
+                            book_info["title"],
+                        )
+                    else:
+                        cat_raw, gen_raw, sub_raw = results[0]
+                        cat, gen, _ = map_book_classification([cat_raw, gen_raw])
+
+                        with Session(engine) as ws:
+                            book = ws.get(Item, book_info["id"])
+                            if book:
+                                if cat:
+                                    book.category = cat
+                                if gen:
+                                    book.genre = gen
+                                if sub_raw:
+                                    book.subject = sub_raw
+
+                                ws.add(book)
+                                ws.flush()
+                                sync_item_to_search(book)
+
+                                tags = [s.strip() for s in sub_raw.split(",")] if sub_raw else []
+                                ensure_work_metadata(
+                                    ws,
+                                    book.author,
+                                    book.title,
+                                    category=cat,
+                                    genre=gen,
+                                    tags=tags,
+                                    overwrite=True,
+                                )
+                                ws.commit()
+                                logger.info(
+                                    "Classification worker: '%s' → %s / %s",
+                                    book.title,
+                                    cat,
+                                    gen,
+                                )
+
+                except Exception as e:
+                    logger.error(
+                        "Classification worker: failed to classify id=%s title=%r: %s",
+                        book_info["id"],
+                        book_info["title"],
+                        e,
+                    )
+
+                # Pause between books so we don't saturate the LLM/hardware.
+                try:
+                    await asyncio.sleep(SLEEP_BETWEEN_BOOKS)
+                except asyncio.CancelledError:
+                    logger.info("Book classification worker shutting down.")
+                    return
+
+        except asyncio.CancelledError:
+            logger.info("Book classification worker shutting down.")
+            return
+        except Exception:
+            logger.exception("Error in classify_pending_books sweep")
+
+        try:
+            await asyncio.sleep(POLL_INTERVAL)
+        except asyncio.CancelledError:
+            logger.info("Book classification worker shutting down.")
             return

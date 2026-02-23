@@ -188,107 +188,112 @@ async def maintenance_bulk_classify(user_id: uuid.UUID):
     from app.api.websocket_manager import notification_manager
     from app.core.db import engine
     from app.search import sync_item_to_search
+    from app.state import classification_state
 
     logger = logging.getLogger(__name__)
+    classification_state.bulk_running = True
     logger.info("Starting maintenance bulk classification and cleanup...")
 
-    with Session(engine) as session:
-        # 1. Clean up polluted ISBNs in Item and WorkMetadata
-        items_to_fix = session.exec(select(Item).where(Item.item_type == ItemType.book)).all()
-        fixed_items = 0
-        for item in items_to_fix:
-            if item.isbn in ["[]", "", []]:
-                item.isbn = None
-                session.add(item)
-                fixed_items += 1
+    try:
+        with Session(engine) as session:
+            # 1. Clean up polluted ISBNs in Item and WorkMetadata
+            items_to_fix = session.exec(select(Item).where(Item.item_type == ItemType.book)).all()
+            fixed_items = 0
+            for item in items_to_fix:
+                if item.isbn in ["[]", "", []]:
+                    item.isbn = None
+                    session.add(item)
+                    fixed_items += 1
 
-        works_to_fix = session.exec(select(WorkMetadata)).all()
-        fixed_works = 0
-        for work in works_to_fix:
-            if work.isbn in ["[]", "", []]:
-                work.isbn = None
-                session.add(work)
-                fixed_works += 1
+            works_to_fix = session.exec(select(WorkMetadata)).all()
+            fixed_works = 0
+            for work in works_to_fix:
+                if work.isbn in ["[]", "", []]:
+                    work.isbn = None
+                    session.add(work)
+                    fixed_works += 1
 
-        session.flush()
-        logger.info(f"ISBN Cleanup: Fixed {fixed_items} items and {fixed_works} work metadata entries.")
+            session.flush()
+            logger.info(f"ISBN Cleanup: Fixed {fixed_items} items and {fixed_works} work metadata entries.")
 
-        # 2. Bulk Classify
-        statement = select(Item).where(Item.item_type == ItemType.book)
-        books = session.exec(statement).all()
+            # 2. Bulk Classify
+            statement = select(Item).where(Item.item_type == ItemType.book)
+            books = session.exec(statement).all()
 
-        books_to_classify = []
-        books_objects = []
+            books_to_classify = []
+            books_objects = []
 
-        for book in books:
-            # Re-classify if generic or missing
-            is_generic = book.category in ["Fiction", "Non-Fiction", None] or book.genre is None
+            for book in books:
+                # Re-classify if generic or missing
+                is_generic = book.category in ["Fiction", "Non-Fiction", None] or book.genre is None
 
-            if is_generic:
-                books_to_classify.append({
-                    "title": book.title,
-                    "author": book.author or "",
-                    "description": book.description
-                })
-                books_objects.append(book)
+                if is_generic:
+                    books_to_classify.append({
+                        "title": book.title,
+                        "author": book.author or "",
+                        "description": book.description
+                    })
+                    books_objects.append(book)
 
-        classified_count = 0
-        from app.ai import classify_books
+            classified_count = 0
+            from app.ai import classify_books
 
-        # Process in chunks of 1 for high reliability with small local models
-        CHUNK_SIZE = 1
-        for i in range(0, len(books_to_classify), CHUNK_SIZE):
-            chunk = books_to_classify[i:i + CHUNK_SIZE]
-            chunk_objs = books_objects[i:i + CHUNK_SIZE]
+            # Process in chunks of 1 for high reliability with small local models
+            CHUNK_SIZE = 1
+            for i in range(0, len(books_to_classify), CHUNK_SIZE):
+                chunk = books_to_classify[i:i + CHUNK_SIZE]
+                chunk_objs = books_objects[i:i + CHUNK_SIZE]
 
-            logger.info(f"Classifying chunk {i//CHUNK_SIZE + 1}/{len(books_to_classify)} ({len(chunk)} books)...")
+                logger.info(f"Classifying chunk {i//CHUNK_SIZE + 1}/{len(books_to_classify)} ({len(chunk)} books)...")
 
-            try:
-                results = await classify_books(chunk)
+                try:
+                    results = await classify_books(chunk)
 
-                chunk_classified = 0
-                for book, res in zip(chunk_objs, results):
-                    if not res: continue
-                    cat_raw, gen_raw, sub_raw = res
+                    chunk_classified = 0
+                    for book, res in zip(chunk_objs, results):
+                        if not res: continue
+                        cat_raw, gen_raw, sub_raw = res
 
-                    # Use map_book_classification for fuzzy matching against valid constants
-                    cat, gen, _ = map_book_classification([cat_raw, gen_raw])
+                        # Use map_book_classification for fuzzy matching against valid constants
+                        cat, gen, _ = map_book_classification([cat_raw, gen_raw])
 
-                    if cat: book.category = cat
-                    if gen: book.genre = gen
-                    if sub_raw: book.subject = sub_raw
-                    
-                    session.add(book)
-                    session.flush()
-                    sync_item_to_search(book)
+                        if cat: book.category = cat
+                        if gen: book.genre = gen
+                        if sub_raw: book.subject = sub_raw
 
-                    # Convert subjects string to tags list
-                    tags = [s.strip() for s in sub_raw.split(",")] if sub_raw else []
+                        session.add(book)
+                        session.flush()
+                        sync_item_to_search(book)
 
-                    # Ensure WorkMetadata also gets updated (overwrite=True so AI results
-                    # replace stale archive data, not just fill empty fields)
-                    ensure_work_metadata(session, book.author, book.title, category=cat, genre=gen, tags=tags, overwrite=True)
-                    classified_count += 1
-                    chunk_classified += 1
+                        # Convert subjects string to tags list
+                        tags = [s.strip() for s in sub_raw.split(",")] if sub_raw else []
 
-                if chunk_classified > 0:
-                    session.commit() # Commit after EACH successful chunk
-                else:
-                    logger.warning(f"Chunk {i//CHUNK_SIZE + 1} failed to classify any books.")
+                        # Ensure WorkMetadata also gets updated (overwrite=True so AI results
+                        # replace stale archive data, not just fill empty fields)
+                        ensure_work_metadata(session, book.author, book.title, category=cat, genre=gen, tags=tags, overwrite=True)
+                        classified_count += 1
+                        chunk_classified += 1
 
-            except Exception as e:
-                logger.error(f"Error processing chunk {i//CHUNK_SIZE + 1}: {e}")
-                session.rollback()
+                    if chunk_classified > 0:
+                        session.commit() # Commit after EACH successful chunk
+                    else:
+                        logger.warning(f"Chunk {i//CHUNK_SIZE + 1} failed to classify any books.")
 
-            await asyncio.sleep(0.5) # Minimal throttle for local execution
+                except Exception as e:
+                    logger.error(f"Error processing chunk {i//CHUNK_SIZE + 1}: {e}")
+                    session.rollback()
 
-        logger.info(f"Maintenance complete: Classified {classified_count} books.")
+                await asyncio.sleep(0.5) # Minimal throttle for local execution
 
-        # Notify user
-        await notification_manager.send_personal_message(
-            {"type": "BOOK_ARCHIVE_UPDATED", "count": classified_count, "action": "classified"},
-            user_id
-        )
+            logger.info(f"Maintenance complete: Classified {classified_count} books.")
+
+            # Notify user
+            await notification_manager.send_personal_message(
+                {"type": "BOOK_ARCHIVE_UPDATED", "count": classified_count, "action": "classified"},
+                user_id
+            )
+    finally:
+        classification_state.bulk_running = False
 
 async def ai_classify_specific_books(
     books_to_classify: list[dict[str, str]],
@@ -305,72 +310,77 @@ async def ai_classify_specific_books(
     logger = logging.getLogger(__name__)
     logger.info(f"Starting AI classification for {len(books_to_classify)} specific books...")
 
-    with Session(engine) as session:
-        books_data = []
-        books_meta_objs = []
+    from app.state import classification_state
+    classification_state.bulk_running = True
+    try:
+        with Session(engine) as session:
+            books_data = []
+            books_meta_objs = []
 
-        for b in books_to_classify:
-            author, title = b.get("author"), b.get("title")
-            if not author or not title: continue
+            for b in books_to_classify:
+                author, title = b.get("author"), b.get("title")
+                if not author or not title: continue
 
-            meta = session.get(WorkMetadata, (author, title))
-            if not meta: continue
+                meta = session.get(WorkMetadata, (author, title))
+                if not meta: continue
 
-            books_data.append({
-                "title": title,
-                "author": author,
-                "description": meta.description
-            })
-            books_meta_objs.append(meta)
+                books_data.append({
+                    "title": title,
+                    "author": author,
+                    "description": meta.description
+                })
+                books_meta_objs.append(meta)
 
-        classified_count = 0
-        # Process in chunks of 1 for high reliability with small local models
-        CHUNK_SIZE = 1
-        for i in range(0, len(books_data), CHUNK_SIZE):
-            chunk = books_data[i:i + CHUNK_SIZE]
-            chunk_metas = books_meta_objs[i:i + CHUNK_SIZE]
+            classified_count = 0
+            # Process in chunks of 1 for high reliability with small local models
+            CHUNK_SIZE = 1
+            for i in range(0, len(books_data), CHUNK_SIZE):
+                chunk = books_data[i:i + CHUNK_SIZE]
+                chunk_metas = books_meta_objs[i:i + CHUNK_SIZE]
 
-            try:
-                results = await classify_books(chunk)
+                try:
+                    results = await classify_books(chunk)
 
-                for meta, res in zip(chunk_metas, results):
-                    if not res: continue
-                    cat_raw, gen_raw, sub_raw = res
+                    for meta, res in zip(chunk_metas, results):
+                        if not res: continue
+                        cat_raw, gen_raw, sub_raw = res
 
-                    # Use fuzzy mapping to canonical constants
-                    cat, gen, _ = map_book_classification([cat_raw, gen_raw])
+                        # Use fuzzy mapping to canonical constants
+                        cat, gen, _ = map_book_classification([cat_raw, gen_raw])
 
-                    if cat: meta.category = cat
-                    if gen: meta.genre = gen
-                    if sub_raw:
-                        meta.tags = [s.strip() for s in sub_raw.split(",")]
+                        if cat: meta.category = cat
+                        if gen: meta.genre = gen
+                        if sub_raw:
+                            meta.tags = [s.strip() for s in sub_raw.split(",")]
 
-                    session.add(meta)
-                    session.flush()
+                        session.add(meta)
+                        session.flush()
 
-                    # Also sync items that use this metadata
-                    items = session.exec(select(Item).where(Item.author == meta.author, Item.title == meta.title)).all()
-                    for item in items:
-                        if cat: item.category = cat
-                        if gen: item.genre = gen
-                        if sub_raw: item.subject = sub_raw
-                        session.add(item)
-                        sync_item_to_search(item)
+                        # Also sync items that use this metadata
+                        items = session.exec(select(Item).where(Item.author == meta.author, Item.title == meta.title)).all()
+                        for item in items:
+                            if cat: item.category = cat
+                            if gen: item.genre = gen
+                            if sub_raw: item.subject = sub_raw
+                            session.add(item)
+                            sync_item_to_search(item)
 
-                    classified_count += 1
+                        classified_count += 1
 
-                session.commit() # Commit after each successful chunk
-            except Exception as e:
-                logger.error(f"Error processing AI classification chunk {i//CHUNK_SIZE + 1}: {e}")
-                session.rollback()
+                    session.commit() # Commit after each successful chunk
+                except Exception as e:
+                    logger.error(f"Error processing AI classification chunk {i//CHUNK_SIZE + 1}: {e}")
+                    session.rollback()
 
-            await asyncio.sleep(0.5)
+                await asyncio.sleep(0.5)
 
-        logger.info(f"AI classification complete: {classified_count} books processed.")
-        await notification_manager.send_personal_message(
-            {"type": "BOOK_ARCHIVE_UPDATED", "count": classified_count, "action": "ai_classified"},
-            user_id
-        )
+            logger.info(f"AI classification complete: {classified_count} books processed.")
+            await notification_manager.send_personal_message(
+                {"type": "BOOK_ARCHIVE_UPDATED", "count": classified_count, "action": "ai_classified"},
+                user_id
+            )
+    finally:
+        classification_state.bulk_running = False
 
 async def fetch_external_book_metadata(
     author: str,
