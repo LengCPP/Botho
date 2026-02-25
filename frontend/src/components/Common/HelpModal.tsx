@@ -298,12 +298,22 @@ function HelpModal() {
               </Text>
             </HStack>
             <Text fontSize="sm" color="fg.muted" lineHeight="tall">
-              Botho is a lending and sharing platform built primarily for books,
-              though you can list just about anything — tools, games, equipment,
-              whatever your circle shares. The name comes from a Sotho word that
-              carries the same meaning as the Nguni concept of Ubuntu: a
-              philosophy of community, mutual humanity, and looking out for one
-              another.{" "}
+              Botho is a community based borrowing and lending platform — a place
+              where people share what they own with the people they trust. It is
+              built primarily for books, though you can list just about anything:
+              tools, games, equipment, whatever your circle is willing to share.
+              You add items to your library, connect with friends and communities,
+              and coordinate loans directly through the app — no spreadsheets,
+              no forgotten due dates, no guessing who has your copy of{" "}
+              <Text as="span" fontStyle="italic">
+                Americanah
+              </Text>
+              .
+            </Text>
+            <Text fontSize="sm" color="fg.muted" lineHeight="tall" mt={3}>
+              The name comes from a Sotho word that carries the same meaning as
+              the Nguni concept of Ubuntu: a philosophy of community, mutual
+              humanity, and looking out for one another.{" "}
               <Text as="span" fontStyle="italic">
                 Ubuntu
               </Text>{" "}
