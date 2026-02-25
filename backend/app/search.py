@@ -44,8 +44,8 @@ def sync_item_to_search(item: Item):
     # Get pooled communities
     pooled_in = [str(c.id) for c in item.communities]
 
-    # Use top-level subject tags split by comma
-    tags = [s.strip() for s in item.subject.split(",")] if item.subject else []
+    # Use top-level subject tags split by comma, normalized to Title Case
+    tags = [s.strip().title() for s in item.subject.split(",")] if item.subject else []
 
     document = {
         "id": str(item.id),
@@ -103,6 +103,10 @@ def delete_work_metadata_from_search(author: str, title: str) -> None:
 def sync_work_metadata_to_search(meta: WorkMetadata):
     index = client.index("works")
     safe_id = _work_search_id(meta.author, meta.title)
+    
+    # Normalize tags to Title Case
+    normalized_tags = [t.strip().title() for t in (meta.tags or []) if t.strip()]
+    
     document = {
         "id": safe_id,
         "author": meta.author,
@@ -112,7 +116,7 @@ def sync_work_metadata_to_search(meta: WorkMetadata):
         "category": meta.category,
         "genre": meta.genre,
         "image_url": meta.image_url,
-        "subject": meta.tags,
+        "subject": normalized_tags,
     }
     index.add_documents([document])
 

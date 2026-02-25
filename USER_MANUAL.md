@@ -45,9 +45,19 @@ You can add items to your personal collection or directly to a community.
   - **Staging UI**: Before finalising the import, review all items in a dedicated staging interface. You can correct errors, select which items to import, and see real-time feedback on data enrichment.
   - **Background Enrichment**: The system automatically enriches your books with descriptions and covers from Google Books in the background.
 - **General Items**: For other resources (tools, games, etc.), manually enter the details and upload an image.
-- **Item Discovery**: Use faceted search to quickly filter items by category, condition, or availability. Facets are automatically sorted to show the most relevant options first.
+- **Item Discovery**: Use faceted search to quickly filter items by category, genre, subject, or author. Facets are automatically sorted alphabetically to show the most relevant options first.
 
-### 6. Reading Log (Books Only)
+### 6. Managing Items & Batch Actions
+The **Manage Items** dashboard (available in "My Items" and "Community Board") provides a powerful interface for overseeing your resources.
+- **Tabs**: View your items by category: **Catalogue** (Public), **Lost Items**, or **Private Items**.
+- **Batch Actions**: Select multiple items to perform actions simultaneously:
+  - **Delete**: Permanently remove items from the system.
+  - **Mark as Lost/Found**: Move items to/from the "Lost Items" tab. Lost items are hidden from public search.
+  - **Make Private/Public**: Toggle visibility for selected items.
+  - **Sync from Archive**: Update book metadata (tags, descriptions, categories) by syncing with the local Botho Archive.
+- **Bulk Add**: Access the import staging UI directly from the management dashboard.
+
+### 7. Reading Log (Books Only)
 Track your reading progress for any book in the system.
 - **Status**: Mark books as **Reading**, **Completed**, or **Dropped**.
 - **Reviews & Ratings**: Rate books (1-5 stars) and leave reviews to help others in your community.

@@ -40,9 +40,11 @@ Botho is a containerized monorepo with a FastAPI (Python) backend and a React (T
 
 ## 6. Key Features to Remember
 - **Communities:** Private/Public groups for resource sharing.
+- **Bucket Collections:** Community-owned collections with shared ownership and auto-cleanup.
+- **Manage Items Dashboard:** Batch actions (delete, lost, private, enrich) and bulk addition.
 - **Loans:** Workflow: Request -> Accept -> Ratify -> Return -> Confirm.
 - **Reading Log:** Book tracking and reviews.
-- **Avatars:** 
+- **Avatars:** Standardized, deterministic system with themed orange rings.
 - **Search:** Powered by Meilisearch.
 
 ## 7. Security

@@ -1554,7 +1554,7 @@ def read_community_item_facets(
             results.append({"name": display_name, "owner_id": str(owner_id_val), "count": count, "sample_images": [img for img in (imgs or []) if img][:5]})
 
     elif group_by == "subject":
-        tag_expr = func.btrim(func.unnest(func.string_to_array(Item.subject, ",")))
+        tag_expr = func.initcap(func.btrim(func.unnest(func.string_to_array(Item.subject, ","))))
         tags_core = select(
             tag_expr.label("name"), Item.item_type, func.count(Item.id).label("count"), func.array_agg(Item.image_url).label("imgs")
         ).where(base_filter).where(Item.subject.is_not(None)).where(Item.subject != "")
@@ -1747,14 +1747,9 @@ def read_community_items(
                     or_(Item.subject.is_(None), Item.subject == "")
                 )
             else:
-                statement = statement.where(
-                    or_(
-                        Item.subject == subject,
-                        Item.subject.ilike(f"{subject},%"),
-                        Item.subject.ilike(f"%, {subject}"),
-                        Item.subject.ilike(f"%, {subject},%"),
-                    )
-                )
+                # Precise match using PostgreSQL regex (case-insensitive)
+                pattern = f"(^|,\\s*){subject}($|,)"
+                statement = statement.where(text("item.subject ~* :pattern")).params(pattern=pattern)
         if author:
             statement = statement.where(col(Item.author).ilike(f"%{author}%"))
         if owner_filter:

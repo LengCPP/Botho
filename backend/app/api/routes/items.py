@@ -863,7 +863,8 @@ def read_item_facets(
             results.append({"name": name or "Others", "item_type": i_type, "count": count, "sample_images": valid_imgs})
 
     elif group_by == "subject":
-        tag_expr = func.btrim(func.unnest(func.string_to_array(Item.subject, ",")))
+        # Use initcap to ensure Title Case consistency
+        tag_expr = func.initcap(func.btrim(func.unnest(func.string_to_array(Item.subject, ","))))
         tags_core = select(
             tag_expr.label("name"), Item.item_type, func.count(Item.id).label("count"), func.array_agg(Item.image_url).label("imgs")
         ).where(Item.owner_id == target_owner_id).where(Item.subject.is_not(None)).where(Item.subject != "")
@@ -1318,21 +1319,15 @@ def read_items(
                 statement = statement.where(Item.genre == genre)
 
         if subject:
-            # Filter on Item.subject (comma-separated string) — consistent with
-            # how collection_index is built in update_collection_index().
             if subject == "Others":
                 statement = statement.where(
                     or_(Item.subject.is_(None), Item.subject == "")
                 )
             else:
-                statement = statement.where(
-                    or_(
-                        Item.subject == subject,
-                        Item.subject.ilike(f"{subject},%"),
-                        Item.subject.ilike(f"%, {subject}"),
-                        Item.subject.ilike(f"%, {subject},%"),
-                    )
-                )
+                # Precise word-boundary match using PostgreSQL regex (case-insensitive)
+                # Matches the subject as a whole element in a comma-separated list.
+                pattern = f"(^|,\\s*){subject}($|,)"
+                statement = statement.where(text("item.subject ~* :pattern")).params(pattern=pattern)
 
         if author:
             if author == "Others":
@@ -1743,6 +1738,12 @@ async def create_item(
             if s and s not in (subject or ""):
                 final_subject = f"{subject}, {s}" if subject else s
 
+        # Normalize subject to Title Case
+        if final_subject:
+            final_subject = ", ".join(
+                s.strip().title() for s in final_subject.split(",") if s.strip()
+            )
+
         db_item = Item(
             title=title,
             description=description,
@@ -1895,7 +1896,12 @@ async def update_item(
         if genre is not None:
             db_item.genre = genre
         if subject is not None:
-            db_item.subject = subject
+            if subject:
+                db_item.subject = ", ".join(
+                    s.strip().title() for s in subject.split(",") if s.strip()
+                )
+            else:
+                db_item.subject = None
         if isbn is not None:
             db_item.isbn = isbn
 
@@ -2183,7 +2189,7 @@ async def update_work_metadata(
 
     # Sync tags to Item.subject for the current user's matching items
     if meta_in.tags:
-        new_subject = ", ".join(t.strip() for t in meta_in.tags if t.strip())
+        new_subject = ", ".join(t.strip().title() for t in meta_in.tags if t.strip())
         if new_subject:
             matching_items = session.exec(
                 select(Item).where(

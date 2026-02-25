@@ -121,7 +121,7 @@ def _update_collection_index_logic(session: Session, owner_id: uuid.UUID):
         update_facet("genre", item.genre)
 
         # 3. Subject (Tags)
-        tags = [s.strip() for s in item.subject.split(",")] if item.subject else []
+        tags = [s.strip().title() for s in item.subject.split(",")] if item.subject else []
         if not tags:
             tags = ["Others"]
         for tag in tags:
@@ -472,6 +472,7 @@ async def sync_items_from_archive(
     from app.core.db import engine
     from app.search import sync_item_to_search
 
+    affected_owners = set()
     with Session(engine) as session:
         count = 0
         for item_id in item_ids:
@@ -506,8 +507,9 @@ async def sync_items_from_archive(
             
             # Merge subject
             if meta.tags:
-                existing_tags = [t.strip() for t in (item.subject.split(",") if item.subject else []) if t.strip()]
-                merged_tags = list(set(existing_tags) | set(meta.tags))
+                existing_tags = [t.strip().title() for t in (item.subject.split(",") if item.subject else []) if t.strip()]
+                # meta.tags is already a list of strings from WorkMetadata.tags (normalized to Title Case during its own sync)
+                merged_tags = sorted(list(set(existing_tags) | {t.strip().title() for t in meta.tags if t.strip()}))
                 new_subject = ", ".join(merged_tags)
                 if item.subject != new_subject:
                     item.subject, updated = new_subject, True
@@ -515,9 +517,15 @@ async def sync_items_from_archive(
             if updated:
                 session.add(item)
                 sync_item_to_search(item)
+                affected_owners.add(item.owner_id)
                 count += 1
 
         session.commit()
+        
+        # Rebuild indexes for all affected owners
+        for owner_id in affected_owners:
+            rebuild_collection_index_task(owner_id)
+
         await notification_manager.send_personal_message(
             {"type": "BOOK_ARCHIVE_UPDATED", "count": count, "action": "synced"},
             user_id

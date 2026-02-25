@@ -9,6 +9,7 @@ import {
   Separator,
   Text,
   VStack,
+  IconButton,
 } from "@chakra-ui/react"
 import { useEffect, useRef, useState } from "react"
 import {
@@ -19,7 +20,7 @@ import {
   FaSortAmountDown,
   FaThLarge,
 } from "react-icons/fa"
-import { FiSearch } from "react-icons/fi"
+import { FiSearch, FiX } from "react-icons/fi"
 
 import { useColorModeValue } from "@/components/ui/color-mode"
 import { InputGroup } from "@/components/ui/input-group"
@@ -165,7 +166,25 @@ export function ItemsViewOptions({
       {/* Search Input */}
       {showSearch && onChangeQ && (
         <Box width={{ base: "full", sm: "200px", md: "250px" }}>
-          <InputGroup flex="1" startElement={<FiSearch />}>
+          <InputGroup
+            flex="1"
+            startElement={<FiSearch />}
+            endElement={
+              localQ && (
+                <IconButton
+                  size="xs"
+                  variant="ghost"
+                  aria-label="Clear search"
+                  onClick={() => {
+                    setLocalQ("")
+                    onChangeQ("")
+                  }}
+                >
+                  <FiX />
+                </IconButton>
+              )
+            }
+          >
             <Input
               id="catalogue-search-input"
               name="q"

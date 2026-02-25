@@ -11,11 +11,12 @@ import {
   Spinner,
   Stack,
   Text,
+  IconButton,
 } from "@chakra-ui/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { useEffect, useRef, useState } from "react"
-import { FiBook, FiSearch, FiUsers } from "react-icons/fi"
+import { FiBook, FiSearch, FiUsers, FiX } from "react-icons/fi"
 
 interface QuickSearchProps {
   placeholder?: string
@@ -64,7 +65,25 @@ export const QuickSearch = ({
 
   return (
     <Box position="relative" width="100%" ref={containerRef} zIndex={100}>
-      <InputGroup startElement={<FiSearch />} width="100%">
+      <InputGroup
+        startElement={<FiSearch />}
+        endElement={
+          searchTerm && (
+            <IconButton
+              size="xs"
+              variant="ghost"
+              aria-label="Clear search"
+              onClick={() => {
+                setSearchTerm("")
+                setShowResults(false)
+              }}
+            >
+              <FiX />
+            </IconButton>
+          )
+        }
+        width="100%"
+      >
         <Input
           id="quick-search-input"
           name="quick-search"

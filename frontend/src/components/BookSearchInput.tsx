@@ -7,8 +7,11 @@ import {
   Spinner,
   Stack,
   Text,
+  IconButton,
 } from "@chakra-ui/react"
 import { useEffect, useRef, useState } from "react"
+import { FiX } from "react-icons/fi"
+import { InputGroup } from "@/components/ui/input-group"
 
 interface BookSearchInputProps {
   onSelect: (book: BookResult) => void
@@ -68,20 +71,42 @@ export const BookSearchInput = ({
     setShowResults(false)
   }
 
+  const handleClear = () => {
+    setSearchTerm("")
+    if (onChange) onChange("")
+    setShowResults(false)
+  }
+
   return (
     <Box position="relative" width="100%" ref={containerRef}>
-      <Input
-        id={id}
-        name={name}
-        value={searchTerm}
-        onChange={(e) => {
-          setSearchTerm(e.target.value)
-          if (onChange) onChange(e.target.value)
-          setShowResults(true)
-        }}
-        onFocus={() => setShowResults(true)}
-        placeholder={placeholder}
-      />
+      <InputGroup
+        width="100%"
+        endElement={
+          searchTerm && (
+            <IconButton
+              size="xs"
+              variant="ghost"
+              aria-label="Clear search"
+              onClick={handleClear}
+            >
+              <FiX />
+            </IconButton>
+          )
+        }
+      >
+        <Input
+          id={id}
+          name={name}
+          value={searchTerm}
+          onChange={(e) => {
+            setSearchTerm(e.target.value)
+            if (onChange) onChange(e.target.value)
+            setShowResults(true)
+          }}
+          onFocus={() => setShowResults(true)}
+          placeholder={placeholder}
+        />
+      </InputGroup>
 
       {showResults && searchTerm.length >= 3 && (
         <Box

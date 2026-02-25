@@ -733,19 +733,19 @@ const ItemCard = ({
                     const extraCount = subjects.length - 3
                     return (
                       subjects.length > 0 && (
-                        <Flex wrap="wrap" gap={1} mt={1}>
+                        <Flex wrap="wrap" gap={2} mt={1}>
                           {visible.map((tag: string, i: number) => (
                             <Badge
                               key={`${i}-${tag}`}
-                              variant="subtle"
-                              colorPalette="cyan"
-                              size="2xs"
+                              variant="outline"
+                              colorPalette="orange"
+                              size="xs"
                             >
                               {tag}
                             </Badge>
                           ))}
                           {extraCount > 0 && (
-                            <Badge variant="subtle" colorPalette="gray" size="2xs">
+                            <Badge variant="subtle" colorPalette="gray" size="xs">
                               +{extraCount} more
                             </Badge>
                           )}

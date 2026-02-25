@@ -25,6 +25,7 @@ Botho follows a modern, containerized monorepo architecture designed for scalabi
 - **Community-Centric Sharing**: Create and join private communities to pool resources (books, games, tools) with trusted circles.
 - **Bucket Collections**: Shared community collections where any member can contribute items, featuring automatic cleanup and shared ownership.
 - **Item Management & Discovery**: Easily catalog items with integrated search (e.g., Book search) and organize them into personal collections. Use faceted search for efficient filtering.
+- **Manage Items Dashboard**: Dedicated interface for batch actions (delete, lost, private, enrich) and bulk addition of resources.
 - **Reading Log**: Track reading progress (Reading, Completed, Dropped), rate items, and add personal tags and reviews to any book in the system.
 - **Lending System**: Comprehensive tracking for borrowed and lent items, including due dates, return status, and approval workflows.
 - **Social Connectivity**: Connect with friends, manage relationships, and view user profiles with distinct custom styling.

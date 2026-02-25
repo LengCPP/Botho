@@ -343,7 +343,7 @@ function CommunityBoard() {
     queryKey: [
       "communityItemsInfinite",
       cId,
-      { sort_by, sort_order, limit, category, genre, author, owner_filter, item_type, q: qP },
+      { sort_by, sort_order, limit, category, genre, subject, author, owner_filter, item_type, q: qP },
     ],
     queryFn: ({ pageParam = 0 }) =>
       CommunitiesService.readCommunityItems({
@@ -354,6 +354,7 @@ function CommunityBoard() {
         sortOrder: sort_order,
         category,
         genre,
+        subject,
         author,
         ownerFilter: owner_filter,
         itemType: item_type,
