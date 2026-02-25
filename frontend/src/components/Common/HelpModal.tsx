@@ -309,7 +309,7 @@ function HelpModal() {
               Botho is a community based borrowing and lending platform — a place
               where people share what they own with the people they trust. Books
               are well supported, but you can catalogue anything: tools, board
-              games, equipment, clothing, whatever your circle is willing to
+              games, equipment, whatever your circle is willing to
               share. Custom item types let you define exactly which fields matter
               for each kind of thing. You add items to your library, connect with
               friends and communities, and coordinate loans directly through the
