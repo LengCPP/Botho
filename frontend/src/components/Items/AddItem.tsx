@@ -33,7 +33,9 @@ import { BOOK_CLASSIFICATION } from "@/constants"
 import useAuth from "@/hooks/useAuth"
 import { type BookResult, useIsbnSearch } from "@/hooks/useBookSearch"
 import useCustomToast from "@/hooks/useCustomToast"
+import { useItemTypeDefinitions } from "@/hooks/useItemTypeDefinitions"
 import { handleError } from "@/utils"
+import { CreateItemTypeModal } from "./CreateItemTypeModal"
 import {
   DialogActionTrigger,
   DialogBody,
@@ -63,6 +65,24 @@ interface ItemCreate {
     tags?: string
   }
   image_url?: string
+  // Extended fields for custom types
+  weight?: string
+  dimensions?: string
+  brand?: string
+  condition_notes?: string
+  color?: string
+  material?: string
+  publisher?: string
+  year?: string
+  edition?: string
+  language?: string
+  age_group?: string
+  player_count?: string
+  platform?: string
+  format?: string
+  series?: string
+  model_number?: string
+  pieces_count?: number
 }
 
 const MAX_FILE_SIZE = 1 * 1024 * 1024 // 1MB
@@ -81,6 +101,9 @@ const AddItem = ({
   const [searchQuery, setSearchQuery] = useState("")
   const [isScanning, setIsScanning] = useState(false)
   const [scannedIsbn, setScannedIsbn] = useState("")
+  const [isCreateTypeModalOpen, setIsCreateTypeModalOpen] = useState(false)
+
+  const { definitions: customTypeDefinitions } = useItemTypeDefinitions()
 
   const { user: currentUser } = useAuth()
   const queryClient = useQueryClient()
@@ -277,6 +300,23 @@ const AddItem = ({
       image: imageFile,
       image_url: data.image_url,
       community_owner_id: communityId,
+      weight: data.weight || undefined,
+      dimensions: data.dimensions || undefined,
+      brand: data.brand || undefined,
+      condition_notes: data.condition_notes || undefined,
+      color: data.color || undefined,
+      material: data.material || undefined,
+      publisher: data.publisher || undefined,
+      year: data.year || undefined,
+      edition: data.edition || undefined,
+      language: data.language || undefined,
+      age_group: data.age_group || undefined,
+      player_count: data.player_count || undefined,
+      platform: data.platform || undefined,
+      format: data.format || undefined,
+      series: data.series || undefined,
+      model_number: data.model_number || undefined,
+      pieces_count: data.pieces_count || undefined,
     }
 
     const formattedWorkInfo = data.work_info?.tags
@@ -342,15 +382,38 @@ const AddItem = ({
               id="item_type"
               {...register("item_type", { required: "Item type is required" })}
               style={selectStyle}
+              onChange={(e) => {
+                if (e.target.value === "__create_new__") {
+                  // Reset selection and open modal
+                  setValue("item_type", "")
+                  setIsCreateTypeModalOpen(true)
+                } else {
+                  setValue("item_type", e.target.value, { shouldValidate: true })
+                }
+              }}
             >
               <option value="" style={{ backgroundColor: selectBg }}>
                 -- select item type --
               </option>
+              <option value="book" style={{ backgroundColor: selectBg }}>
+                Book
+              </option>
               <option value="general" style={{ backgroundColor: selectBg }}>
                 General
               </option>
-              <option value="book" style={{ backgroundColor: selectBg }}>
-                Book
+              {[...customTypeDefinitions]
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((def) => (
+                  <option
+                    key={def.slug}
+                    value={def.slug}
+                    style={{ backgroundColor: selectBg }}
+                  >
+                    {def.name}
+                  </option>
+                ))}
+              <option value="__create_new__" style={{ backgroundColor: selectBg }}>
+                + Create new type…
               </option>
             </select>
             {itemType === "book" && (
@@ -366,6 +429,14 @@ const AddItem = ({
             )}
           </HStack>
         </Field>
+
+        <CreateItemTypeModal
+          isOpen={isCreateTypeModalOpen}
+          onClose={() => setIsCreateTypeModalOpen(false)}
+          onCreated={(slug) => {
+            setValue("item_type", slug, { shouldValidate: true })
+          }}
+        />
 
         <Field
           id="title"
@@ -549,6 +620,46 @@ const AddItem = ({
             </HStack>
           </>
         )}
+
+        {/* Custom type fields */}
+        {itemType &&
+          itemType !== "book" &&
+          itemType !== "general" &&
+          itemType !== "" && (() => {
+            const def = customTypeDefinitions.find((d) => d.slug === itemType)
+            const fields = def?.enabled_fields ?? []
+            if (!def || fields.length === 0) return null
+            const labelForField = (key: string) =>
+              key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+            return (
+              <VStack align="stretch" gap={4}>
+                {fields.map((fieldKey) => {
+                  if (fieldKey === "description") return null // already rendered above
+                  if (fieldKey === "pieces_count") {
+                    return (
+                      <Field key={fieldKey} id={fieldKey} label={labelForField(fieldKey)}>
+                        <Input
+                          id={fieldKey}
+                          type="number"
+                          placeholder={labelForField(fieldKey)}
+                          {...register(fieldKey as any, { valueAsNumber: true })}
+                        />
+                      </Field>
+                    )
+                  }
+                  return (
+                    <Field key={fieldKey} id={fieldKey} label={labelForField(fieldKey)}>
+                      <Input
+                        id={fieldKey}
+                        placeholder={labelForField(fieldKey)}
+                        {...register(fieldKey as any)}
+                      />
+                    </Field>
+                  )
+                })}
+              </VStack>
+            )
+          })()}
 
         <Field id="image_file" label="Upload Image">
           <Input

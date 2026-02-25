@@ -3,6 +3,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Annotated, Any, Literal, Optional
 
+import sqlalchemy as sa
 from pydantic import BeforeValidator, EmailStr, field_validator
 from sqlalchemy import JSON, Column, DateTime, func
 from sqlalchemy.dialects.postgresql import JSONB
@@ -632,7 +633,7 @@ class ItemBase(SQLModel):
     title: str = Field(min_length=0, max_length=255)
     description: str | None = Field(default=None, max_length=10000)
     author: str | None = Field(default=None, max_length=255)
-    item_type: ItemType = Field(default=ItemType.general)
+    item_type: str = Field(default="general", max_length=100)
     image_url: str | None = Field(default=None, max_length=512)
     isbn: str | None = Field(default=None, max_length=20, index=True)
     category: str | None = Field(default=None, max_length=255)
@@ -641,6 +642,24 @@ class ItemBase(SQLModel):
     info: dict[str, Any] | None = Field(default={}, sa_column=Column(JSON)) # physical_description, grade (1-10)
     is_lost: bool = Field(default=False)
     is_private: bool = Field(default=False)
+    # Extended fields for custom item types
+    weight: str | None = Field(default=None, max_length=255)
+    dimensions: str | None = Field(default=None, max_length=255)
+    brand: str | None = Field(default=None, max_length=255)
+    condition_notes: str | None = Field(default=None, max_length=2000)
+    color: str | None = Field(default=None, max_length=255)
+    material: str | None = Field(default=None, max_length=255)
+    publisher: str | None = Field(default=None, max_length=255)
+    year: str | None = Field(default=None, max_length=255)
+    edition: str | None = Field(default=None, max_length=255)
+    language: str | None = Field(default=None, max_length=255)
+    age_group: str | None = Field(default=None, max_length=255)
+    player_count: str | None = Field(default=None, max_length=255)
+    platform: str | None = Field(default=None, max_length=255)
+    format: str | None = Field(default=None, max_length=255)
+    series: str | None = Field(default=None, max_length=255)
+    model_number: str | None = Field(default=None, max_length=255)
+    pieces_count: int | None = Field(default=None, sa_column=Column(sa.Integer, nullable=True))
 
 
 class Item(ItemBase, table=True):
@@ -841,7 +860,7 @@ class ItemUpdate(SQLModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=10000)
     author: str | None = Field(default=None, max_length=255)
-    item_type: ItemType | None = None
+    item_type: str | None = Field(default=None, max_length=100)
     image_url: str | None = None
     info: dict[str, Any] | None = None
     category: str | None = None
@@ -850,6 +869,23 @@ class ItemUpdate(SQLModel):
     isbn: str | None = None
     is_lost: bool | None = None
     is_private: bool | None = None
+    weight: str | None = None
+    dimensions: str | None = None
+    brand: str | None = None
+    condition_notes: str | None = None
+    color: str | None = None
+    material: str | None = None
+    publisher: str | None = None
+    year: str | None = None
+    edition: str | None = None
+    language: str | None = None
+    age_group: str | None = None
+    player_count: str | None = None
+    platform: str | None = None
+    format: str | None = None
+    series: str | None = None
+    model_number: str | None = None
+    pieces_count: int | None = None
 
 
 class ItemOwnerPublic(SQLModel):
@@ -922,7 +958,7 @@ class ItemMinimal(SQLModel):
     title: str
     description: str | None = None
     author: str | None = None
-    item_type: ItemType
+    item_type: str
     image_url: str | None = None
     category: str | None = None
     genre: str | None = None
@@ -1232,6 +1268,39 @@ class UserReportCardPublic(SQLModel):
     user: "UserPublic"
     reviews: list[UserReviewPublic]
     metrics: UserReputationSchema
+
+
+# Custom Item Type Definition
+
+class ItemTypeDefinition(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    name: str = Field(max_length=100)
+    slug: str = Field(max_length=100, unique=True, index=True)
+    created_by: uuid.UUID = Field(foreign_key="user.id", index=True)
+    enabled_fields: str = Field(default="[]")   # JSON array of field names
+    label_field: str = Field(default="title", max_length=50)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ItemTypeDefinitionCreate(SQLModel):
+    name: str = Field(min_length=1, max_length=100)
+    enabled_fields: list[str] = Field(default=[])
+    label_field: str = Field(default="title", max_length=50)
+
+
+class ItemTypeDefinitionPublic(SQLModel):
+    id: uuid.UUID
+    name: str
+    slug: str
+    created_by: uuid.UUID
+    enabled_fields: list[str] = []
+    label_field: str
+    created_at: datetime
+
+
+class ItemTypeDefinitionsPublic(SQLModel):
+    data: list[ItemTypeDefinitionPublic]
+    count: int
 
 
 

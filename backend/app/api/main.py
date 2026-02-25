@@ -6,6 +6,7 @@ from app.api.routes import (
     friends,
     imports,
     interests,
+    item_types,
     items,
     loans,
     login,
@@ -38,6 +39,7 @@ api_router.include_router(loans.router)
 api_router.include_router(reading_log.router)
 api_router.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
 api_router.include_router(dashboard.router)
+api_router.include_router(item_types.router, prefix="/item-types", tags=["item-types"])
 
 
 if settings.ENVIRONMENT == "local":

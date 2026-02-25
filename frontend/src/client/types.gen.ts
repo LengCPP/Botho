@@ -4,7 +4,7 @@ export type Body_items_create_item = {
     title: string;
     description?: (string | null);
     author?: (string | null);
-    item_type?: ItemType;
+    item_type?: string;
     category?: (string | null);
     genre?: (string | null);
     subject?: (string | null);
@@ -13,13 +13,30 @@ export type Body_items_create_item = {
     image?: ((Blob | File) | null);
     image_url?: (string | null);
     community_owner_id?: (string | null);
+    weight?: (string | null);
+    dimensions?: (string | null);
+    brand?: (string | null);
+    condition_notes?: (string | null);
+    color?: (string | null);
+    material?: (string | null);
+    publisher?: (string | null);
+    year?: (string | null);
+    edition?: (string | null);
+    language?: (string | null);
+    age_group?: (string | null);
+    player_count?: (string | null);
+    platform?: (string | null);
+    format?: (string | null);
+    series?: (string | null);
+    model_number?: (string | null);
+    pieces_count?: (number | null);
 };
 
 export type Body_items_update_item = {
     title?: (string | null);
     description?: (string | null);
     author?: (string | null);
-    item_type?: (ItemType | null);
+    item_type?: (string | null);
     category?: (string | null);
     genre?: (string | null);
     subject?: (string | null);
@@ -27,6 +44,23 @@ export type Body_items_update_item = {
     info?: (string | null);
     image?: ((Blob | File) | null);
     image_url?: (string | null);
+    weight?: (string | null);
+    dimensions?: (string | null);
+    brand?: (string | null);
+    condition_notes?: (string | null);
+    color?: (string | null);
+    material?: (string | null);
+    publisher?: (string | null);
+    year?: (string | null);
+    edition?: (string | null);
+    language?: (string | null);
+    age_group?: (string | null);
+    player_count?: (string | null);
+    platform?: (string | null);
+    format?: (string | null);
+    series?: (string | null);
+    model_number?: (string | null);
+    pieces_count?: (number | null);
 };
 
 export type Body_login_login_access_token = {
@@ -249,7 +283,7 @@ export type ItemMinimal = {
     title: string;
     description?: (string | null);
     author?: (string | null);
-    item_type: ItemType;
+    item_type: string;
     image_url?: (string | null);
     category?: (string | null);
     genre?: (string | null);
@@ -277,7 +311,7 @@ export type ItemPublic = {
     title: string;
     description?: (string | null);
     author?: (string | null);
-    item_type?: ItemType;
+    item_type?: string;
     image_url?: (string | null);
     isbn?: (string | null);
     category?: (string | null);
@@ -288,6 +322,23 @@ export type ItemPublic = {
 } | null);
     is_lost?: boolean;
     is_private?: boolean;
+    weight?: (string | null);
+    dimensions?: (string | null);
+    brand?: (string | null);
+    condition_notes?: (string | null);
+    color?: (string | null);
+    material?: (string | null);
+    publisher?: (string | null);
+    year?: (string | null);
+    edition?: (string | null);
+    language?: (string | null);
+    age_group?: (string | null);
+    player_count?: (string | null);
+    platform?: (string | null);
+    format?: (string | null);
+    series?: (string | null);
+    model_number?: (string | null);
+    pieces_count?: (number | null);
     id: string;
     owner_id: string;
     count: number;
@@ -352,7 +403,26 @@ export type ItemsPublic = {
 } | null);
 };
 
-export type ItemType = 'general' | 'book';
+export type ItemTypeDefinitionCreate = {
+    name: string;
+    enabled_fields?: Array<(string)>;
+    label_field?: string;
+};
+
+export type ItemTypeDefinitionPublic = {
+    id: string;
+    name: string;
+    slug: string;
+    created_by: string;
+    enabled_fields?: Array<(string)>;
+    label_field: string;
+    created_at: string;
+};
+
+export type ItemTypeDefinitionsPublic = {
+    data: Array<ItemTypeDefinitionPublic>;
+    count: number;
+};
 
 export type LoanCreate = {
     item_id: string;
@@ -597,7 +667,6 @@ export type UserReviewPublic = {
 export type UserRoleReviewed = 'BORROWER' | 'OWNER';
 
 export type UserSettingsSchema = {
-    autocomplete_enabled?: boolean;
     theme_mode?: 'light' | 'dark' | 'system';
     show_contact_details?: boolean;
     show_full_name?: boolean;
@@ -1139,7 +1208,7 @@ export type ItemsReadItemsData = {
     excludeLost?: boolean;
     excludePrivate?: boolean;
     genre?: (string | null);
-    itemType?: (ItemType | null);
+    itemType?: (string | null);
     limit?: number;
     lostOnly?: boolean;
     minimal?: boolean;
@@ -1276,6 +1345,20 @@ export type ItemsBatchSyncFromArchiveData = {
 };
 
 export type ItemsBatchSyncFromArchiveResponse = (Message);
+
+export type ItemTypesListItemTypesResponse = (ItemTypeDefinitionsPublic);
+
+export type ItemTypesCreateItemTypeData = {
+    requestBody: ItemTypeDefinitionCreate;
+};
+
+export type ItemTypesCreateItemTypeResponse = (ItemTypeDefinitionPublic);
+
+export type ItemTypesGetItemTypeData = {
+    slug: string;
+};
+
+export type ItemTypesGetItemTypeResponse = (ItemTypeDefinitionPublic);
 
 export type LoansCreateLoanRequestData = {
     requestBody: LoanCreate;

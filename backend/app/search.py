@@ -23,7 +23,11 @@ def configure_search():
         "is_available",
         "is_lost",
         "is_private",
-        "isbn"
+        "isbn",
+        "brand",
+        "year",
+        "language",
+        "platform",
     ])
     items_index.update_sortable_attributes([
         "title",
@@ -63,7 +67,24 @@ def sync_item_to_search(item: Item):
         "created_at": int(item.created_at.timestamp()) if item.created_at else None,
         "is_available": True,
         "is_lost": item.is_lost,
-        "is_private": item.is_private
+        "is_private": item.is_private,
+        "brand": item.brand,
+        "year": item.year,
+        "language": item.language,
+        "platform": item.platform,
+        "format": item.format,
+        "series": item.series,
+        "color": item.color,
+        "material": item.material,
+        "publisher": item.publisher,
+        "edition": item.edition,
+        "model_number": item.model_number,
+        "age_group": item.age_group,
+        "player_count": item.player_count,
+        "weight": item.weight,
+        "dimensions": item.dimensions,
+        "condition_notes": item.condition_notes,
+        "pieces_count": item.pieces_count,
     }
     index.add_documents([document])
 

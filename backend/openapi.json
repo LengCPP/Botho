@@ -1384,6 +1384,33 @@
         ]
       }
     },
+    "/api/v1/items/book-registry/cleanup-broken-images": {
+      "post": {
+        "tags": [
+          "items"
+        ],
+        "summary": "Cleanup Broken Images",
+        "description": "Find all WorkMetadata and Item records whose image_url points to a missing\nMinIO object and null it out so they appear in the 'Missing Image' filter.\nSuperuser only. Processes in background.",
+        "operationId": "items-cleanup_broken_images",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/items/book-registry": {
       "get": {
         "tags": [
@@ -1479,6 +1506,8 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
               "title": "Q"
             }
           },
@@ -1488,6 +1517,8 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
               "default": 5,
               "title": "Limit"
             }
@@ -1575,7 +1606,7 @@
           "items"
         ],
         "summary": "Recommend Items",
-        "description": "Get recommended books based on user interests and social graph.\nUses Meilisearch for ranking and filtering.",
+        "description": "Get recommended books based on user interests and social graph.\n\nSignal hierarchy (highest \u2192 lowest weight):\n  1. InterestSignal  \u2014 user explicitly clicked \"notify me\" on an item (weight \u00d73)\n  2. ReadingLog COMPLETED / ItemReview 5\u2605 \u2014 strong positive taste signals (weight \u00d72)\n  3. ReadingLog READING / ItemReview 4\u2605 / Loan history \u2014 moderate signals (weight \u00d71)\n  4. User interests (manual) \u2014 broad category preferences (weight \u00d71)\n  5. Community interests \u2014 cold-start fallback when user has no personal signals\n\nReadingLog DROPPED books: author excluded from results.",
         "operationId": "items-recommend_items",
         "security": [
           {
@@ -1676,7 +1707,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -1872,7 +1904,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/ItemType"
+                  "type": "string"
                 },
                 {
                   "type": "null"
@@ -1898,7 +1930,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -2789,6 +2822,53 @@
         ]
       }
     },
+    "/api/v1/items/batch/mark-found": {
+      "post": {
+        "tags": [
+          "items"
+        ],
+        "summary": "Batch Mark Found",
+        "description": "Mark multiple lost items as found (move back to catalogue).",
+        "operationId": "items-batch_mark_found",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemBatchAction"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/items/batch/toggle-privacy": {
       "post": {
         "tags": [
@@ -2842,13 +2922,60 @@
           "items"
         ],
         "summary": "Batch Enrich Metadata",
-        "description": "Enrich metadata for multiple items in the background.",
+        "description": "Enrich metadata for multiple items in the background.\nSuperuser only to prevent API abuse.",
         "operationId": "items-batch_enrich_metadata",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ItemBatchEnrich"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/items/batch/sync-archive": {
+      "post": {
+        "tags": [
+          "items"
+        ],
+        "summary": "Batch Sync From Archive",
+        "description": "Sync items with the latest data from the WorkMetadata archive in the background.",
+        "operationId": "items-batch_sync_from_archive",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemBatchAction"
               }
             }
           },
@@ -3471,6 +3598,16 @@
               "default": false,
               "title": "Member Only"
             }
+          },
+          {
+            "name": "browse",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Browse"
+            }
           }
         ],
         "responses": {
@@ -3652,7 +3789,7 @@
           "communities"
         ],
         "summary": "Delete Community",
-        "description": "Delete a community.",
+        "description": "Delete a community (superuser emergency bypass only).\nAdmins should use the disband-vote endpoint.",
         "operationId": "communities-delete_community",
         "security": [
           {
@@ -3678,6 +3815,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/communities/{id}/rules": {
+      "patch": {
+        "tags": [
+          "communities"
+        ],
+        "summary": "Update Community Rules",
+        "description": "Update a community's rules text (Admin or Moderator only).",
+        "operationId": "communities-update_community_rules",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommunityRulesUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunityPublic"
                 }
               }
             }
@@ -4081,13 +4277,357 @@
         }
       }
     },
+    "/api/v1/communities/{id}/resign": {
+      "post": {
+        "tags": [
+          "communities"
+        ],
+        "summary": "Resign From Community",
+        "description": "Resign from a staff role (ADMIN or MODERATOR) and become a regular MEMBER.",
+        "operationId": "communities-resign_from_community",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/communities/{id}/disband-vote": {
+      "get": {
+        "tags": [
+          "communities"
+        ],
+        "summary": "Get Disband Vote",
+        "description": "Get the current disband vote status (admin only).",
+        "operationId": "communities-get_disband_vote",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunityDisbandVoteStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "communities"
+        ],
+        "summary": "Cast Disband Vote",
+        "description": "Cast a vote to disband the community (admin only).\nvote=True  \u2192 add/keep YES vote\nvote=False \u2192 cancel the motion (delete all votes)",
+        "operationId": "communities-cast_disband_vote",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "vote",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "boolean",
+              "title": "Vote"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/CommunityDisbandVoteStatus"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Message"
+                    }
+                  ],
+                  "title": "Response Communities-Cast Disband Vote"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/communities/{id}/members/{user_id}/demotion-vote": {
+      "get": {
+        "tags": [
+          "communities"
+        ],
+        "summary": "Get Demotion Vote",
+        "description": "Get current demotion vote status for a target admin (admin only).",
+        "operationId": "communities-get_demotion_vote",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunityDemotionVoteStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "communities"
+        ],
+        "summary": "Cast Demotion Vote",
+        "description": "Cast a vote to demote a target admin to member.\nvote=True  \u2192 add YES vote\nvote=False \u2192 cancel the motion for this target",
+        "operationId": "communities-cast_demotion_vote",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "vote",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "boolean",
+              "title": "Vote"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/CommunityDemotionVoteStatus"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Message"
+                    }
+                  ],
+                  "title": "Response Communities-Cast Demotion Vote"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/communities/{id}/favorite": {
+      "post": {
+        "tags": [
+          "communities"
+        ],
+        "summary": "Toggle Favorite Community",
+        "description": "Toggle favorite status for a community.",
+        "operationId": "communities-toggle_favorite_community",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/communities/{id}/item-facets": {
       "get": {
         "tags": [
           "communities"
         ],
         "summary": "Read Community Item Facets",
-        "description": "Get unique values and counts for a specific facet (category, genre, author, subject)\nbelonging to a community. Uses Meilisearch for fuzzy search when q is provided.",
+        "description": "Get unique values and counts for a specific facet belonging to a community.\nUses Meilisearch for fuzzy search when q is provided.",
         "operationId": "communities-read_community_item_facets",
         "security": [
           {
@@ -4122,7 +4662,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -4305,13 +4846,47 @@
             }
           },
           {
-            "name": "q",
+            "name": "item_type",
             "in": "query",
             "required": false,
             "schema": {
               "anyOf": [
                 {
                   "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Item Type"
+            }
+          },
+          {
+            "name": "owner_filter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Owner Filter"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -4705,6 +5280,201 @@
         }
       }
     },
+    "/api/v1/communities/{id}/announcements/{announcement_id}": {
+      "patch": {
+        "tags": [
+          "communities"
+        ],
+        "summary": "Update Community Announcement",
+        "description": "Update an announcement (Admin only).",
+        "operationId": "communities-update_community_announcement",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "announcement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Announcement Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommunityAnnouncementCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunityAnnouncementPublic"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "communities"
+        ],
+        "summary": "Delete Community Announcement",
+        "description": "Delete an announcement (Admin only).",
+        "operationId": "communities-delete_community_announcement",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "announcement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Announcement Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/communities/{id}/announcements/{announcement_id}/pin": {
+      "patch": {
+        "tags": [
+          "communities"
+        ],
+        "summary": "Pin Community Announcement",
+        "description": "Pin or unpin an announcement (Admin only).",
+        "operationId": "communities-pin_community_announcement",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "announcement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Announcement Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommunityPinUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunityAnnouncementPublic"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/communities/{id}/messages": {
       "get": {
         "tags": [
@@ -4940,6 +5710,144 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/communities/{id}/messages/{message_id}/pin": {
+      "patch": {
+        "tags": [
+          "communities"
+        ],
+        "summary": "Pin Community Message",
+        "description": "Pin or unpin a board message (Admin only).",
+        "operationId": "communities-pin_community_message",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Message Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommunityPinUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunityMessagePublic"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/communities/{id}/log": {
+      "get": {
+        "tags": [
+          "communities"
+        ],
+        "summary": "Read Community Log",
+        "description": "Get the community event log (accepted members only).",
+        "operationId": "communities-read_community_log",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunityLogPublic"
                 }
               }
             }
@@ -5418,6 +6326,8 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
               "title": "Q"
             }
           },
@@ -5427,6 +6337,8 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
               "default": 10,
               "title": "Limit"
             }
@@ -5492,7 +6404,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -6775,6 +7688,129 @@
         }
       }
     },
+    "/api/v1/loans/items/{item_id}/interest": {
+      "post": {
+        "tags": [
+          "loans"
+        ],
+        "summary": "Signal Item Interest",
+        "description": "Signal interest in borrowing an item that is currently on loan.",
+        "operationId": "loans-signal_item_interest",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "loans"
+        ],
+        "summary": "Cancel Item Interest",
+        "description": "Remove an interest signal.",
+        "operationId": "loans-cancel_item_interest",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/loans/my-interest-signals": {
+      "get": {
+        "tags": [
+          "loans"
+        ],
+        "summary": "Get My Interest Signals",
+        "description": "Get all interest signals for the current user.",
+        "operationId": "loans-get_my_interest_signals",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Loans-Get My Interest Signals"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/reading-log/": {
       "get": {
         "tags": [
@@ -7336,6 +8372,116 @@
         }
       }
     },
+    "/api/v1/item-types/": {
+      "get": {
+        "tags": [
+          "item-types"
+        ],
+        "summary": "List Item Types",
+        "description": "List all custom item type definitions. No auth required.",
+        "operationId": "item-types-list_item_types",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemTypeDefinitionsPublic"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "item-types"
+        ],
+        "summary": "Create Item Type",
+        "description": "Create a new custom item type. Auth required.",
+        "operationId": "item-types-create_item_type",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemTypeDefinitionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemTypeDefinitionPublic"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/item-types/{slug}": {
+      "get": {
+        "tags": [
+          "item-types"
+        ],
+        "summary": "Get Item Type",
+        "description": "Get a single item type definition by slug.",
+        "operationId": "item-types-get_item_type",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemTypeDefinitionPublic"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/private/users/": {
       "post": {
         "tags": [
@@ -7410,7 +8556,8 @@
             "title": "Author"
           },
           "item_type": {
-            "$ref": "#/components/schemas/ItemType",
+            "type": "string",
+            "title": "Item Type",
             "default": "general"
           },
           "category": {
@@ -7457,17 +8604,6 @@
             ],
             "title": "Isbn"
           },
-          "extra_data": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Extra Data"
-          },
           "info": {
             "anyOf": [
               {
@@ -7513,6 +8649,193 @@
               }
             ],
             "title": "Community Owner Id"
+          },
+          "weight": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight"
+          },
+          "dimensions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimensions"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "condition_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Condition Notes"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "material": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "edition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edition"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "age_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Group"
+          },
+          "player_count": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Player Count"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "series": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series"
+          },
+          "model_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Number"
+          },
+          "pieces_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pieces Count"
           }
         },
         "type": "object",
@@ -7559,12 +8882,13 @@
           "item_type": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ItemType"
+                "type": "string"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Item Type"
           },
           "category": {
             "anyOf": [
@@ -7610,17 +8934,6 @@
             ],
             "title": "Isbn"
           },
-          "extra_data": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Extra Data"
-          },
           "info": {
             "anyOf": [
               {
@@ -7654,6 +8967,193 @@
               }
             ],
             "title": "Image Url"
+          },
+          "weight": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight"
+          },
+          "dimensions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimensions"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "condition_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Condition Notes"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "material": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "edition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edition"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "age_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Group"
+          },
+          "player_count": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Player Count"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "series": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series"
+          },
+          "model_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Number"
+          },
+          "pieces_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pieces Count"
           }
         },
         "type": "object",
@@ -7857,10 +9357,20 @@
             "format": "uuid",
             "title": "Author Id"
           },
+          "is_pinned": {
+            "type": "boolean",
+            "title": "Is Pinned",
+            "default": false
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
           },
           "author": {
             "$ref": "#/components/schemas/UserPublic"
@@ -7874,6 +9384,7 @@
           "community_id",
           "author_id",
           "created_at",
+          "updated_at",
           "author"
         ],
         "title": "CommunityAnnouncementPublic"
@@ -7936,6 +9447,70 @@
         ],
         "title": "CommunityCreate"
       },
+      "CommunityDemotionVoteStatus": {
+        "properties": {
+          "target_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Target User Id"
+          },
+          "yes_votes": {
+            "type": "integer",
+            "title": "Yes Votes"
+          },
+          "needed": {
+            "type": "integer",
+            "title": "Needed"
+          },
+          "voted_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Voted Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_user_id",
+          "yes_votes",
+          "needed",
+          "voted_ids"
+        ],
+        "title": "CommunityDemotionVoteStatus"
+      },
+      "CommunityDisbandVoteStatus": {
+        "properties": {
+          "voted_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Voted Ids"
+          },
+          "pending_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Pending Ids"
+          },
+          "total_admins": {
+            "type": "integer",
+            "title": "Total Admins"
+          }
+        },
+        "type": "object",
+        "required": [
+          "voted_ids",
+          "pending_ids",
+          "total_admins"
+        ],
+        "title": "CommunityDisbandVoteStatus"
+      },
       "CommunityInvitationCreate": {
         "properties": {
           "friend_id": {
@@ -7949,6 +9524,88 @@
           "friend_id"
         ],
         "title": "CommunityInvitationCreate"
+      },
+      "CommunityLogEntry": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type"
+          },
+          "actor_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Name"
+          },
+          "target_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Name"
+          },
+          "extra": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_type",
+          "actor_name",
+          "target_name",
+          "extra",
+          "created_at"
+        ],
+        "title": "CommunityLogEntry"
+      },
+      "CommunityLogPublic": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/CommunityLogEntry"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "count"
+        ],
+        "title": "CommunityLogPublic"
       },
       "CommunityMemberRole": {
         "type": "string",
@@ -8004,6 +9661,30 @@
               }
             ],
             "title": "Notifications Enabled"
+          },
+          "suspension_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suspension Until"
+          },
+          "action_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Reason"
           }
         },
         "type": "object",
@@ -8047,10 +9728,20 @@
             "format": "uuid",
             "title": "Author Id"
           },
+          "is_pinned": {
+            "type": "boolean",
+            "title": "Is Pinned",
+            "default": false
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
           },
           "author": {
             "$ref": "#/components/schemas/UserPublic"
@@ -8063,6 +9754,7 @@
           "community_id",
           "author_id",
           "created_at",
+          "updated_at",
           "author"
         ],
         "title": "CommunityMessagePublic"
@@ -8087,6 +9779,19 @@
           "count"
         ],
         "title": "CommunityMessagesPublic"
+      },
+      "CommunityPinUpdate": {
+        "properties": {
+          "is_pinned": {
+            "type": "boolean",
+            "title": "Is Pinned"
+          }
+        },
+        "type": "object",
+        "required": [
+          "is_pinned"
+        ],
+        "title": "CommunityPinUpdate"
       },
       "CommunityPublic": {
         "properties": {
@@ -8127,6 +9832,17 @@
             "type": "string",
             "format": "uuid",
             "title": "Created By"
+          },
+          "rules": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rules"
           },
           "current_user_role": {
             "anyOf": [
@@ -8170,6 +9886,11 @@
               }
             ],
             "title": "Collection Index"
+          },
+          "is_favorited": {
+            "type": "boolean",
+            "title": "Is Favorited",
+            "default": false
           }
         },
         "type": "object",
@@ -8179,6 +9900,24 @@
           "created_by"
         ],
         "title": "CommunityPublic"
+      },
+      "CommunityRulesUpdate": {
+        "properties": {
+          "rules": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 5000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rules"
+          }
+        },
+        "type": "object",
+        "title": "CommunityRulesUpdate"
       },
       "CommunityUpdate": {
         "properties": {
@@ -8228,6 +9967,18 @@
               }
             ],
             "title": "Is Private"
+          },
+          "rules": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 5000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rules"
           }
         },
         "type": "object",
@@ -8346,6 +10097,42 @@
         ],
         "title": "InterestPublic"
       },
+      "InterestSignalPublic": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "item_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Item Id"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserPublic"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "item_id",
+          "user_id",
+          "created_at",
+          "user"
+        ],
+        "title": "InterestSignalPublic"
+      },
       "ItemBatchAction": {
         "properties": {
           "item_ids": {
@@ -8354,6 +10141,8 @@
               "format": "uuid"
             },
             "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
             "title": "Item Ids"
           }
         },
@@ -8371,6 +10160,8 @@
               "format": "uuid"
             },
             "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
             "title": "Item Ids"
           },
           "fields_to_overwrite": {
@@ -8520,7 +10311,8 @@
             "title": "Author"
           },
           "item_type": {
-            "$ref": "#/components/schemas/ItemType"
+            "type": "string",
+            "title": "Item Type"
           },
           "image_url": {
             "anyOf": [
@@ -8702,7 +10494,9 @@
             "title": "Author"
           },
           "item_type": {
-            "$ref": "#/components/schemas/ItemType",
+            "type": "string",
+            "maxLength": 100,
+            "title": "Item Type",
             "default": "general"
           },
           "image_url": {
@@ -8765,19 +10559,6 @@
             ],
             "title": "Subject"
           },
-          "extra_data": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Extra Data",
-            "default": {}
-          },
           "info": {
             "anyOf": [
               {
@@ -8800,6 +10581,209 @@
             "type": "boolean",
             "title": "Is Private",
             "default": false
+          },
+          "weight": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight"
+          },
+          "dimensions": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimensions"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "condition_notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Condition Notes"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "material": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "edition": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edition"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "age_group": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Group"
+          },
+          "player_count": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Player Count"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "series": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series"
+          },
+          "model_number": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Number"
+          },
+          "pieces_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pieces Count"
           },
           "id": {
             "type": "string",
@@ -9029,13 +11013,104 @@
         ],
         "title": "ItemReviewsPublic"
       },
-      "ItemType": {
-        "type": "string",
-        "enum": [
-          "general",
-          "book"
+      "ItemTypeDefinitionCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "enabled_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Enabled Fields",
+            "default": []
+          },
+          "label_field": {
+            "type": "string",
+            "maxLength": 50,
+            "title": "Label Field",
+            "default": "title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
         ],
-        "title": "ItemType"
+        "title": "ItemTypeDefinitionCreate"
+      },
+      "ItemTypeDefinitionPublic": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Created By"
+          },
+          "enabled_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Enabled Fields",
+            "default": []
+          },
+          "label_field": {
+            "type": "string",
+            "title": "Label Field"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "created_by",
+          "label_field",
+          "created_at"
+        ],
+        "title": "ItemTypeDefinitionPublic"
+      },
+      "ItemTypeDefinitionsPublic": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ItemTypeDefinitionPublic"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "count"
+        ],
+        "title": "ItemTypeDefinitionsPublic"
       },
       "ItemsMinimalPublic": {
         "properties": {
@@ -9299,6 +11374,14 @@
             "type": "boolean",
             "title": "Other Admins Exist",
             "default": false
+          },
+          "interest_signals": {
+            "items": {
+              "$ref": "#/components/schemas/InterestSignalPublic"
+            },
+            "type": "array",
+            "title": "Interest Signals",
+            "default": []
           }
         },
         "type": "object",
@@ -9330,7 +11413,8 @@
           "EXTENSION_PENDING",
           "RETURN_PENDING",
           "RETURNED",
-          "DEFAULTED"
+          "DEFAULTED",
+          "BACKLOGGED"
         ],
         "title": "LoanStatus"
       },
@@ -9445,7 +11529,8 @@
           "INFO",
           "SUCCESS",
           "WARNING",
-          "ERROR"
+          "ERROR",
+          "ITEM_AVAILABLE"
         ],
         "title": "NotificationType"
       },
@@ -10247,6 +12332,16 @@
           "review_count": {
             "type": "integer",
             "title": "Review Count"
+          },
+          "returned_count": {
+            "type": "integer",
+            "title": "Returned Count",
+            "default": 0
+          },
+          "total_borrows": {
+            "type": "integer",
+            "title": "Total Borrows",
+            "default": 0
           }
         },
         "type": "object",
@@ -10439,13 +12534,13 @@
       },
       "UserSettingsSchema": {
         "properties": {
-          "autocomplete_enabled": {
-            "type": "boolean",
-            "title": "Autocomplete Enabled",
-            "default": true
-          },
           "theme_mode": {
             "type": "string",
+            "enum": [
+              "light",
+              "dark",
+              "system"
+            ],
             "title": "Theme Mode",
             "default": "system"
           },

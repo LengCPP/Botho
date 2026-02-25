@@ -98,8 +98,26 @@ export const ItemDetailModal = ({
     []
 
   const details = [
-    { label: "ISBN", value: item.isbn || workMeta?.isbn },
+    { label: "ISBN", value: (item as any).isbn || workMeta?.isbn },
+    { label: "Brand", value: (item as any).brand },
+    { label: "Publisher", value: (item as any).publisher },
+    { label: "Year", value: (item as any).year },
+    { label: "Edition", value: (item as any).edition },
+    { label: "Series", value: (item as any).series },
+    { label: "Format", value: (item as any).format },
+    { label: "Language", value: (item as any).language },
+    { label: "Platform", value: (item as any).platform },
+    { label: "Color", value: (item as any).color },
+    { label: "Material", value: (item as any).material },
+    { label: "Weight", value: (item as any).weight },
+    { label: "Dimensions", value: (item as any).dimensions },
+    { label: "Age Group", value: (item as any).age_group },
+    { label: "Player Count", value: (item as any).player_count },
+    { label: "Pieces", value: (item as any).pieces_count?.toString() },
+    { label: "Model #", value: (item as any).model_number },
   ].filter((d) => d.value)
+
+  const conditionNotes = (item as any).condition_notes
 
   return (
     <DialogRoot
@@ -118,7 +136,7 @@ export const ItemDetailModal = ({
           <VStack align="start" gap={4} width="full">
             <HStack gap={2} wrap="wrap">
               <Badge colorPalette="teal" variant="solid">
-                {String(item.item_type || "General")}
+                {String(item.item_type || "general").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
               </Badge>
               {item.category && (
                 <Badge variant="outline" colorPalette="main">
@@ -240,6 +258,17 @@ export const ItemDetailModal = ({
                     </Box>
                   )}
                 </VStack>
+              </Box>
+            )}
+
+            {conditionNotes && (
+              <Box width="full">
+                <Text fontSize="xs" fontWeight="bold" color="fg.subtle" textTransform="uppercase" mb={1}>
+                  Condition Notes
+                </Text>
+                <Text fontSize="sm" whiteSpace="pre-wrap" color="fg.muted">
+                  {conditionNotes}
+                </Text>
               </Box>
             )}
 

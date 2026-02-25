@@ -65,6 +65,7 @@ from app.models import (
     ItemsMinimalPublic,
     ItemsPublic,
     ItemType,
+    ItemTypeDefinition,
     Loan,
     LoanStatus,
     Message,
@@ -227,7 +228,7 @@ async def sync_items_to_registry(
 
         with Session(engine) as bg_session:
             items = bg_session.exec(
-                select(Item).where(Item.item_type == ItemType.book)
+                select(Item).where(Item.item_type == "book")
             ).all()
             for item in items:
                 # Use existing helper to populate registry
@@ -908,7 +909,7 @@ def read_items(
     genre: str | None = None,
     subject: str | None = None,
     author: str | None = None,
-    item_type: ItemType | None = None,
+    item_type: str | None = None,
     enable_feed: bool = False,
     q: str | None = Query(default=None, max_length=200),
     minimal: Annotated[bool, Query()] = False,
@@ -1011,7 +1012,7 @@ def read_items(
             if author:
                 filters.append(f'author = "{author}"')
             if item_type:
-                filters.append(f'item_type = "{item_type.value}"')
+                filters.append(f'item_type = "{item_type}"')
 
             if lost_only:
                 filters.append("is_lost = true")
@@ -1654,7 +1655,7 @@ async def create_item(
     title: Annotated[str, Form()],
     description: Annotated[str | None, Form()] = None,
     author: Annotated[str | None, Form()] = None,
-    item_type: Annotated[ItemType, Form()] = ItemType.general,
+    item_type: Annotated[str, Form()] = "general",
     category: Annotated[str | None, Form()] = None,
     genre: Annotated[str | None, Form()] = None,
     subject: Annotated[str | None, Form()] = None,
@@ -1663,6 +1664,23 @@ async def create_item(
     image: Annotated[UploadFile | None, File()] = None,
     image_url: Annotated[str | None, Form()] = None,
     community_owner_id: Annotated[uuid.UUID | None, Form()] = None,
+    weight: Annotated[str | None, Form()] = None,
+    dimensions: Annotated[str | None, Form()] = None,
+    brand: Annotated[str | None, Form()] = None,
+    condition_notes: Annotated[str | None, Form()] = None,
+    color: Annotated[str | None, Form()] = None,
+    material: Annotated[str | None, Form()] = None,
+    publisher: Annotated[str | None, Form()] = None,
+    year: Annotated[str | None, Form()] = None,
+    edition: Annotated[str | None, Form()] = None,
+    language: Annotated[str | None, Form()] = None,
+    age_group: Annotated[str | None, Form()] = None,
+    player_count: Annotated[str | None, Form()] = None,
+    platform: Annotated[str | None, Form()] = None,
+    format: Annotated[str | None, Form()] = None,
+    series: Annotated[str | None, Form()] = None,
+    model_number: Annotated[str | None, Form()] = None,
+    pieces_count: Annotated[int | None, Form()] = None,
 ) -> Any:
     """
     Create a new item. Associates with current user or community as owner.
@@ -1674,6 +1692,14 @@ async def create_item(
                 parsed_info = json.loads(info)
             except json.JSONDecodeError:
                 raise HTTPException(status_code=400, detail="Invalid JSON in info")
+
+        # Validate custom item type
+        if item_type not in ("book", "general"):
+            type_def = session.exec(
+                select(ItemTypeDefinition).where(ItemTypeDefinition.slug == item_type)
+            ).first()
+            if not type_def:
+                raise HTTPException(status_code=404, detail=f"Item type '{item_type}' not found")
 
         # Handle image upload
         final_image_url = image_url
@@ -1731,7 +1757,7 @@ async def create_item(
         final_genre = genre
         final_subject = subject
 
-        if item_type == ItemType.book:
+        if item_type == "book":
             c, g, s = map_book_classification(genre or category or subject)
             final_category = c or category
             final_genre = g or genre
@@ -1756,6 +1782,23 @@ async def create_item(
             info=parsed_info,
             image_url=final_image_url,
             owner_id=target_owner_id,
+            weight=weight,
+            dimensions=dimensions,
+            brand=brand,
+            condition_notes=condition_notes,
+            color=color,
+            material=material,
+            publisher=publisher,
+            year=year,
+            edition=edition,
+            language=language,
+            age_group=age_group,
+            player_count=player_count,
+            platform=platform,
+            format=format,
+            series=series,
+            model_number=model_number,
+            pieces_count=pieces_count,
         )
         session.add(db_item)
         session.flush()
@@ -1845,7 +1888,7 @@ async def update_item(
     title: Annotated[str | None, Form()] = None,
     description: Annotated[str | None, Form()] = None,
     author: Annotated[str | None, Form()] = None,
-    item_type: Annotated[ItemType | None, Form()] = None,
+    item_type: Annotated[str | None, Form()] = None,
     category: Annotated[str | None, Form()] = None,
     genre: Annotated[str | None, Form()] = None,
     subject: Annotated[str | None, Form()] = None,
@@ -1853,6 +1896,23 @@ async def update_item(
     info: Annotated[str | None, Form()] = None,
     image: Annotated[UploadFile | None, File()] = None,
     image_url: Annotated[str | None, Form()] = None,
+    weight: Annotated[str | None, Form()] = None,
+    dimensions: Annotated[str | None, Form()] = None,
+    brand: Annotated[str | None, Form()] = None,
+    condition_notes: Annotated[str | None, Form()] = None,
+    color: Annotated[str | None, Form()] = None,
+    material: Annotated[str | None, Form()] = None,
+    publisher: Annotated[str | None, Form()] = None,
+    year: Annotated[str | None, Form()] = None,
+    edition: Annotated[str | None, Form()] = None,
+    language: Annotated[str | None, Form()] = None,
+    age_group: Annotated[str | None, Form()] = None,
+    player_count: Annotated[str | None, Form()] = None,
+    platform: Annotated[str | None, Form()] = None,
+    format: Annotated[str | None, Form()] = None,
+    series: Annotated[str | None, Form()] = None,
+    model_number: Annotated[str | None, Form()] = None,
+    pieces_count: Annotated[int | None, Form()] = None,
 ) -> Any:
     """
     Update an item.
@@ -1888,6 +1948,12 @@ async def update_item(
         if author is not None:
             db_item.author = author
         if item_type is not None:
+            if item_type not in ("book", "general"):
+                type_def = session.exec(
+                    select(ItemTypeDefinition).where(ItemTypeDefinition.slug == item_type)
+                ).first()
+                if not type_def:
+                    raise HTTPException(status_code=404, detail=f"Item type '{item_type}' not found")
             db_item.item_type = item_type
 
         # Classification updates
@@ -1922,6 +1988,42 @@ async def update_item(
                 db_item.info = json.loads(info)
             except json.JSONDecodeError:
                 raise HTTPException(status_code=400, detail="Invalid JSON in info")
+
+        # Extended fields
+        if weight is not None:
+            db_item.weight = weight
+        if dimensions is not None:
+            db_item.dimensions = dimensions
+        if brand is not None:
+            db_item.brand = brand
+        if condition_notes is not None:
+            db_item.condition_notes = condition_notes
+        if color is not None:
+            db_item.color = color
+        if material is not None:
+            db_item.material = material
+        if publisher is not None:
+            db_item.publisher = publisher
+        if year is not None:
+            db_item.year = year
+        if edition is not None:
+            db_item.edition = edition
+        if language is not None:
+            db_item.language = language
+        if age_group is not None:
+            db_item.age_group = age_group
+        if player_count is not None:
+            db_item.player_count = player_count
+        if platform is not None:
+            db_item.platform = platform
+        if format is not None:
+            db_item.format = format
+        if series is not None:
+            db_item.series = series
+        if model_number is not None:
+            db_item.model_number = model_number
+        if pieces_count is not None:
+            db_item.pieces_count = pieces_count
 
         if image:
             try:
@@ -2617,7 +2719,7 @@ def batch_enrich_metadata(
     for item in items:
         if (
             _is_owner_or_admin(item, current_user, session)
-            and item.item_type == ItemType.book
+            and item.item_type == "book"
         ):
             books_to_enrich.append(
                 {"author": item.author, "title": item.title, "isbn": item.isbn}
@@ -2655,7 +2757,7 @@ def batch_sync_from_archive(
     valid_ids = [
         item.id
         for item in items
-        if _is_owner_or_admin(item, current_user, session) and item.item_type == ItemType.book
+        if _is_owner_or_admin(item, current_user, session) and item.item_type == "book"
     ]
 
     if not valid_ids:
