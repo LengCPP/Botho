@@ -131,12 +131,6 @@ async def create_review(
     if not loan:
         raise HTTPException(status_code=404, detail="Loan not found")
 
-    if loan.status != LoanStatus.RETURNED:
-        raise HTTPException(
-            status_code=400,
-            detail="Reviews can only be submitted for returned items"
-        )
-
     # Determine role being reviewed
     reviewee_id = None
     role_reviewed = None
@@ -183,6 +177,19 @@ async def create_review(
         raise HTTPException(
             status_code=403,
             detail="You were not a participant in this loan"
+        )
+
+    # Borrowers can review as soon as they've signalled the return; owners must
+    # wait for confirmed receipt so they can properly assess item condition.
+    if role_reviewed == UserRoleReviewed.OWNER:
+        allowed = {LoanStatus.RETURN_PENDING, LoanStatus.RETURNED}
+    else:
+        allowed = {LoanStatus.RETURNED}
+
+    if loan.status not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail="Reviews can only be submitted for returned items"
         )
 
     # Check if review already exists from this user for this loan

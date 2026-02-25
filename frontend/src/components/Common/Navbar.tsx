@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router"
 
 import Logo from "/assets/images/botho-logo.png"
 import { ColorModeButton } from "../ui/color-mode"
+import HelpModal from "./HelpModal"
 import NotificationsMenu from "./NotificationsMenu"
 import UserMenu from "./UserMenu"
 
@@ -28,9 +29,10 @@ function Navbar() {
           </Link>
         </HStack>
 
-        {/* Right Side: Theme Toggle, Notifications, User Avatar */}
+        {/* Right Side: Theme Toggle, Help, Notifications, User Avatar */}
         <HStack gap={2} display="flex" flexShrink={0}>
           <ColorModeButton />
+          <HelpModal />
           <Box display={{ base: "none", md: "block" }}>
             <NotificationsMenu />
           </Box>

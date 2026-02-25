@@ -171,7 +171,6 @@ class CommunityFavorite(SQLModel, table=True):
 
 # Support Models
 class UserSettingsSchema(SQLModel):
-    autocomplete_enabled: bool = Field(default=True)
     theme_mode: Literal["light", "dark", "system"] = "system"
     show_contact_details: bool = Field(default=False)
     show_full_name: bool = Field(default=False)

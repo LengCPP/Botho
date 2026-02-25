@@ -62,11 +62,7 @@ function Login() {
   useEffect(() => {
     if (token) {
       localStorage.setItem("access_token", token)
-      if (new_user === "true") {
-        navigate({ to: "/settings", search: { tab: "password" } })
-      } else {
-        navigate({ to: "/" })
-      }
+      navigate({ to: "/" })
     }
   }, [token, new_user, navigate])
 

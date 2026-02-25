@@ -51,12 +51,6 @@ const UserPreferences = () => {
     mutation.mutate({ theme_mode: value })
   }
 
-  const handleAutocompleteChange = (details: {
-    checked: boolean | "indeterminate"
-  }) => {
-    mutation.mutate({ autocomplete_enabled: !!details.checked })
-  }
-
   const handlePrivacyChange = (details: {
     checked: boolean | "indeterminate"
   }) => {
@@ -134,15 +128,6 @@ const UserPreferences = () => {
           </Checkbox>
         </VStack>
 
-        <VStack align="start" gap={2}>
-          <Heading size="xs">General</Heading>
-          <Checkbox
-            checked={currentUser?.settings?.autocomplete_enabled ?? true}
-            onCheckedChange={handleAutocompleteChange}
-          >
-            Enable Autocomplete
-          </Checkbox>
-        </VStack>
       </VStack>
     </Box>
   )

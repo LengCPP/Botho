@@ -65,8 +65,6 @@ function Layout() {
   return (
     <Flex direction="column" minH="100dvh">
       <Navbar />
-      <LoanReminderBanner />
-      <ItemAvailableBanner />
 
       {/* Mobile Burger Menu Trigger */}
       <Box
@@ -127,9 +125,18 @@ function Layout() {
 
       <Flex flex="1">
         <Sidebar />
-        <Box flex="1" p={4} ml={{ base: 0, md: "280px" }}>
-          <Outlet />
-        </Box>
+        <Flex
+          flex="1"
+          direction="column"
+          ml={{ base: 0, md: "280px" }}
+          minW={0}
+        >
+          <LoanReminderBanner />
+          <ItemAvailableBanner />
+          <Box flex="1" p={4}>
+            <Outlet />
+          </Box>
+        </Flex>
       </Flex>
     </Flex>
   )
