@@ -306,7 +306,7 @@ function HelpModal() {
               and coordinate loans directly through the app — no spreadsheets,
               no forgotten due dates, no guessing who has your copy of{" "}
               <Text as="span" fontStyle="italic">
-                Americanah
+                Nineteen Eighty-Four
               </Text>
               .
             </Text>
