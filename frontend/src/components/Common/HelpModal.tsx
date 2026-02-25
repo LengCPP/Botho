@@ -58,7 +58,15 @@ const sections = [
     content: [
       {
         heading: "Adding an Item",
-        text: "Click 'Add Item'. For books, use the integrated search to auto-fill metadata (title, author, cover) from Google Books. For other resources (tools, games, etc.), fill in details manually and upload an image.",
+        text: "Click 'Add Item' and choose a type from the dropdown. Books use the integrated search to auto-fill metadata (title, author, cover) from Google Books. All other types show only the fields that apply to that type — no irrelevant fields cluttering the form.",
+      },
+      {
+        heading: "Item Types",
+        text: "Books and General items are built in. For everything else — tools, board games, clothing, equipment — you can create a custom type. Select '+ Create new type…' in the Add Item dropdown, give it a name, pick which fields apply (brand, weight, dimensions, platform, age group, etc.), and choose the primary label field. Once created, any member of the platform can use that type.",
+      },
+      {
+        heading: "Type Tabs",
+        text: "If you have items of more than one type, tabs appear at the top of your Items page — one tab per type. Clicking a tab filters the view to that type only. The Collections view (subject/genre groupings) is only available under the Books tab, since that grouping is specific to books.",
       },
       {
         heading: "Bulk Import",
@@ -74,7 +82,7 @@ const sections = [
       },
       {
         heading: "Collections View",
-        text: "Switch to Collections view to see items grouped by Subject, Genre, or Author. Click a collection to drill into those items.",
+        text: "Available for books only. Switch to Collections view to see your books grouped by Subject, Genre, or Author. Click a collection to drill into those books.",
       },
     ],
   },
@@ -299,12 +307,14 @@ function HelpModal() {
             </HStack>
             <Text fontSize="sm" color="fg.muted" lineHeight="tall">
               Botho is a community based borrowing and lending platform — a place
-              where people share what they own with the people they trust. It is
-              built primarily for books, though you can list just about anything:
-              tools, games, equipment, whatever your circle is willing to share.
-              You add items to your library, connect with friends and communities,
-              and coordinate loans directly through the app — no spreadsheets,
-              no forgotten due dates, no guessing who has your copy of{" "}
+              where people share what they own with the people they trust. Books
+              are well supported, but you can catalogue anything: tools, board
+              games, equipment, clothing, whatever your circle is willing to
+              share. Custom item types let you define exactly which fields matter
+              for each kind of thing. You add items to your library, connect with
+              friends and communities, and coordinate loans directly through the
+              app — no spreadsheets, no forgotten due dates, no guessing who has
+              your copy of{" "}
               <Text as="span" fontStyle="italic">
                 Nineteen Eighty-Four
               </Text>
