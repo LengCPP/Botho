@@ -76,6 +76,7 @@ interface ItemsBrowserProps {
   organizeOptions?: string[]
   leftSlot?: React.ReactNode
   emptyMessage?: string
+  showDisplayToggle?: boolean
 }
 
 export function ItemsBrowser({
@@ -124,6 +125,7 @@ export function ItemsBrowser({
   organizeOptions = ["subject", "genre", "category", "author"],
   leftSlot,
   emptyMessage = "No items found.",
+  showDisplayToggle = true,
 }: ItemsBrowserProps) {
   const headingColor = useColorModeValue("main.600", "main.300")
 
@@ -195,7 +197,7 @@ export function ItemsBrowser({
           organizeBy={isItemsMode ? undefined : organizeBy}
           onChangeOrganizeBy={isItemsMode ? undefined : onChangeOrganizeBy}
           filterLabel={isItemsMode ? "Filter" : "Group By"}
-          showDisplayToggle
+          showDisplayToggle={showDisplayToggle}
           showFilter
           showSort
           showLimit

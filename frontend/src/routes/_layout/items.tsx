@@ -249,6 +249,10 @@ function ItemsTable() {
     ? (typeBreakdown[item_type]?.count ?? totalItemCount)
     : totalCount
 
+  // Collections view (facet grouping) only makes sense for books
+  const isBookView = !item_type || item_type === "book"
+  const effectiveDisplayType = isBookView ? display_type : "items"
+
   // Auto-select the first type tab when none is selected and tabs are shown
   useEffect(() => {
     if (showTypeTabs && !item_type && availableTypes.length > 0) {
@@ -323,6 +327,7 @@ function ItemsTable() {
               category: undefined,
               genre: undefined,
               author: undefined,
+              ...(value && value !== "book" ? { display_type: "items" } : {}),
             })
           }
           variant="line"
@@ -341,7 +346,7 @@ function ItemsTable() {
       )}
 
       <ItemsBrowser
-        displayType={display_type}
+        displayType={effectiveDisplayType}
         viewMode={view_mode}
         organizeBy={organize_by}
         sortBy={sort_by}
@@ -402,6 +407,7 @@ function ItemsTable() {
             item_type: undefined,
           })
         }
+        showDisplayToggle={isBookView}
         onFetchNextItems={fetchNextPage}
         onFetchNextFacets={fetchNextFacets}
         onShowDetails={setSelectedItem}
