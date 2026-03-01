@@ -1,6 +1,6 @@
 import type { ItemPublic } from "@/client"
 import useAuth from "@/hooks/useAuth"
-import { getImageUrl } from "@/utils"
+import { formatTypeName, getImageUrl } from "@/utils"
 import { Badge, Box, Flex, HStack, Image, Text, VStack } from "@chakra-ui/react"
 import { Link } from "@tanstack/react-router"
 import { useState } from "react"
@@ -137,7 +137,7 @@ export const ItemListItem = ({ item: itemProp }: ItemListItemProps) => {
               variant="subtle"
               colorPalette={isBook ? "blue" : "gray"}
             >
-              {item.item_type || "General"}
+              {formatTypeName(item.item_type)}
             </Badge>
           </HStack>
 

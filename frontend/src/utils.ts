@@ -74,6 +74,11 @@ export const formatPublicId = (publicId: string | undefined): string => {
   return publicId.toUpperCase()
 }
 
+export const formatTypeName = (slug: string | null | undefined): string => {
+  if (!slug) return "General"
+  return slug.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
 /**
  * Get the full URL for an image.
  * If it's a relative path (starting with /api), prepend OpenAPI.BASE.

@@ -10,7 +10,7 @@ import { ItemActionsMenu } from "@/components/Common/ItemActionsMenu"
 import { useColorModeValue } from "@/components/ui/color-mode"
 import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
-import { getImageUrl } from "@/utils"
+import { formatTypeName, getImageUrl } from "@/utils"
 import {
   Badge,
   Box,
@@ -613,18 +613,18 @@ const ItemCard = ({
               display="flex"
               flexDirection="column"
             >
-              <Flex justify="space-between" align="start" mb={2}>
+              <Flex align="start" mb={2} wrap="wrap" gap={1}>
                 {showAdditionalInfo ? (
                   <Badge colorPalette="purple" variant="solid" size="sm">
                     Copy Info
                   </Badge>
                 ) : (
                   <Badge colorPalette="teal" variant="solid" size="sm">
-                    {String(item.item_type || "General")}
+                    {formatTypeName(item.item_type)}
                   </Badge>
                 )}
 
-                <HStack gap={1} onClick={(e) => e.stopPropagation()}>
+                <HStack gap={1} ml="auto" onClick={(e) => e.stopPropagation()}>
                   {!showAdditionalInfo && onShowDetails && (
                     <IconButton
                       aria-label="Full Details"

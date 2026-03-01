@@ -22,6 +22,7 @@ import ItemCard from "@/components/Items/ItemCard"
 import { ItemsViewOptions } from "@/components/Items/ItemsViewOptions"
 import PendingItems from "@/components/Pending/PendingItems"
 import { useColorModeValue } from "@/components/ui/color-mode"
+import { formatTypeName } from "@/utils"
 
 interface ItemsBrowserProps {
   // URL/view state
@@ -148,9 +149,6 @@ export function ItemsBrowser({
       return a.localeCompare(b)
     })
   const showTypeTabs = availableTypes.length > 1
-
-  const formatTypeName = (slug: string) =>
-    slug.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
 
   // Collections view only makes sense for books
   const isBookView = !itemType || itemType === "book"

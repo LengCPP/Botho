@@ -13,6 +13,7 @@ import { useQuery } from "@tanstack/react-query"
 import { FaStar } from "react-icons/fa"
 
 import { type ItemPublic, ItemsService } from "@/client"
+import { formatTypeName } from "@/utils"
 import {
   DialogBody,
   DialogCloseTrigger,
@@ -136,7 +137,7 @@ export const ItemDetailModal = ({
           <VStack align="start" gap={4} width="full">
             <HStack gap={2} wrap="wrap">
               <Badge colorPalette="teal" variant="solid">
-                {String(item.item_type || "general").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                {formatTypeName(item.item_type)}
               </Badge>
               {item.category && (
                 <Badge variant="outline" colorPalette="main">
