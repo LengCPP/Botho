@@ -780,15 +780,26 @@ def read_item_facets(
         if total == 0:
             return {"data": [], "count": 0}
 
+    # When viewing another user's items, exclude private/lost items
+    is_viewing_others = target_owner_id != current_user.id and not current_user.is_superuser
+
+    def visibility_filter(stmt):
+        if is_viewing_others:
+            return stmt.where(Item.is_private == False).where(Item.is_lost == False)
+        return stmt
+
     # Search filtering logic
     search_item_ids = None
     if q:
         from app.search import client as meili_client
         try:
             index = meili_client.index("items")
+            meili_filter = f'owner_id = "{target_owner_id}" OR pooled_in = "{target_owner_id}"'
+            if is_viewing_others:
+                meili_filter = f'({meili_filter}) AND is_private = false AND is_lost = false'
             search_params = {
-                "filter": f'owner_id = "{target_owner_id}" OR pooled_in = "{target_owner_id}"',
-                "limit": 1000, 
+                "filter": meili_filter,
+                "limit": 1000,
                 "attributesToRetrieve": ["id"]
             }
             search_results = index.search(q, search_params)
@@ -828,6 +839,7 @@ def read_item_facets(
         core_stmt = select(
             Item.author, Item.item_type, func.count(Item.id).label("count"), func.array_agg(Item.image_url).label("imgs")
         ).where(Item.owner_id == target_owner_id)
+        core_stmt = visibility_filter(core_stmt)
         core_stmt = build_search_condition(core_stmt)
         group_stmt = core_stmt.group_by(Item.author, Item.item_type)
         total_count = session.exec(select(func.count()).select_from(group_stmt.subquery())).one()
@@ -841,6 +853,7 @@ def read_item_facets(
         core_stmt = select(
             Item.category.label("name"), Item.item_type, func.count(Item.id).label("count"), func.array_agg(Item.image_url).label("imgs")
         ).where(Item.owner_id == target_owner_id)
+        core_stmt = visibility_filter(core_stmt)
         core_stmt = build_search_condition(core_stmt)
         group_stmt = core_stmt.group_by("name", Item.item_type)
         total_count = session.exec(select(func.count()).select_from(group_stmt.subquery())).one()
@@ -854,6 +867,7 @@ def read_item_facets(
         core_stmt = select(
             Item.genre.label("name"), Item.item_type, func.count(Item.id).label("count"), func.array_agg(Item.image_url).label("imgs")
         ).where(Item.owner_id == target_owner_id)
+        core_stmt = visibility_filter(core_stmt)
         core_stmt = build_search_condition(core_stmt)
         group_stmt = core_stmt.group_by("name", Item.item_type)
         total_count = session.exec(select(func.count()).select_from(group_stmt.subquery())).one()
@@ -869,12 +883,14 @@ def read_item_facets(
         tags_core = select(
             tag_expr.label("name"), Item.item_type, func.count(Item.id).label("count"), func.array_agg(Item.image_url).label("imgs")
         ).where(Item.owner_id == target_owner_id).where(Item.subject.is_not(None)).where(Item.subject != "")
+        tags_core = visibility_filter(tags_core)
         tags_core = build_search_condition(tags_core)
         tags_group = tags_core.group_by("name", Item.item_type)
 
         others_core = select(
             cast("Others", String).label("name"), Item.item_type, func.count(Item.id).label("count"), func.array_agg(Item.image_url).label("imgs")
         ).where(Item.owner_id == target_owner_id).where(or_(Item.subject.is_(None), Item.subject == ""))
+        others_core = visibility_filter(others_core)
         others_core = build_search_condition(others_core)
         others_group = others_core.group_by(Item.item_type)
 
@@ -973,6 +989,11 @@ def read_items(
         feed_mode = True
     else:
         target_owner_id = current_user.id
+
+    # When viewing another user's items, never expose private or lost items
+    if target_owner_id and target_owner_id != current_user.id and not current_user.is_superuser:
+        exclude_private = True
+        exclude_lost = True
 
     if feed_mode:
         from sqlalchemy import union as sql_union
