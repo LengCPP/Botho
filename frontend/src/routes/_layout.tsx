@@ -1,13 +1,11 @@
-import { Box, Flex, IconButton, Text } from "@chakra-ui/react"
+import { Box, Flex, IconButton } from "@chakra-ui/react"
 import {
   Outlet,
-  Link as RouterLink,
   createFileRoute,
   redirect,
 } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import { FaBars } from "react-icons/fa"
-import { FiSettings } from "react-icons/fi"
 
 import { ItemAvailableBanner } from "@/components/Common/ItemAvailableBanner"
 import { LoanReminderBanner } from "@/components/Common/LoanReminderBanner"
@@ -95,29 +93,7 @@ function Layout() {
           <DrawerContent maxW="280px" h="full">
             <DrawerCloseTrigger />
             <DrawerBody pt={12}>
-              <Flex flexDir="column" h="full" justify="space-between">
-                <Box>
-                  <SidebarItems onClose={() => setOpen(false)} />
-                </Box>
-                <Box mb={4}>
-                  <RouterLink to="/settings" onClick={() => setOpen(false)}>
-                    <Flex
-                      alignItems="center"
-                      gap={4}
-                      px={4}
-                      py={2}
-                      _hover={{
-                        background: "gray.subtle",
-                      }}
-                      w="full"
-                      fontSize="sm"
-                    >
-                      <FiSettings />
-                      <Text>Settings</Text>
-                    </Flex>
-                  </RouterLink>
-                </Box>
-              </Flex>
+              <SidebarItems onClose={() => setOpen(false)} />
             </DrawerBody>
           </DrawerContent>
         </DrawerRoot>
