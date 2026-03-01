@@ -1246,8 +1246,6 @@ class UserReview(SQLModel, table=True):
     comment: str | None = Field(default=None, max_length=2000)
     condition_grade: int | None = Field(default=None, ge=1, le=10)
     condition_notes: str | None = Field(default=None, max_length=1000)
-    is_disputed: bool = Field(default=False)
-    dispute_reason: str | None = Field(default=None, max_length=1000)
     role_reviewed: UserRoleReviewed
     created_at: datetime | None = Field(
         default=None,
@@ -1269,10 +1267,6 @@ class UserReviewCreate(SQLModel):
     comment: str | None = Field(default=None, max_length=2000)
     condition_grade: int | None = Field(default=None, ge=1, le=10)
     condition_notes: str | None = Field(default=None, max_length=1000)
-
-
-class UserReviewDisputeCreate(SQLModel):
-    reason: str = Field(min_length=10, max_length=1000)
 
 
 class UserReviewPublic(SQLModel):

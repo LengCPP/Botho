@@ -118,7 +118,6 @@ Every user has a reputation profile that reflects their track record as a borrow
 - **Reliability Rate**: A percentage reflecting how often loans are returned on time and in good condition.
 - **Delinquency Flag**: Users who consistently default on loans may be flagged as delinquent, which is visible to community admins.
 - **Reviews**: After a loan is completed, both parties can leave a review. Reviews contribute directly to each other's honor score.
-- **Disputes**: If you believe a review is unfair, you can raise a dispute. Resolved disputes can be forgiven with a reason.
 
 ---
 

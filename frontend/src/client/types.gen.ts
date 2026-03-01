@@ -670,10 +670,6 @@ export type UserReviewCreate = {
     condition_notes?: (string | null);
 };
 
-export type UserReviewDisputeCreate = {
-    reason: string;
-};
-
 export type UserReviewPublic = {
     id: string;
     reviewer_id: string;
@@ -1636,20 +1632,6 @@ export type ReviewsReadMyReviewsData = {
 };
 
 export type ReviewsReadMyReviewsResponse = (Array<UserReviewPublic>);
-
-export type ReviewsDisputeReviewData = {
-    requestBody: UserReviewDisputeCreate;
-    reviewId: string;
-};
-
-export type ReviewsDisputeReviewResponse = (UserReviewPublic);
-
-export type ReviewsResolveDisputeData = {
-    action: string;
-    reviewId: string;
-};
-
-export type ReviewsResolveDisputeResponse = (Message);
 
 export type ReviewsCreateReviewData = {
     requestBody: UserReviewCreate;

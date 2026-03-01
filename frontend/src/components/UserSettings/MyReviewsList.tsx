@@ -1,8 +1,6 @@
 import { useColorModeValue } from "@/components/ui/color-mode"
 import {
-  Badge,
   Box,
-  Button,
   Flex,
   HStack,
   Heading,
@@ -10,14 +8,11 @@ import {
   Spinner,
   Text,
   VStack,
-  useDisclosure,
 } from "@chakra-ui/react"
 import { useQuery } from "@tanstack/react-query"
 import { format } from "date-fns"
-import { useState } from "react"
-import { FiAlertTriangle, FiStar } from "react-icons/fi"
-import { ReviewsService, type UserReviewPublic } from "../../client"
-import DisputeModal from "../Common/DisputeModal"
+import { FiStar } from "react-icons/fi"
+import { ReviewsService } from "../../client"
 
 const MyReviewsList = () => {
   const { data: reviews, isLoading } = useQuery({
@@ -25,17 +20,7 @@ const MyReviewsList = () => {
     queryFn: () => ReviewsService.readMyReviews(),
   })
 
-  const [selectedReview, setSelectedReview] = useState<UserReviewPublic | null>(
-    null,
-  )
-  const { open, onOpen, onClose } = useDisclosure()
-
   const borderColor = useColorModeValue("gray.200", "gray.700")
-
-  const handleDispute = (review: UserReviewPublic) => {
-    setSelectedReview(review)
-    onOpen()
-  }
 
   if (isLoading) {
     return (
@@ -86,20 +71,6 @@ const MyReviewsList = () => {
                     {format(new Date(review.created_at), "MMM d, yyyy")}
                   </Text>
                 </HStack>
-                {(review as any).is_disputed ? (
-                  <Badge colorPalette="orange" variant="solid">
-                    Disputed
-                  </Badge>
-                ) : (
-                  <Button
-                    size="xs"
-                    variant="ghost"
-                    colorPalette="red"
-                    onClick={() => handleDispute(review)}
-                  >
-                    Dispute
-                  </Button>
-                )}
               </HStack>
 
               <HStack gap={1}>
@@ -148,41 +119,10 @@ const MyReviewsList = () => {
                   )}
                 </Box>
               )}
-
-              {(review as any).is_disputed && (
-                <HStack
-                  gap={2}
-                  bg="orange.50"
-                  _dark={{ bg: "orange.900/20" }}
-                  p={2}
-                  borderRadius="md"
-                  width="full"
-                >
-                  <Icon as={FiAlertTriangle} color="orange.500" />
-                  <Text
-                    fontSize="xs"
-                    color="orange.700"
-                    _dark={{ color: "orange.200" }}
-                  >
-                    This review is under moderation.
-                  </Text>
-                </HStack>
-              )}
             </VStack>
           </Box>
         ))}
       </VStack>
-
-      {selectedReview && (
-        <DisputeModal
-          review={selectedReview}
-          isOpen={open}
-          onClose={() => {
-            onClose()
-            setSelectedReview(null)
-          }}
-        />
-      )}
     </VStack>
   )
 }

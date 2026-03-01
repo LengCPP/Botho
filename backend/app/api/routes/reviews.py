@@ -13,11 +13,9 @@ from app.models import (
     Item,
     Loan,
     LoanStatus,
-    Message,
     User,
     UserReview,
     UserReviewCreate,
-    UserReviewDisputeCreate,
     UserReviewPublic,
     UserRoleReviewed,
 )
@@ -50,71 +48,6 @@ def read_my_reviews(
         public_reviews.append(r_public)
 
     return public_reviews
-
-
-@router.post("/{review_id}/dispute", response_model=UserReviewPublic)
-def dispute_review(
-    *,
-    session: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user),
-    review_id: uuid.UUID,
-    dispute_in: UserReviewDisputeCreate,
-) -> Any:
-    """
-    Dispute a review.
-    """
-    review = session.get(UserReview, review_id)
-    if not review:
-        raise HTTPException(status_code=404, detail="Review not found")
-
-    if review.reviewee_id != current_user.id:
-        raise HTTPException(status_code=403, detail="You can only dispute reviews about yourself")
-
-    if review.is_disputed:
-        raise HTTPException(status_code=400, detail="Review is already disputed")
-
-    review.is_disputed = True
-    review.dispute_reason = dispute_in.reason
-    session.add(review)
-    session.commit()
-    session.refresh(review)
-    return review
-
-
-@router.post("/{review_id}/resolve", dependencies=[Depends(deps.get_current_active_superuser)], response_model=Message)
-async def resolve_dispute(
-    *,
-    session: Session = Depends(deps.get_db),
-    review_id: uuid.UUID,
-    action: str, # "delete" or "dismiss"
-) -> Any:
-    """
-    Resolve a review dispute (Admin only).
-    Action can be 'delete' (removes review) or 'dismiss' (keeps review, clears dispute).
-    """
-    review = session.get(UserReview, review_id)
-    if not review:
-        raise HTTPException(status_code=404, detail="Review not found")
-
-    if not review.is_disputed:
-        raise HTTPException(status_code=400, detail="Review is not disputed")
-
-    if action == "delete":
-        reviewee_id = review.reviewee_id
-        session.delete(review)
-        session.commit()
-        # Re-calculate metrics
-        await update_user_metrics(user_id=reviewee_id, session=session)
-        return Message(message="Review deleted successfully")
-    elif action == "dismiss":
-        review.is_disputed = False
-        # review.dispute_reason = None # Optionally keep the reason for history? Clearing it for now to reset state.
-        session.add(review)
-        session.commit()
-        session.refresh(review)
-        return Message(message="Dispute dismissed, review retained")
-    else:
-        raise HTTPException(status_code=400, detail="Invalid action. Use 'delete' or 'dismiss'")
 
 
 @router.post("/", response_model=UserReviewPublic)
