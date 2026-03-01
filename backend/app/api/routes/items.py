@@ -781,8 +781,10 @@ def read_item_facets(
         if total == 0:
             return {"data": [], "count": 0}
 
-    # When viewing another user's items, exclude private/lost items
-    is_viewing_others = target_owner_id != current_user.id and not current_user.is_superuser
+    # When viewing another user's items, exclude private/lost items.
+    # Superusers bypass friendship checks but still see only public items on
+    # another user's profile — private/lost items are that user's own business.
+    is_viewing_others = target_owner_id != current_user.id
 
     def visibility_filter(stmt):
         if is_viewing_others:
@@ -1003,8 +1005,9 @@ def read_items(
     else:
         target_owner_id = current_user.id
 
-    # When viewing another user's items, never expose private or lost items
-    if target_owner_id and target_owner_id != current_user.id and not current_user.is_superuser:
+    # When viewing another user's items, never expose private or lost items.
+    # Superusers bypass friendship checks but still see only public items here.
+    if target_owner_id and target_owner_id != current_user.id:
         exclude_private = True
         exclude_lost = True
 
