@@ -41,7 +41,7 @@ import {
   FaSpinner,
   FaTrash,
 } from "react-icons/fa"
-import * as XLSX from "xlsx"
+import readXlsxFile from "read-excel-file/browser"
 
 const STAGING_CHUNK_SIZE = 500
 
@@ -430,13 +430,14 @@ export const ImportItems = ({
     if (file.name.endsWith(".csv"))
       Papa.parse(file, { header: true, skipEmptyLines: true, complete })
     else {
-      const reader = new FileReader()
-      reader.onload = (evt) => {
-        const wb = XLSX.read(evt.target?.result, { type: "binary" })
-        const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]])
+      readXlsxFile(file).then((rows) => {
+        if (rows.length < 2) { complete({ data: [] }); return }
+        const headers = rows[0].map(String)
+        const data = rows.slice(1).map((row) =>
+          Object.fromEntries(headers.map((h, i) => [h, row[i] ?? ""]))
+        )
         complete({ data })
-      }
-      reader.readAsBinaryString(file)
+      })
     }
   }
 
