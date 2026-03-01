@@ -722,6 +722,7 @@ def read_item_facets(
     group_by: str = "category",
     owner_id: uuid.UUID | None = None,
     q: str | None = Query(default=None, max_length=200),
+    item_type: str | None = None,
     skip: int = 0,
     limit: int = 20,
 ) -> Any:
@@ -788,6 +789,11 @@ def read_item_facets(
             return stmt.where(Item.is_private == False).where(Item.is_lost == False)
         return stmt
 
+    def item_type_filter(stmt):
+        if item_type:
+            return stmt.where(Item.item_type == item_type)
+        return stmt
+
     # Search filtering logic
     search_item_ids = None
     if q:
@@ -797,6 +803,8 @@ def read_item_facets(
             meili_filter = f'owner_id = "{target_owner_id}" OR pooled_in = "{target_owner_id}"'
             if is_viewing_others:
                 meili_filter = f'({meili_filter}) AND is_private = false AND is_lost = false'
+            if item_type:
+                meili_filter = f'({meili_filter}) AND item_type = "{item_type}"'
             search_params = {
                 "filter": meili_filter,
                 "limit": 1000,
@@ -840,6 +848,7 @@ def read_item_facets(
             Item.author, Item.item_type, func.count(Item.id).label("count"), func.array_agg(Item.image_url).label("imgs")
         ).where(Item.owner_id == target_owner_id)
         core_stmt = visibility_filter(core_stmt)
+        core_stmt = item_type_filter(core_stmt)
         core_stmt = build_search_condition(core_stmt)
         group_stmt = core_stmt.group_by(Item.author, Item.item_type)
         total_count = session.exec(select(func.count()).select_from(group_stmt.subquery())).one()
@@ -854,6 +863,7 @@ def read_item_facets(
             Item.category.label("name"), Item.item_type, func.count(Item.id).label("count"), func.array_agg(Item.image_url).label("imgs")
         ).where(Item.owner_id == target_owner_id)
         core_stmt = visibility_filter(core_stmt)
+        core_stmt = item_type_filter(core_stmt)
         core_stmt = build_search_condition(core_stmt)
         group_stmt = core_stmt.group_by("name", Item.item_type)
         total_count = session.exec(select(func.count()).select_from(group_stmt.subquery())).one()
@@ -868,6 +878,7 @@ def read_item_facets(
             Item.genre.label("name"), Item.item_type, func.count(Item.id).label("count"), func.array_agg(Item.image_url).label("imgs")
         ).where(Item.owner_id == target_owner_id)
         core_stmt = visibility_filter(core_stmt)
+        core_stmt = item_type_filter(core_stmt)
         core_stmt = build_search_condition(core_stmt)
         group_stmt = core_stmt.group_by("name", Item.item_type)
         total_count = session.exec(select(func.count()).select_from(group_stmt.subquery())).one()
@@ -884,6 +895,7 @@ def read_item_facets(
             tag_expr.label("name"), Item.item_type, func.count(Item.id).label("count"), func.array_agg(Item.image_url).label("imgs")
         ).where(Item.owner_id == target_owner_id).where(Item.subject.is_not(None)).where(Item.subject != "")
         tags_core = visibility_filter(tags_core)
+        tags_core = item_type_filter(tags_core)
         tags_core = build_search_condition(tags_core)
         tags_group = tags_core.group_by("name", Item.item_type)
 
@@ -891,6 +903,7 @@ def read_item_facets(
             cast("Others", String).label("name"), Item.item_type, func.count(Item.id).label("count"), func.array_agg(Item.image_url).label("imgs")
         ).where(Item.owner_id == target_owner_id).where(or_(Item.subject.is_(None), Item.subject == ""))
         others_core = visibility_filter(others_core)
+        others_core = item_type_filter(others_core)
         others_core = build_search_condition(others_core)
         others_group = others_core.group_by(Item.item_type)
 

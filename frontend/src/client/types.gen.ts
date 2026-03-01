@@ -1241,6 +1241,7 @@ export type ItemsRecommendItemsResponse = (ItemsPublic);
 
 export type ItemsReadItemFacetsData = {
     groupBy?: string;
+    itemType?: (string | null);
     limit?: number;
     ownerId?: (string | null);
     q?: (string | null);

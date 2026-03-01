@@ -162,12 +162,13 @@ function ItemsTable() {
     isFetchingNextPage: isFetchingNextFacets,
     isLoading: isLoadingFacets,
   } = useInfiniteQuery({
-    queryKey: ["itemFacetsInfinite", user?.id, organize_by, q],
+    queryKey: ["itemFacetsInfinite", user?.id, organize_by, q, item_type],
     queryFn: ({ pageParam = 0 }) =>
       ItemsService.readItemFacets({
         ownerId: user?.id,
         groupBy: organize_by,
         q: q,
+        itemType: item_type,
         skip: pageParam as number,
         limit: COLLECTIONS_LIMIT,
       }),

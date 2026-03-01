@@ -221,12 +221,13 @@ function UserProfilePage() {
     hasNextPage: hasNextFacets,
     isFetchingNextPage: isFetchingNextFacets,
   } = useInfiniteQuery({
-    queryKey: ["itemFacetsInfinite", userId, organize_by, q],
+    queryKey: ["itemFacetsInfinite", userId, organize_by, q, item_type],
     queryFn: ({ pageParam = 0 }) =>
       ItemsService.readItemFacets({
         ownerId: userId,
         groupBy: organize_by,
         q,
+        itemType: item_type,
         skip: pageParam as number,
         limit: COLLECTIONS_LIMIT,
       }),

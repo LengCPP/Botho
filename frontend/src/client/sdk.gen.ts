@@ -1682,6 +1682,7 @@ export class ItemsService {
      * @param data.groupBy
      * @param data.ownerId
      * @param data.q
+     * @param data.itemType
      * @param data.skip
      * @param data.limit
      * @returns unknown Successful Response
@@ -1695,6 +1696,7 @@ export class ItemsService {
                 group_by: data.groupBy,
                 owner_id: data.ownerId,
                 q: data.q,
+                item_type: data.itemType,
                 skip: data.skip,
                 limit: data.limit
             },
