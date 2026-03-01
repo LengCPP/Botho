@@ -1376,6 +1376,27 @@ def read_items(
             select(func.count()).select_from(statement.subquery())
         ).one()
 
+        # Compute item_type facets for the SQL path so friend-profile type tabs
+        # reflect the live, visibility-filtered state instead of the stale collection_index.
+        if minimal and target_owner_id:
+            type_facet_stmt = (
+                select(Item.item_type, func.count(Item.id).label("c"))
+                .where(Item.owner_id == target_owner_id)
+            )
+            if exclude_private:
+                type_facet_stmt = type_facet_stmt.where(Item.is_private == False)
+            if exclude_lost:
+                type_facet_stmt = type_facet_stmt.where(Item.is_lost == False)
+            type_facet_rows = session.exec(
+                type_facet_stmt.group_by(Item.item_type)
+            ).all()
+            facets = {
+                "item_type": {
+                    str(t): {"name": str(t), "count": c}
+                    for t, c in type_facet_rows
+                }
+            }
+
         sort_column = Item.created_at
         if sort_by == "title":
             sort_column = Item.title

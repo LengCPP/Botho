@@ -370,7 +370,9 @@ function UserProfilePage() {
           subject={subject}
           author={author}
           itemType={item_type}
-          typeBreakdown={(user?.collection_index as any)?.item_type ?? {}}
+          typeBreakdown={
+            (infiniteItems?.pages[0] as any)?.facets?.item_type ?? {}
+          }
           onChangeItemType={(type) =>
             updateSearch({
               item_type: type,
@@ -383,7 +385,7 @@ function UserProfilePage() {
           }
           items={groupItems(allItems as any)}
           facets={allFacets}
-          totalItemCount={user?.collection_index?.total ?? totalItemCount}
+          totalItemCount={totalItemCount}
           totalFacetCount={totalFacetCount}
           isLoading={
             (isLoadingItems && !allItems.length) ||
