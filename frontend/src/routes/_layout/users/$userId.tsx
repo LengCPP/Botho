@@ -370,6 +370,17 @@ function UserProfilePage() {
           subject={subject}
           author={author}
           itemType={item_type}
+          typeBreakdown={(user?.collection_index as any)?.item_type ?? {}}
+          onChangeItemType={(type) =>
+            updateSearch({
+              item_type: type,
+              subject: undefined,
+              category: undefined,
+              genre: undefined,
+              author: undefined,
+              ...(type && type !== "book" ? { display_type: "items" } : {}),
+            })
+          }
           items={groupItems(allItems as any)}
           facets={allFacets}
           totalItemCount={user?.collection_index?.total ?? totalItemCount}

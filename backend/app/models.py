@@ -1273,9 +1273,13 @@ class UserReportCardPublic(SQLModel):
 # Custom Item Type Definition
 
 class ItemTypeDefinition(SQLModel, table=True):
+    __table_args__ = (
+        sa.UniqueConstraint("slug", "created_by", name="uq_itemtypedefinition_slug_user"),
+    )
+
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     name: str = Field(max_length=100)
-    slug: str = Field(max_length=100, unique=True, index=True)
+    slug: str = Field(max_length=100, index=True)
     created_by: uuid.UUID = Field(foreign_key="user.id", index=True)
     enabled_fields: str = Field(default="[]")   # JSON array of field names
     label_field: str = Field(default="title", max_length=50)

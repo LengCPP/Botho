@@ -36,9 +36,11 @@ def _to_public(definition: ItemTypeDefinition) -> ItemTypeDefinitionPublic:
 
 
 @router.get("/", response_model=ItemTypeDefinitionsPublic)
-def list_item_types(session: SessionDep) -> Any:
-    """List all custom item type definitions. No auth required."""
-    definitions = session.exec(select(ItemTypeDefinition)).all()
+def list_item_types(session: SessionDep, current_user: CurrentUser) -> Any:
+    """List the current user's custom item type definitions."""
+    definitions = session.exec(
+        select(ItemTypeDefinition).where(ItemTypeDefinition.created_by == current_user.id)
+    ).all()
     return ItemTypeDefinitionsPublic(
         data=[_to_public(d) for d in definitions],
         count=len(definitions),
@@ -52,21 +54,24 @@ def create_item_type(
     current_user: CurrentUser,
     body: ItemTypeDefinitionCreate,
 ) -> Any:
-    """Create a new custom item type. Auth required."""
+    """Create a new custom item type for the current user."""
     slug = body.name.lower().strip().replace(" ", "_")
 
     # Reject reserved slugs
     if slug in ("book", "general"):
         raise HTTPException(status_code=400, detail=f"'{slug}' is a reserved item type")
 
-    # Reject duplicate slug
+    # Reject duplicate slug for this user
     existing = session.exec(
-        select(ItemTypeDefinition).where(ItemTypeDefinition.slug == slug)
+        select(ItemTypeDefinition).where(
+            ItemTypeDefinition.slug == slug,
+            ItemTypeDefinition.created_by == current_user.id,
+        )
     ).first()
     if existing:
         raise HTTPException(
             status_code=400,
-            detail=f"Item type '{slug}' already exists",
+            detail=f"You already have an item type named '{slug}'",
         )
 
     definition = ItemTypeDefinition(
@@ -83,10 +88,13 @@ def create_item_type(
 
 
 @router.get("/{slug}", response_model=ItemTypeDefinitionPublic)
-def get_item_type(*, session: SessionDep, slug: str) -> Any:
-    """Get a single item type definition by slug."""
+def get_item_type(*, session: SessionDep, current_user: CurrentUser, slug: str) -> Any:
+    """Get one of the current user's item type definitions by slug."""
     definition = session.exec(
-        select(ItemTypeDefinition).where(ItemTypeDefinition.slug == slug)
+        select(ItemTypeDefinition).where(
+            ItemTypeDefinition.slug == slug,
+            ItemTypeDefinition.created_by == current_user.id,
+        )
     ).first()
     if not definition:
         raise HTTPException(status_code=404, detail="Item type not found")

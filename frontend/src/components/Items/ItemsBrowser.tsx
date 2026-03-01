@@ -1,14 +1,16 @@
 import {
+  Badge,
   Box,
   Button,
   Flex,
   HStack,
   Heading,
   SimpleGrid,
+  Tabs,
   Text,
   VStack,
 } from "@chakra-ui/react"
-import React from "react"
+import React, { useEffect } from "react"
 import { FaChevronLeft } from "react-icons/fa"
 
 import {
@@ -72,6 +74,10 @@ interface ItemsBrowserProps {
   onLoanRequest: (item: any) => void
   onExtensionRequest: (loan: any) => void
 
+  // Type tabs
+  typeBreakdown?: Record<string, { count: number; name: string }>
+  onChangeItemType?: (type: string | undefined) => void
+
   // Customisation
   organizeOptions?: string[]
   leftSlot?: React.ReactNode
@@ -122,6 +128,8 @@ export function ItemsBrowser({
   onReview,
   onLoanRequest,
   onExtensionRequest,
+  typeBreakdown = {},
+  onChangeItemType,
   organizeOptions = ["subject", "genre", "category", "author"],
   leftSlot,
   emptyMessage = "No items found.",
@@ -129,14 +137,46 @@ export function ItemsBrowser({
 }: ItemsBrowserProps) {
   const headingColor = useColorModeValue("main.600", "main.300")
 
+  // Type tabs logic
+  const availableTypes = Object.entries(typeBreakdown)
+    .filter(([, v]) => v.count > 0)
+    .sort(([a], [b]) => {
+      if (a === "book") return -1
+      if (b === "book") return 1
+      if (a === "general") return -1
+      if (b === "general") return 1
+      return a.localeCompare(b)
+    })
+  const showTypeTabs = availableTypes.length > 1
+
+  const formatTypeName = (slug: string) =>
+    slug.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+
+  // Collections view only makes sense for books
+  const isBookView = !itemType || itemType === "book"
+  const effectiveDisplayType = isBookView ? displayType : "items"
+  const effectiveShowDisplayToggle = showTypeTabs ? isBookView : showDisplayToggle
+
+  // Auto-select the first tab when none is selected and tabs are available
+  useEffect(() => {
+    if (showTypeTabs && !itemType && availableTypes.length > 0 && onChangeItemType) {
+      onChangeItemType(availableTypes[0][0])
+    }
+  }, [showTypeTabs, itemType, availableTypes.length])
+
   const isDrillDown =
-    displayType === "collections"
+    effectiveDisplayType === "collections"
       ? !!(subject || author || genre || category || ownerFilter)
       : !!(subject || author)
 
-  const isItemsMode = displayType === "items" || isDrillDown
+  const isItemsMode = effectiveDisplayType === "items" || isDrillDown
 
-  const itemTypeLabel = itemType === "book" ? "Books" : "Items"
+  const itemTypeLabel =
+    itemType === "book"
+      ? "Books"
+      : itemType && itemType !== "general"
+        ? formatTypeName(itemType)
+        : "Items"
   const currentFilterValue = subject || author || genre || category || ""
 
   const getDrilldownHeading = () => {
@@ -153,7 +193,7 @@ export function ItemsBrowser({
   }
 
   const computedHeading =
-    displayType === "collections"
+    effectiveDisplayType === "collections"
       ? isDrillDown
         ? getDrilldownHeading()
         : "Collections"
@@ -163,6 +203,26 @@ export function ItemsBrowser({
 
   return (
     <Box>
+      {showTypeTabs && onChangeItemType && (
+        <Tabs.Root
+          value={itemType ?? ""}
+          onValueChange={({ value }) => onChangeItemType(value || undefined)}
+          variant="line"
+          mb={4}
+        >
+          <Tabs.List>
+            {availableTypes.map(([slug, { count }]) => (
+              <Tabs.Trigger key={slug} value={slug}>
+                {formatTypeName(slug)}
+                <Badge ml={2} variant="subtle" colorPalette="gray" size="sm">
+                  {count}
+                </Badge>
+              </Tabs.Trigger>
+            ))}
+          </Tabs.List>
+        </Tabs.Root>
+      )}
+
       <Flex
         justify="space-between"
         align="center"
@@ -182,7 +242,7 @@ export function ItemsBrowser({
           onChangeQ={onChangeQ}
           viewMode={viewMode}
           onChangeViewMode={onChangeViewMode}
-          displayType={displayType}
+          displayType={effectiveDisplayType}
           onChangeDisplayType={onChangeDisplayType}
           sortBy={sortBy}
           onChangeSortBy={onChangeSortBy}
@@ -197,7 +257,7 @@ export function ItemsBrowser({
           organizeBy={isItemsMode ? undefined : organizeBy}
           onChangeOrganizeBy={isItemsMode ? undefined : onChangeOrganizeBy}
           filterLabel={isItemsMode ? "Filter" : "Group By"}
-          showDisplayToggle={showDisplayToggle}
+          showDisplayToggle={effectiveShowDisplayToggle}
           showFilter
           showSort
           showLimit

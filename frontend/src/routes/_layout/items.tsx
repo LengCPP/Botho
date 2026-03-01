@@ -5,7 +5,6 @@ import {
   EmptyState,
   HStack,
   Heading,
-  Tabs,
   VStack,
 } from "@chakra-ui/react"
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query"
@@ -226,39 +225,8 @@ function ItemsTable() {
   const totalItemCount = (infiniteData?.pages[0] as any)?.count || 0
   const totalCount = (user?.collection_index as any)?.total ?? 0
 
-  // Derive per-type counts from collection_index (already maintained server-side)
   const typeBreakdown: Record<string, { count: number; name: string }> =
     (user?.collection_index as any)?.item_type ?? {}
-
-  const availableTypes = Object.entries(typeBreakdown)
-    .filter(([, v]) => v.count > 0)
-    .sort(([a], [b]) => {
-      if (a === "book") return -1
-      if (b === "book") return 1
-      if (a === "general") return -1
-      if (b === "general") return 1
-      return a.localeCompare(b)
-    })
-
-  const showTypeTabs = availableTypes.length > 1
-
-  const formatTypeName = (slug: string) =>
-    slug.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
-
-  const activeTypeCount = item_type
-    ? (typeBreakdown[item_type]?.count ?? totalItemCount)
-    : totalCount
-
-  // Collections view (facet grouping) only makes sense for books
-  const isBookView = !item_type || item_type === "book"
-  const effectiveDisplayType = isBookView ? display_type : "items"
-
-  // Auto-select the first type tab when none is selected and tabs are shown
-  useEffect(() => {
-    if (showTypeTabs && !item_type && availableTypes.length > 0) {
-      updateSearch({ item_type: availableTypes[0][0] })
-    }
-  }, [showTypeTabs, item_type, availableTypes.length])
 
   if (tab === "manage") {
     return (
@@ -317,36 +285,8 @@ function ItemsTable() {
         </Badge>
       </HStack>
 
-      {showTypeTabs && (
-        <Tabs.Root
-          value={item_type ?? ""}
-          onValueChange={({ value }) =>
-            updateSearch({
-              item_type: value || undefined,
-              subject: undefined,
-              category: undefined,
-              genre: undefined,
-              author: undefined,
-              ...(value && value !== "book" ? { display_type: "items" } : {}),
-            })
-          }
-          variant="line"
-        >
-          <Tabs.List>
-            {availableTypes.map(([slug, { count }]) => (
-              <Tabs.Trigger key={slug} value={slug}>
-                {formatTypeName(slug)}
-                <Badge ml={2} variant="subtle" colorPalette="gray" size="sm">
-                  {count}
-                </Badge>
-              </Tabs.Trigger>
-            ))}
-          </Tabs.List>
-        </Tabs.Root>
-      )}
-
       <ItemsBrowser
-        displayType={effectiveDisplayType}
+        displayType={display_type}
         viewMode={view_mode}
         organizeBy={organize_by}
         sortBy={sort_by}
@@ -358,9 +298,20 @@ function ItemsTable() {
         subject={subject}
         author={author}
         itemType={item_type}
+        typeBreakdown={typeBreakdown}
+        onChangeItemType={(type) =>
+          updateSearch({
+            item_type: type,
+            subject: undefined,
+            category: undefined,
+            genre: undefined,
+            author: undefined,
+            ...(type && type !== "book" ? { display_type: "items" } : {}),
+          })
+        }
         items={groupItems(allItems as any)}
         facets={allFacets}
-        totalItemCount={activeTypeCount}
+        totalItemCount={totalItemCount}
         totalFacetCount={totalFacetCount}
         isLoading={
           (isLoadingInfinite && !allItems.length) ||
@@ -407,7 +358,6 @@ function ItemsTable() {
             item_type: undefined,
           })
         }
-        showDisplayToggle={isBookView}
         onFetchNextItems={fetchNextPage}
         onFetchNextFacets={fetchNextFacets}
         onShowDetails={setSelectedItem}
