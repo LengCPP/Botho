@@ -13,6 +13,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "read-excel-file/browser": path.resolve(
+        __dirname,
+        "node_modules/read-excel-file/browser/index.js",
+      ),
     },
   },
   plugins: [react(), TanStackRouterVite()],
