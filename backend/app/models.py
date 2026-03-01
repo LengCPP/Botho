@@ -506,6 +506,7 @@ class Community(CommunityBase, table=True):
     loans: list["Loan"] = Relationship(back_populates="community")
     collection_index: dict[str, Any] | None = Field(default={}, sa_column=Column(JSONB))
     logs: list["CommunityLog"] = Relationship(back_populates="community", cascade_delete=True)
+    allowed_item_types: list[str] | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
 
 
 class CommunityAnnouncement(SQLModel, table=True):
@@ -784,6 +785,44 @@ class CommunityRulesUpdate(SQLModel):
 
 class CommunityPinUpdate(SQLModel):
     is_pinned: bool
+
+
+class CommunitySettingsUpdate(SQLModel):
+    allowed_item_types: list[str] | None = Field(default=None)
+
+
+class CommunityItemRequest(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    community_id: uuid.UUID = Field(foreign_key="community.id", ondelete="CASCADE", index=True)
+    item_id: uuid.UUID = Field(foreign_key="item.id", ondelete="CASCADE")
+    requested_by: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
+    item_type: str = Field(max_length=100)
+    status: str = Field(default="PENDING")  # PENDING | APPROVED | REJECTED
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    resolved_by: uuid.UUID | None = Field(default=None, foreign_key="user.id")
+    resolved_at: datetime | None = Field(default=None)
+    note: str | None = Field(default=None, max_length=500)
+
+
+class CommunityItemRequestPublic(SQLModel):
+    id: uuid.UUID
+    community_id: uuid.UUID
+    item_id: uuid.UUID
+    requested_by: uuid.UUID
+    item_type: str
+    status: str
+    created_at: datetime
+    resolved_by: uuid.UUID | None = None
+    resolved_at: datetime | None = None
+    note: str | None = None
+    # Joined fields
+    item_title: str | None = None
+    requester_name: str | None = None
+
+
+class CommunityItemRequestsPublic(SQLModel):
+    data: list[CommunityItemRequestPublic]
+    count: int
 
 
 class CommunitiesPublic(SQLModel):

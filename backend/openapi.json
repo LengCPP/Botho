@@ -4926,7 +4926,7 @@
           "communities"
         ],
         "summary": "Add Item To Community",
-        "description": "Add an item to a community pool (Any member).",
+        "description": "Add an item to a community pool (Any member).\nIf the community restricts item types, creates a pending request instead.",
         "operationId": "communities-add_item_to_community",
         "security": [
           {
@@ -5012,6 +5012,248 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/communities/{id}/item-requests": {
+      "get": {
+        "tags": [
+          "communities"
+        ],
+        "summary": "Get Community Item Requests",
+        "description": "Get pending item pool requests for a community (Admin only).",
+        "operationId": "communities-get_community_item_requests",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunityItemRequestsPublic"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/communities/{id}/item-requests/{request_id}/approve": {
+      "post": {
+        "tags": [
+          "communities"
+        ],
+        "summary": "Approve Item Request",
+        "description": "Approve an item pool request (Admin only). Pools the item.",
+        "operationId": "communities-approve_item_request",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Request Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/communities/{id}/item-requests/{request_id}/reject": {
+      "post": {
+        "tags": [
+          "communities"
+        ],
+        "summary": "Reject Item Request",
+        "description": "Reject an item pool request (Admin only).",
+        "operationId": "communities-reject_item_request",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Request Id"
+            }
+          },
+          {
+            "name": "note",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Note"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/communities/{id}/settings": {
+      "patch": {
+        "tags": [
+          "communities"
+        ],
+        "summary": "Update Community Settings",
+        "description": "Update community settings (Admin only).",
+        "operationId": "communities-update_community_settings",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommunitySettingsUpdate"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -8378,7 +8620,7 @@
           "item-types"
         ],
         "summary": "List Item Types",
-        "description": "List all custom item type definitions. No auth required.",
+        "description": "List the current user's custom item type definitions.",
         "operationId": "item-types-list_item_types",
         "responses": {
           "200": {
@@ -8391,14 +8633,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
       },
       "post": {
         "tags": [
           "item-types"
         ],
         "summary": "Create Item Type",
-        "description": "Create a new custom item type. Auth required.",
+        "description": "Create a new custom item type for the current user.",
         "operationId": "item-types-create_item_type",
         "requestBody": {
           "content": {
@@ -8445,8 +8692,13 @@
           "item-types"
         ],
         "summary": "Get Item Type",
-        "description": "Get a single item type definition by slug.",
+        "description": "Get one of the current user's item type definitions by slug.",
         "operationId": "item-types-get_item_type",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "slug",
@@ -9525,6 +9777,132 @@
         ],
         "title": "CommunityInvitationCreate"
       },
+      "CommunityItemRequestPublic": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "community_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Community Id"
+          },
+          "item_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Item Id"
+          },
+          "requested_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Requested By"
+          },
+          "item_type": {
+            "type": "string",
+            "title": "Item Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "resolved_by": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved By"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "item_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Title"
+          },
+          "requester_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requester Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "community_id",
+          "item_id",
+          "requested_by",
+          "item_type",
+          "status",
+          "created_at"
+        ],
+        "title": "CommunityItemRequestPublic"
+      },
+      "CommunityItemRequestsPublic": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/CommunityItemRequestPublic"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "count"
+        ],
+        "title": "CommunityItemRequestsPublic"
+      },
       "CommunityLogEntry": {
         "properties": {
           "id": {
@@ -9918,6 +10296,26 @@
         },
         "type": "object",
         "title": "CommunityRulesUpdate"
+      },
+      "CommunitySettingsUpdate": {
+        "properties": {
+          "allowed_item_types": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Item Types"
+          }
+        },
+        "type": "object",
+        "title": "CommunitySettingsUpdate"
       },
       "CommunityUpdate": {
         "properties": {

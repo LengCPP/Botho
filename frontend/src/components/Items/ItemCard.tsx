@@ -439,7 +439,7 @@ const ItemCard = ({
       </DialogRoot>
 
       <Box
-        aspectRatio={isBook ? 2 / 3 : 3 / 4}
+        aspectRatio={2 / 3}
         width="100%"
         maxW="300px"
         mx="auto"

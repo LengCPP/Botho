@@ -30,6 +30,9 @@ from app.models import (
     CommunityFavorite,
     CommunityInvitationCreate,
     CommunityItem,
+    CommunityItemRequest,
+    CommunityItemRequestPublic,
+    CommunityItemRequestsPublic,
     CommunityLog,
     CommunityLogPublic,
     CommunityMember,
@@ -43,6 +46,7 @@ from app.models import (
     CommunityPinUpdate,
     CommunityPublic,
     CommunityRulesUpdate,
+    CommunitySettingsUpdate,
     CommunityUpdate,
     Friendship,
     FriendshipStatus,
@@ -1868,7 +1872,7 @@ def read_community_items(
 
 
 @router.post("/{id}/items/{item_id}", response_model=Message)
-def add_item_to_community(
+async def add_item_to_community(
     *,
     session: SessionDep,
     current_user: CurrentUser,
@@ -1878,6 +1882,7 @@ def add_item_to_community(
 ) -> Any:
     """
     Add an item to a community pool (Any member).
+    If the community restricts item types, creates a pending request instead.
     """
     community = session.get(Community, id)
     if not community:
@@ -1913,6 +1918,51 @@ def add_item_to_community(
     if existing:
         raise HTTPException(status_code=400, detail="Item already in community pool")
 
+    # Check allowed item types restriction
+    if community.allowed_item_types is not None:
+        if item.item_type not in community.allowed_item_types:
+            # Check for duplicate pending request
+            existing_req = session.exec(
+                select(CommunityItemRequest).where(
+                    CommunityItemRequest.community_id == id,
+                    CommunityItemRequest.item_id == item_id,
+                    CommunityItemRequest.status == "PENDING",
+                )
+            ).first()
+            if existing_req:
+                raise HTTPException(status_code=400, detail="A request for this item is already pending")
+
+            req = CommunityItemRequest(
+                community_id=id,
+                item_id=item_id,
+                requested_by=current_user.id,
+                item_type=item.item_type,
+            )
+            session.add(req)
+            session.commit()
+
+            # Notify all admins
+            admin_statement = (
+                select(CommunityMember)
+                .where(
+                    CommunityMember.community_id == id,
+                    CommunityMember.role == CommunityMemberRole.ADMIN,
+                    CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+                )
+            )
+            admin_members = session.exec(admin_statement).all()
+            requester_name = current_user.full_name or current_user.email
+            for admin_member in admin_members:
+                await notify_user(
+                    session=session,
+                    recipient_id=admin_member.user_id,
+                    title="Item Pool Request",
+                    message=f"{requester_name} wants to pool a '{item.item_type}' item: '{item.title}'",
+                    type=NotificationType.INFO,
+                    link=f"/communities/{id}?tab=items",
+                )
+            return Message(message="requested")
+
     comm_item = CommunityItem(
         community_id=id, item_id=item_id, added_by=current_user.id
     )
@@ -1933,6 +1983,196 @@ def add_item_to_community(
     session.refresh(item)
     sync_item_to_search(item)
     return Message(message="Item added to community pool")
+
+
+@router.get("/{id}/item-requests", response_model=CommunityItemRequestsPublic)
+def get_community_item_requests(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+) -> Any:
+    """
+    Get pending item pool requests for a community (Admin only).
+    """
+    community_admin = _get_accepted_membership(session, id, current_user.id)
+    if not (community_admin and community_admin.role == CommunityMemberRole.ADMIN) and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Only admins can view item requests")
+
+    statement = (
+        select(CommunityItemRequest, Item, User)
+        .join(Item, CommunityItemRequest.item_id == Item.id)
+        .join(User, CommunityItemRequest.requested_by == User.id)
+        .where(
+            CommunityItemRequest.community_id == id,
+            CommunityItemRequest.status == "PENDING",
+        )
+        .order_by(CommunityItemRequest.created_at)
+    )
+    results = session.exec(statement).all()
+
+    data = [
+        CommunityItemRequestPublic(
+            id=req.id,
+            community_id=req.community_id,
+            item_id=req.item_id,
+            requested_by=req.requested_by,
+            item_type=req.item_type,
+            status=req.status,
+            created_at=req.created_at,
+            resolved_by=req.resolved_by,
+            resolved_at=req.resolved_at,
+            note=req.note,
+            item_title=item.title,
+            requester_name=user.full_name or user.email,
+        )
+        for req, item, user in results
+    ]
+    return CommunityItemRequestsPublic(data=data, count=len(data))
+
+
+@router.post("/{id}/item-requests/{request_id}/approve", response_model=Message)
+async def approve_item_request(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
+    id: uuid.UUID,
+    request_id: uuid.UUID,
+) -> Any:
+    """
+    Approve an item pool request (Admin only). Pools the item.
+    """
+    community_admin = _get_accepted_membership(session, id, current_user.id)
+    if not (community_admin and community_admin.role == CommunityMemberRole.ADMIN) and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Only admins can approve item requests")
+
+    req = session.get(CommunityItemRequest, request_id)
+    if not req or req.community_id != id:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if req.status != "PENDING":
+        raise HTTPException(status_code=400, detail="Request is not pending")
+
+    item = session.get(Item, req.item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    # Check if already in pool (race condition guard)
+    existing = session.exec(
+        select(CommunityItem).where(
+            CommunityItem.community_id == id,
+            CommunityItem.item_id == req.item_id,
+        )
+    ).first()
+    if not existing:
+        comm_item = CommunityItem(
+            community_id=id, item_id=req.item_id, added_by=req.requested_by
+        )
+        session.add(comm_item)
+        _write_log(
+            session, id, "BOOK_ADDED",
+            actor_name=current_user.full_name or current_user.email,
+            extra=item.title,
+        )
+
+    from datetime import datetime as dt
+    req.status = "APPROVED"
+    req.resolved_by = current_user.id
+    req.resolved_at = dt.utcnow()
+    session.add(req)
+    session.commit()
+
+    invalidate_item_caches(session, req.item_id, background_tasks)
+    from app.search import sync_item_to_search
+    session.refresh(item)
+    sync_item_to_search(item)
+
+    await notify_user(
+        session=session,
+        recipient_id=req.requested_by,
+        title="Item Pool Request Approved",
+        message=f"Your '{req.item_type}' item '{item.title}' was approved for the community pool.",
+        type=NotificationType.INFO,
+        link=f"/communities/{id}?tab=items",
+    )
+    return Message(message="Request approved")
+
+
+@router.post("/{id}/item-requests/{request_id}/reject", response_model=Message)
+async def reject_item_request(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    request_id: uuid.UUID,
+    note: str | None = None,
+) -> Any:
+    """
+    Reject an item pool request (Admin only).
+    """
+    community_admin = _get_accepted_membership(session, id, current_user.id)
+    if not (community_admin and community_admin.role == CommunityMemberRole.ADMIN) and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Only admins can reject item requests")
+
+    req = session.get(CommunityItemRequest, request_id)
+    if not req or req.community_id != id:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if req.status != "PENDING":
+        raise HTTPException(status_code=400, detail="Request is not pending")
+
+    item = session.get(Item, req.item_id)
+
+    from datetime import datetime as dt
+    req.status = "REJECTED"
+    req.resolved_by = current_user.id
+    req.resolved_at = dt.utcnow()
+    if note:
+        req.note = note
+    session.add(req)
+    session.commit()
+
+    item_title = item.title if item else "Unknown item"
+    msg = f"Your '{req.item_type}' item '{item_title}' was not approved for the community pool."
+    if note:
+        msg += f" Note: {note}"
+    await notify_user(
+        session=session,
+        recipient_id=req.requested_by,
+        title="Item Pool Request Rejected",
+        message=msg,
+        type=NotificationType.INFO,
+        link=f"/communities/{id}?tab=items",
+    )
+    return Message(message="Request rejected")
+
+
+@router.patch("/{id}/settings", response_model=Message)
+def update_community_settings(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    settings: CommunitySettingsUpdate,
+) -> Any:
+    """
+    Update community settings (Admin only).
+    """
+    community_admin = _get_accepted_membership(session, id, current_user.id)
+    if not (community_admin and community_admin.role == CommunityMemberRole.ADMIN) and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Only admins can update community settings")
+
+    community = session.get(Community, id)
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    if settings.allowed_item_types is not None:
+        for slug in settings.allowed_item_types:
+            if not slug or not isinstance(slug, str):
+                raise HTTPException(status_code=400, detail="Each allowed item type must be a non-empty string")
+    community.allowed_item_types = settings.allowed_item_types
+    session.add(community)
+    session.commit()
+    return Message(message="Settings updated")
 
 
 @router.post("/{id}/items/{item_id}/donate", response_model=Message)

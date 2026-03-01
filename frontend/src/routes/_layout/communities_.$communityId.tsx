@@ -212,6 +212,7 @@ function CommunityBoard() {
     message: string
     onConfirm: () => void
   } | null>(null)
+  const [allowedTypesEdit, setAllowedTypesEdit] = useState<string[] | null | undefined>(undefined)
 
   // Derived state
   const isFiltered = !!subject || !!author || !!category || !!genre || !!owner_filter
@@ -677,6 +678,47 @@ function CommunityBoard() {
       showSuccessToast("Rules updated")
     },
     onError: () => showErrorToast("Failed to update rules"),
+  })
+
+  // Item pool requests (admin only)
+  const { data: itemRequests, isLoading: isLoadingItemRequests } = useQuery({
+    queryKey: ["communityItemRequests", cId],
+    queryFn: () => CommunitiesService.getCommunityItemRequests({ id: cId }),
+    enabled: !!isAdmin && tab === "items",
+  })
+
+  const approveItemRequestMutation = useMutation({
+    mutationFn: (requestId: string) =>
+      CommunitiesService.approveItemRequest({ id: cId, requestId }),
+    onSuccess: () => {
+      showSuccessToast("Request approved")
+      queryClient.invalidateQueries({ queryKey: ["communityItemRequests", cId] })
+      queryClient.invalidateQueries({ queryKey: ["communityItemsInfinite", cId] })
+    },
+    onError: () => showErrorToast("Failed to approve"),
+  })
+
+  const rejectItemRequestMutation = useMutation({
+    mutationFn: (requestId: string) =>
+      CommunitiesService.rejectItemRequest({ id: cId, requestId }),
+    onSuccess: () => {
+      showSuccessToast("Request rejected")
+      queryClient.invalidateQueries({ queryKey: ["communityItemRequests", cId] })
+    },
+    onError: () => showErrorToast("Failed to reject"),
+  })
+
+  const updateSettingsMutation = useMutation({
+    mutationFn: (allowedTypes: string[] | null) =>
+      CommunitiesService.updateCommunitySettings({
+        id: cId,
+        requestBody: { allowed_item_types: allowedTypes },
+      }),
+    onSuccess: () => {
+      showSuccessToast("Settings saved")
+      queryClient.invalidateQueries({ queryKey: ["community", cId] })
+    },
+    onError: () => showErrorToast("Failed to save settings"),
   })
 
   const createFriendRequestMutation = useMutation({
@@ -1225,6 +1267,61 @@ function CommunityBoard() {
                   />
                 )}
 
+                {/* Pending item pool requests banner (admin only) */}
+                {isAdmin && !isLoadingItemRequests && (itemRequests?.data?.length ?? 0) > 0 && (
+                  <Box
+                    p={4}
+                    borderWidth="1px"
+                    borderColor="yellow.400"
+                    borderRadius="md"
+                    bg="yellow.subtle"
+                  >
+                    <Heading size="sm" mb={3} color="yellow.700">
+                      {itemRequests!.data.length} pending item pool request{itemRequests!.data.length !== 1 ? "s" : ""}
+                    </Heading>
+                    <VStack align="stretch" gap={2}>
+                      {itemRequests!.data.map((req: any) => (
+                        <Flex
+                          key={req.id}
+                          justify="space-between"
+                          align="center"
+                          p={3}
+                          borderWidth="1px"
+                          rounded="md"
+                          bg="bg.panel"
+                        >
+                          <VStack align="start" gap={0}>
+                            <Text fontWeight="medium" fontSize="sm">{req.item_title}</Text>
+                            <HStack gap={2}>
+                              <Badge size="xs" colorPalette="purple">{req.item_type}</Badge>
+                              <Text fontSize="xs" color="fg.muted">by {req.requester_name}</Text>
+                            </HStack>
+                          </VStack>
+                          <HStack gap={2}>
+                            <Button
+                              size="xs"
+                              colorPalette="green"
+                              loading={approveItemRequestMutation.isPending}
+                              onClick={() => approveItemRequestMutation.mutate(req.id)}
+                            >
+                              <FiCheck /> Approve
+                            </Button>
+                            <Button
+                              size="xs"
+                              colorPalette="red"
+                              variant="outline"
+                              loading={rejectItemRequestMutation.isPending}
+                              onClick={() => rejectItemRequestMutation.mutate(req.id)}
+                            >
+                              <FiX /> Reject
+                            </Button>
+                          </HStack>
+                        </Flex>
+                      ))}
+                    </VStack>
+                  </Box>
+                )}
+
                 <ItemsBrowser
                   displayType={display_type}
                   viewMode={view_mode}
@@ -1239,6 +1336,18 @@ function CommunityBoard() {
                   author={author}
                   ownerFilter={owner_filter}
                   itemType={item_type}
+                  typeBreakdown={(comm?.collection_index as any)?.item_type ?? {}}
+                  onChangeItemType={(type) =>
+                    updateSearch({
+                      item_type: type,
+                      subject: undefined,
+                      category: undefined,
+                      genre: undefined,
+                      author: undefined,
+                      owner_filter: undefined,
+                      ...(type && type !== "book" ? { display_type: "items" } : {}),
+                    })
+                  }
                   items={groupItems(allItems as any)}
                   facets={allCollections}
                   totalItemCount={commI?.pages[0]?.count || 0}
@@ -1595,6 +1704,83 @@ function CommunityBoard() {
             {isStaff && (
               <Tabs.Content value="settings" pt={6}>
                 <VStack align="stretch" gap={8}>
+                  {/* Allowed Item Types (admin only) */}
+                  {isAdmin && (() => {
+                    const typeIndex: Record<string, number> = (comm?.collection_index as any)?.item_type ?? {}
+                    const knownTypes = ["book", "general", ...Object.keys(typeIndex).filter(t => t !== "book" && t !== "general")]
+                    const current: string[] | null = allowedTypesEdit !== undefined
+                      ? allowedTypesEdit
+                      : (comm as any)?.allowed_item_types ?? null
+                    const isAllAllowed = current === null
+                    const toggleType = (slug: string) => {
+                      const base: string[] = current ?? knownTypes
+                      if (base.includes(slug)) {
+                        setAllowedTypesEdit(base.filter(t => t !== slug))
+                      } else {
+                        setAllowedTypesEdit([...base, slug])
+                      }
+                    }
+                    return (
+                      <Box>
+                        <Heading size="md" mb={4} color="ui.hover">
+                          Allowed Item Types
+                        </Heading>
+                        <Text fontSize="sm" color="fg.muted" mb={3}>
+                          Restrict which item types members can pool directly. Restricted types require admin approval.
+                          Leave all enabled to allow all types.
+                        </Text>
+                        <VStack align="start" gap={2} mb={4}>
+                          <HStack>
+                            <input
+                              type="checkbox"
+                              id="allow-all"
+                              checked={isAllAllowed}
+                              onChange={(e) => {
+                                if (e.target.checked) setAllowedTypesEdit(null)
+                                else setAllowedTypesEdit(knownTypes)
+                              }}
+                            />
+                            <label htmlFor="allow-all" style={{ fontSize: "0.875rem", fontWeight: 500 }}>
+                              All types allowed (no restrictions)
+                            </label>
+                          </HStack>
+                          {!isAllAllowed && knownTypes.map((slug) => (
+                            <HStack key={slug} ml={4}>
+                              <input
+                                type="checkbox"
+                                id={`type-${slug}`}
+                                checked={(current ?? []).includes(slug)}
+                                onChange={() => toggleType(slug)}
+                              />
+                              <label htmlFor={`type-${slug}`} style={{ fontSize: "0.875rem" }}>
+                                {slug}
+                              </label>
+                            </HStack>
+                          ))}
+                        </VStack>
+                        <Button
+                          size="sm"
+                          colorPalette="accent"
+                          loading={updateSettingsMutation.isPending}
+                          onClick={() => updateSettingsMutation.mutate(current)}
+                          disabled={allowedTypesEdit === undefined}
+                        >
+                          Save
+                        </Button>
+                        {allowedTypesEdit !== undefined && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            ml={2}
+                            onClick={() => setAllowedTypesEdit(undefined)}
+                          >
+                            Cancel
+                          </Button>
+                        )}
+                      </Box>
+                    )
+                  })()}
+
                   {/* Pending Applicants */}
                   {!isLoadingApplicants && (apps?.data?.length ?? 0) > 0 ? (
                     <Box>

@@ -139,6 +139,26 @@ export type CommunityInvitationCreate = {
     friend_id: string;
 };
 
+export type CommunityItemRequestPublic = {
+    id: string;
+    community_id: string;
+    item_id: string;
+    requested_by: string;
+    item_type: string;
+    status: string;
+    created_at: string;
+    resolved_by?: (string | null);
+    resolved_at?: (string | null);
+    note?: (string | null);
+    item_title?: (string | null);
+    requester_name?: (string | null);
+};
+
+export type CommunityItemRequestsPublic = {
+    data: Array<CommunityItemRequestPublic>;
+    count: number;
+};
+
 export type CommunityLogEntry = {
     id: string;
     event_type: string;
@@ -208,6 +228,10 @@ export type CommunityPublic = {
 
 export type CommunityRulesUpdate = {
     rules?: (string | null);
+};
+
+export type CommunitySettingsUpdate = {
+    allowed_item_types?: (Array<(string)> | null);
 };
 
 export type CommunityUpdate = {
@@ -895,6 +919,34 @@ export type CommunitiesRemoveItemFromCommunityData = {
 };
 
 export type CommunitiesRemoveItemFromCommunityResponse = (Message);
+
+export type CommunitiesGetCommunityItemRequestsData = {
+    id: string;
+};
+
+export type CommunitiesGetCommunityItemRequestsResponse = (CommunityItemRequestsPublic);
+
+export type CommunitiesApproveItemRequestData = {
+    id: string;
+    requestId: string;
+};
+
+export type CommunitiesApproveItemRequestResponse = (Message);
+
+export type CommunitiesRejectItemRequestData = {
+    id: string;
+    note?: (string | null);
+    requestId: string;
+};
+
+export type CommunitiesRejectItemRequestResponse = (Message);
+
+export type CommunitiesUpdateCommunitySettingsData = {
+    id: string;
+    requestBody: CommunitySettingsUpdate;
+};
+
+export type CommunitiesUpdateCommunitySettingsResponse = (Message);
 
 export type CommunitiesInitiateDonationData = {
     id: string;

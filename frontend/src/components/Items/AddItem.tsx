@@ -167,14 +167,19 @@ const AddItem = ({
   const poolMutation = useMutation({
     mutationFn: (itemId: string) =>
       CommunitiesService.addItemToCommunity({ id: communityId!, itemId }),
-    onSuccess: () => {
-      showSuccessToast("Item added to community pool.")
-      queryClient.invalidateQueries({
-        queryKey: ["communityItems", communityId],
-      })
-      queryClient.invalidateQueries({
-        queryKey: ["communityItemsInfinite", communityId],
-      })
+    onSuccess: (data) => {
+      if ((data as any).message === "requested") {
+        showSuccessToast("Request sent to admins for approval.")
+        queryClient.invalidateQueries({ queryKey: ["communityItemRequests", communityId] })
+      } else {
+        showSuccessToast("Item added to community pool.")
+        queryClient.invalidateQueries({
+          queryKey: ["communityItems", communityId],
+        })
+        queryClient.invalidateQueries({
+          queryKey: ["communityItemsInfinite", communityId],
+        })
+      }
       queryClient.invalidateQueries({ queryKey: ["my-items-for-community"] })
     },
     onError: (err: ApiError) => {
