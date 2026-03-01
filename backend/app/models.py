@@ -1032,7 +1032,7 @@ class ItemsPublic(SQLModel):
 class ItemsMinimalPublic(SQLModel):
     data: list[ItemMinimal]
     count: int
-    facets: dict[str, dict[str, int]] | None = None
+    facets: dict[str, Any] | None = None
 
 
 class StagedItemPublic(SQLModel):
