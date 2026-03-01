@@ -24,12 +24,17 @@ Botho follows a modern, containerized monorepo architecture designed for scalabi
 
 - **Community-Centric Sharing**: Create and join private communities to pool resources (books, games, tools) with trusted circles.
 - **Bucket Collections**: Shared community collections where any member can contribute items, featuring automatic cleanup and shared ownership.
+- **Community Item Type Restrictions**: Admins can restrict which item types are allowed in a community pool. Items of unlisted types enter an approval queue where admins can accept or reject them with an optional note.
 - **Item Management & Discovery**: Easily catalog items with integrated search (e.g., Book search) and organize them into personal collections. Use faceted search for efficient filtering.
-- **Manage Items Dashboard**: Dedicated interface for batch actions (delete, lost, private, enrich) and bulk addition of resources.
-- **Reading Log**: Track reading progress (Reading, Completed, Dropped), rate items, and add personal tags and reviews to any book in the system.
-- **Lending System**: Comprehensive tracking for borrowed and lent items, including due dates, return status, and approval workflows.
+- **Custom Item Types**: Users can define their own item types (e.g., "Board Game", "Vinyl Record") with a custom set of enabled fields. Type definitions are user-scoped and appear as tabs throughout the UI.
+- **Extended Item Fields**: 17+ optional metadata fields on every item — weight, dimensions, brand, color, material, publisher, year, edition, language, age group, player count, platform, format, series, model number, pieces count, and condition notes.
+- **Manage Items Dashboard**: Dedicated interface for batch actions (delete, lost, private, sync from archive) and bulk addition of resources via CSV/Excel import with a staging UI.
+- **Reading Log**: Track reading progress (Reading, Completed, Dropped), rate items, and add reviews to any book in the system.
+- **Lending System**: Comprehensive tracking for borrowed and lent items, including due dates, return status, loan extensions, and item-loss forgiveness.
+- **Reputation & Honor System**: Users earn an honor score and reliability rate based on peer reviews after each loan. A delinquency flag surfaces chronic misuse.
+- **Interest Signals**: Express interest in a currently unavailable item so the owner is notified when you want to borrow it.
 - **Social Connectivity**: Connect with friends, manage relationships, and view user profiles with distinct custom styling.
-- **Notifications**: Stay updated on loan requests, returns, and community activity via real-time WebSockets and Push Notifications.
+- **Notifications**: Stay updated on loan requests, returns, community approvals, and activity via real-time WebSockets and Push Notifications.
 - **Enhanced Profile Management**: Unified interface for updating bio, alias, contact details, and interests.
 - **Visual Identity**: Standardized, deterministic avatar system with a themed orange ring (`#fb6635`) for consistent user recognition.
 
