@@ -1,4 +1,4 @@
-import { SearchService } from "@/client"
+import { Search } from "@/client"
 import { InputGroup } from "@/components/ui/input-group"
 import useAuth from "@/hooks/useAuth"
 import {
@@ -40,7 +40,7 @@ export const QuickSearch = ({
 
   const { data: results, isLoading } = useQuery({
     queryKey: ["quick-search", debouncedTerm],
-    queryFn: () => SearchService.search({ q: debouncedTerm, limit: 5 }),
+    queryFn: () => Search.search({ q: debouncedTerm, limit: 5 }),
     enabled: debouncedTerm.length > 0,
   })
 

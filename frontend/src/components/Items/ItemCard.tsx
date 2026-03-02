@@ -1,9 +1,9 @@
 import {
-  CommunitiesService,
+  Communities,
   type ItemPublic,
   type LoanPublic,
-  LoansService,
-  ReadingLogService,
+  Loans,
+  Log,
 } from "@/client"
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import { ItemActionsMenu } from "@/components/Common/ItemActionsMenu"
@@ -94,7 +94,7 @@ const ItemCard = ({
 
   const { data: outgoingLoans } = useQuery({
     queryKey: ["loans", "outgoing"],
-    queryFn: () => LoansService.readOutgoingLoanRequests({}),
+    queryFn: () => Loans.readOutgoingLoanRequests({}),
     enabled: !!user,
   })
 
@@ -115,7 +115,7 @@ const ItemCard = ({
   const borderColor = useColorModeValue("accent.200", "gray.600")
 
   const cancelLoanMutation = useMutation({
-    mutationFn: () => LoansService.cancelLoan({ id: currentLoan!.id }),
+    mutationFn: () => Loans.cancelLoan({ id: currentLoan!.id }),
     onSuccess: () => {
       showSuccessToast("Loan request cancelled.")
       queryClient.invalidateQueries({ queryKey: ["loans"] })
@@ -128,7 +128,7 @@ const ItemCard = ({
 
   const signalReturnMutation = useMutation({
     mutationFn: () =>
-      LoansService.signalReturn({ id: (loanProp?.id || currentLoan?.id)! }),
+      Loans.signalReturn({ id: (loanProp?.id || currentLoan?.id)! }),
     onSuccess: (updatedLoan) => {
       showSuccessToast("Return signaled to owner.")
       queryClient.invalidateQueries({ queryKey: ["loans"] })
@@ -143,7 +143,7 @@ const ItemCard = ({
   const { data: readingLogData } = useQuery({
     queryKey: ["reading-log-status", item.author, item.title],
     queryFn: () =>
-      ReadingLogService.readReadingLog({
+      Log.readReadingLog({
         author: item.author || "",
         title: item.title,
         limit: 1,
@@ -156,8 +156,8 @@ const ItemCard = ({
   const readingLogMutation = useMutation({
     mutationFn: async () => {
       if (!readingLogEntry) {
-        return ReadingLogService.createReadingLogEntry({
-          requestBody: {
+        return Log.createReadingLogEntry({
+          readingLogCreate: {
             author: item.author || "",
             title: item.title,
             status: "READING",
@@ -165,9 +165,9 @@ const ItemCard = ({
         })
       }
       if (readingLogEntry.status === "READING") {
-        return ReadingLogService.updateReadingLogEntry({
+        return Log.updateReadingLogEntry({
           id: readingLogEntry.id,
-          requestBody: {
+          readingLogUpdate: {
             status: "COMPLETED",
           },
         })
@@ -238,7 +238,7 @@ const ItemCard = ({
 
   const { data: myInterestSignals } = useQuery({
     queryKey: ["my-interest-signals"],
-    queryFn: () => LoansService.getMyInterestSignals({}),
+    queryFn: () => Loans.getMyInterestSignals({}),
     enabled: !!user,
   })
   const hasInterestSignal = myInterestSignals?.data?.some(
@@ -246,7 +246,7 @@ const ItemCard = ({
   )
 
   const signalInterestMutation = useMutation({
-    mutationFn: () => LoansService.signalItemInterest({ itemId: item.id }),
+    mutationFn: () => Loans.signalItemInterest({ item_id: item.id }),
     onSuccess: () => {
       showSuccessToast("Interest signaled!")
       queryClient.invalidateQueries({ queryKey: ["my-interest-signals"] })
@@ -257,7 +257,7 @@ const ItemCard = ({
   })
 
   const cancelInterestMutation = useMutation({
-    mutationFn: () => LoansService.cancelItemInterest({ itemId: item.id }),
+    mutationFn: () => Loans.cancelItemInterest({ item_id: item.id }),
     onSuccess: () => {
       showSuccessToast("Interest removed.")
       queryClient.invalidateQueries({ queryKey: ["my-interest-signals"] })
@@ -269,7 +269,7 @@ const ItemCard = ({
 
   const { data: community } = useQuery({
     queryKey: ["community", communityId],
-    queryFn: () => CommunitiesService.readCommunity({ id: communityId! }),
+    queryFn: () => Communities.readCommunity({ id: communityId! }),
     enabled: !!communityId,
   })
 

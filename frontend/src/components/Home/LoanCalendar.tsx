@@ -1,4 +1,4 @@
-import { LoansService } from "@/client"
+import { Loans } from "@/client"
 import {
   Box,
   Flex,
@@ -34,7 +34,7 @@ export const LoanCalendar = () => {
 
   const { data: loansData, isLoading } = useQuery({
     queryKey: ["loans", "outgoing"],
-    queryFn: () => LoansService.readOutgoingLoanRequests({ limit: 100 }),
+    queryFn: () => Loans.readOutgoingLoanRequests({ limit: 100 }),
   })
 
   // Filter for active loans

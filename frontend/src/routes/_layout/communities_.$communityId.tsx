@@ -58,7 +58,7 @@ import {
 import { z } from "zod"
 
 // Services
-import { CommunitiesService, FriendsService, LoansService } from "@/client"
+import { Communities, Friends, Loans } from "@/client"
 
 // Components
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
@@ -269,7 +269,7 @@ function CommunityBoard() {
   const { data: comm, isLoading: isLoadingCommunity } = useQuery({
     queryKey: ["community", cId],
     queryFn: () =>
-      CommunitiesService.readCommunity({
+      Communities.readCommunity({
         id: cId,
       }) as Promise<any>,
     initialData: () => {
@@ -291,7 +291,7 @@ function CommunityBoard() {
   const { data: members, isLoading: isLoadingMembers } = useQuery({
     queryKey: ["communityMembers", cId],
     queryFn: () =>
-      CommunitiesService.readCommunityMembers({
+      Communities.readCommunityMembers({
         id: cId,
         status: "ACCEPTED" as any,
       }),
@@ -303,8 +303,8 @@ function CommunityBoard() {
     queryKey: ["communityMembersBannedSuspended", cId],
     queryFn: async () => {
       const [banned, suspended] = await Promise.all([
-        CommunitiesService.readCommunityMembers({ id: cId, status: "BANNED" as any }),
-        CommunitiesService.readCommunityMembers({ id: cId, status: "SUSPENDED" as any }),
+        Communities.readCommunityMembers({ id: cId, status: "BANNED" as any }),
+        Communities.readCommunityMembers({ id: cId, status: "SUSPENDED" as any }),
       ])
       return {
         data: [...(banned.data ?? []), ...(suspended.data ?? [])],
@@ -326,7 +326,7 @@ function CommunityBoard() {
   const { data: apps, isLoading: isLoadingApplicants } = useQuery({
     queryKey: ["communityApplicants", cId],
     queryFn: () =>
-      CommunitiesService.readCommunityMembers({
+      Communities.readCommunityMembers({
         id: cId,
         status: "PENDING" as any,
       }),
@@ -347,22 +347,20 @@ function CommunityBoard() {
       { sort_by, sort_order, limit, category, genre, subject, author, owner_filter, item_type, q: qP },
     ],
     queryFn: ({ pageParam = 0 }) =>
-      CommunitiesService.readCommunityItems({
+      Communities.readCommunityItems({
         id: cId,
         skip: pageParam as number,
         limit,
-        sortBy: sort_by,
-        sortOrder: sort_order,
+        sort_by,
+        sort_order,
         category,
         genre,
         subject,
         author,
-        ownerFilter: owner_filter,
-        itemType: item_type,
+        owner_filter,
+        item_type,
         q: qP,
-        excludeLost: true,
-        excludePrivate: true,
-      } as any),
+      }),
     getNextPageParam: (last, all) => {
       const loaded = all.length * limit
       return loaded < last.count ? loaded : undefined
@@ -382,9 +380,9 @@ function CommunityBoard() {
   } = useInfiniteQuery({
     queryKey: ["communityFacetsInfinite", cId, organize_by, qP],
     queryFn: ({ pageParam = 0 }) =>
-      (CommunitiesService as any).readCommunityItemFacets({
+      Communities.readCommunityItemFacets({
         id: cId,
-        groupBy: organize_by,
+        group_by: organize_by,
         q: qP,
         skip: pageParam,
         limit: COLLECTIONS_LIMIT,
@@ -404,7 +402,7 @@ function CommunityBoard() {
   // Outgoing loans
   useQuery({
     queryKey: ["loans", "outgoing"],
-    queryFn: () => LoansService.readOutgoingLoanRequests({}),
+    queryFn: () => Loans.readOutgoingLoanRequests({}),
     enabled: !!currU && isMember && tab === "items",
   })
 
@@ -412,7 +410,7 @@ function CommunityBoard() {
   const { data: commL, isLoading: isLoadingLoans } = useQuery({
     queryKey: ["communityLoans", cId],
     queryFn: () =>
-      CommunitiesService.readCommunityLoans({
+      Communities.readCommunityLoans({
         id: cId,
       }),
     enabled: !!isMember,
@@ -422,7 +420,7 @@ function CommunityBoard() {
   const { data: ann, isLoading: isLoadingAnnouncements } = useQuery({
     queryKey: ["communityAnnouncements", cId],
     queryFn: () =>
-      CommunitiesService.readCommunityAnnouncements({
+      Communities.readCommunityAnnouncements({
         id: cId,
       }),
     enabled: !!isMember,
@@ -432,7 +430,7 @@ function CommunityBoard() {
   const { data: msgs, isLoading: isLoadingMessages } = useQuery({
     queryKey: ["communityMessages", cId],
     queryFn: () =>
-      CommunitiesService.readCommunityMessages({
+      Communities.readCommunityMessages({
         id: cId,
       }),
     enabled: !!isMember,
@@ -441,7 +439,7 @@ function CommunityBoard() {
   // Community log
   const { data: logData } = useQuery({
     queryKey: ["communityLog", cId],
-    queryFn: () => CommunitiesService.readCommunityLog({ id: cId, limit: 50 }),
+    queryFn: () => Communities.readCommunityLog({ id: cId, limit: 50 }),
     enabled: !!isMember && showLog,
   })
 
@@ -498,9 +496,9 @@ function CommunityBoard() {
 
   const postMessageMutation = useMutation({
     mutationFn: (content: string) =>
-      CommunitiesService.createCommunityMessage({
+      Communities.createCommunityMessage({
         id: cId,
-        requestBody: { content },
+        communityMessageCreate: { content },
       }),
     onSuccess: () => {
       setMsg("")
@@ -513,7 +511,7 @@ function CommunityBoard() {
 
   const toggleNotificationsMutation = useMutation({
     mutationFn: (enabled: boolean) =>
-      CommunitiesService.updateCommunityNotifications({
+      Communities.updateCommunityNotifications({
         id: cId,
         enabled,
       }),
@@ -528,10 +526,10 @@ function CommunityBoard() {
 
   const updateMemberMutation = useMutation({
     mutationFn: (data: any) =>
-      CommunitiesService.updateCommunityMemberRole({
+      Communities.updateCommunityMemberRole({
         id: cId,
-        userId: data.userId,
-        requestBody: {
+        user_id: data.userId,
+        communityMemberUpdate: {
           role: data.role,
           status: data.status,
           suspension_until: data.suspension_until,
@@ -551,7 +549,7 @@ function CommunityBoard() {
 
   const removeMemberMutation = useMutation({
     mutationFn: (userId: string) =>
-      CommunitiesService.leaveCommunity({
+      Communities.leaveCommunity({
         id: cId,
         userId,
       }),
@@ -569,7 +567,7 @@ function CommunityBoard() {
   })
 
   const leaveCommunityMutation = useMutation({
-    mutationFn: () => CommunitiesService.leaveCommunity({ id: cId }),
+    mutationFn: () => Communities.leaveCommunity({ id: cId }),
     onSuccess: () => {
       showSuccessToast("Left")
       queryClient.invalidateQueries({
@@ -659,7 +657,7 @@ function CommunityBoard() {
   })
 
   const joinMutation = useMutation({
-    mutationFn: () => CommunitiesService.joinCommunity({ id: cId }),
+    mutationFn: () => Communities.joinCommunity({ id: cId }),
     onSuccess: (data) => {
       showSuccessToast(data.message)
       queryClient.invalidateQueries({
@@ -671,7 +669,7 @@ function CommunityBoard() {
 
   const updateRulesMutation = useMutation({
     mutationFn: (rules: string | null) =>
-      CommunitiesService.updateCommunityRules({ id: cId, requestBody: { rules } }),
+      Communities.updateCommunityRules({ id: cId, communityRulesUpdate: { rules } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["community", cId] })
       setIsEditRulesOpen(false)
@@ -683,13 +681,13 @@ function CommunityBoard() {
   // Item pool requests (admin only)
   const { data: itemRequests, isLoading: isLoadingItemRequests } = useQuery({
     queryKey: ["communityItemRequests", cId],
-    queryFn: () => CommunitiesService.getCommunityItemRequests({ id: cId }),
+    queryFn: () => Communities.getCommunityItemRequests({ id: cId }),
     enabled: !!isAdmin && tab === "items",
   })
 
   const approveItemRequestMutation = useMutation({
     mutationFn: (requestId: string) =>
-      CommunitiesService.approveItemRequest({ id: cId, requestId }),
+      Communities.approveItemRequest({ id: cId, requestId }),
     onSuccess: () => {
       showSuccessToast("Request approved")
       queryClient.invalidateQueries({ queryKey: ["communityItemRequests", cId] })
@@ -700,7 +698,7 @@ function CommunityBoard() {
 
   const rejectItemRequestMutation = useMutation({
     mutationFn: (requestId: string) =>
-      CommunitiesService.rejectItemRequest({ id: cId, requestId }),
+      Communities.rejectItemRequest({ id: cId, requestId }),
     onSuccess: () => {
       showSuccessToast("Request rejected")
       queryClient.invalidateQueries({ queryKey: ["communityItemRequests", cId] })
@@ -710,9 +708,9 @@ function CommunityBoard() {
 
   const updateSettingsMutation = useMutation({
     mutationFn: (allowedTypes: string[] | null) =>
-      CommunitiesService.updateCommunitySettings({
+      Communities.updateCommunitySettings({
         id: cId,
-        requestBody: { allowed_item_types: allowedTypes },
+        communitySettingsUpdate: { allowed_item_types: allowedTypes },
       }),
     onSuccess: () => {
       showSuccessToast("Settings saved")
@@ -723,7 +721,7 @@ function CommunityBoard() {
 
   const createFriendRequestMutation = useMutation({
     mutationFn: (friendId: string) =>
-      FriendsService.createFriendRequest({ friendId }),
+      Friends.createFriendRequest({ friend_id: friendId }),
     onSuccess: () => {
       showSuccessToast("Sent!")
       queryClient.invalidateQueries({
@@ -741,27 +739,27 @@ function CommunityBoard() {
     }: { loan: any; action: string; params?: any }) => {
       switch (action) {
         case "cancel":
-          return LoansService.cancelLoan({ id: loan.id })
+          return Loans.cancelLoan({ id: loan.id })
         case "respond":
-          return LoansService.respondToLoanRequest({
+          return Loans.respondToLoanRequest({
             id: loan.id,
             accept: params.accept,
           })
         case "ratify":
-          return LoansService.ratifyLoan({ id: loan.id })
+          return Loans.ratifyLoan({ id: loan.id })
         case "return":
-          return LoansService.returnLoan({ id: loan.id })
+          return Loans.returnLoan({ id: loan.id })
         case "extension":
-          return LoansService.respondToExtensionRequest({
+          return Loans.respondToExtensionRequest({
             id: loan.id,
             accept: params.accept,
           })
         case "remind":
-          return LoansService.sendReturnReminder({ id: loan.id })
+          return Loans.sendReturnReminder({ id: loan.id })
         case "default":
-          return LoansService.markLoanDefaulted({ id: loan.id })
+          return Loans.markLoanDefaulted({ id: loan.id })
         case "signalReturn":
-          return LoansService.signalReturn({ id: loan.id })
+          return Loans.signalReturn({ id: loan.id })
         default:
           throw new Error("Unknown action")
       }
@@ -2413,9 +2411,9 @@ function AddAnnouncementModal({
 
   const mutation = useMutation({
     mutationFn: () =>
-      CommunitiesService.createCommunityAnnouncement({
+      Communities.createCommunityAnnouncement({
         id: communityId,
-        requestBody: { title, content },
+        communityAnnouncementCreate: { title, content },
       }),
     onSuccess: () => {
       showSuccessToast("Posted!")
@@ -2506,7 +2504,7 @@ function AnnouncementItem({
 
   const deleteAnnouncementMutation = useMutation({
     mutationFn: () =>
-      CommunitiesService.deleteCommunityAnnouncement({
+      Communities.deleteCommunityAnnouncement({
         id: communityId,
         announcementId: ann.id,
       }),
@@ -2521,10 +2519,10 @@ function AnnouncementItem({
 
   const updateAnnouncementMutation = useMutation({
     mutationFn: () =>
-      CommunitiesService.updateCommunityAnnouncement({
+      Communities.updateCommunityAnnouncement({
         id: communityId,
         announcementId: ann.id,
-        requestBody: { title: editTitle, content: editContent },
+        communityAnnouncementCreate: { title: editTitle, content: editContent },
       }),
     onSuccess: () => {
       setIsEditing(false)
@@ -2537,10 +2535,10 @@ function AnnouncementItem({
 
   const pinAnnouncementMutation = useMutation({
     mutationFn: (is_pinned: boolean) =>
-      CommunitiesService.pinCommunityAnnouncement({
+      Communities.pinCommunityAnnouncement({
         id: communityId,
         announcementId: ann.id,
-        requestBody: { is_pinned },
+        communityPinUpdate: { is_pinned },
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["communityAnnouncements", communityId] }),
     onError: () => showErrorToast("Failed"),
@@ -2675,7 +2673,7 @@ function MessageItem({
 
   const deleteMessageMutation = useMutation({
     mutationFn: () =>
-      CommunitiesService.deleteCommunityMessage({
+      Communities.deleteCommunityMessage({
         id: communityId,
         messageId: msg.id,
       }),
@@ -2690,10 +2688,10 @@ function MessageItem({
 
   const updateMessageMutation = useMutation({
     mutationFn: (content: string) =>
-      CommunitiesService.updateCommunityMessage({
+      Communities.updateCommunityMessage({
         id: communityId,
         messageId: msg.id,
-        requestBody: { content },
+        communityMessageCreate: { content },
       }),
     onSuccess: () => {
       setIsEditing(false)
@@ -2706,10 +2704,10 @@ function MessageItem({
 
   const pinMessageMutation = useMutation({
     mutationFn: (is_pinned: boolean) =>
-      CommunitiesService.pinCommunityMessage({
+      Communities.pinCommunityMessage({
         id: communityId,
         messageId: msg.id,
-        requestBody: { is_pinned },
+        communityPinUpdate: { is_pinned },
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["communityMessages", communityId] }),
     onError: () => showErrorToast("Failed"),
@@ -2850,9 +2848,9 @@ function DonationManagement({
 
   const ratifyDonationMutation = useMutation({
     mutationFn: (itemId: string) =>
-      CommunitiesService.ratifyDonation({
+      Communities.ratifyDonation({
         id: communityId,
-        itemId,
+        item_id: itemId,
       }),
     onSuccess: () => {
       showSuccessToast("Donation ratified!")

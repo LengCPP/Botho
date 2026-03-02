@@ -73,7 +73,13 @@ def _update_collection_index_logic(session: Session, owner_id: uuid.UUID):
         items = session.exec(items_stmt).all()
         logger.info(f"Rebuilding index for community {owner_id}, found {len(items)} items.")
     else:
-        items = session.exec(select(Item).where(Item.owner_id == owner_id)).all()
+        items = session.exec(
+            select(Item).where(
+                Item.owner_id == owner_id,
+                Item.is_lost == False,
+                Item.is_private == False,
+            )
+        ).all()
         logger.info(f"Rebuilding index for user {owner_id}, found {len(items)} items.")
 
     index = {

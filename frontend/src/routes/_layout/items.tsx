@@ -16,9 +16,9 @@ import { z } from "zod"
 
 import {
   type ItemPublic,
-  ItemsService,
+  Items,
   type LoanPublic,
-  LoansService,
+  Loans,
 } from "@/client"
 import ReviewModal from "@/components/Common/ReviewModal"
 import AddItem from "@/components/Items/AddItem"
@@ -62,7 +62,7 @@ const itemsSearchSchema = z.object({
 const COLLECTIONS_LIMIT = 12
 
 export const Route = createFileRoute("/_layout/items")({
-  component: Items,
+  component: ItemsPage,
   validateSearch: (search) => itemsSearchSchema.parse(search),
 })
 
@@ -124,21 +124,21 @@ function ItemsTable() {
       },
     ],
     queryFn: ({ pageParam = 0 }) =>
-      ItemsService.readItems({
+      Items.readItems({
         skip: pageParam as number,
         limit: limit,
-        sortBy: sort_by,
-        sortOrder: sort_order,
-        ownerId: user?.id,
+        sort_by: sort_by,
+        sort_order: sort_order,
+        owner_id: user?.id,
         category: category,
         genre: genre,
         subject: subject,
         author: author,
-        itemType: item_type as any,
+        item_type: item_type as any,
         q: q,
         minimal: true,
-        excludeLost: true,
-        excludePrivate: true,
+        exclude_lost: true,
+        exclude_private: true,
       }),
     getNextPageParam: (lastPage, allPages) => {
       const loadedCount = allPages.length * limit
@@ -164,11 +164,11 @@ function ItemsTable() {
   } = useInfiniteQuery({
     queryKey: ["itemFacetsInfinite", user?.id, organize_by, q, item_type],
     queryFn: ({ pageParam = 0 }) =>
-      ItemsService.readItemFacets({
-        ownerId: user?.id,
-        groupBy: organize_by,
+      Items.readItemFacets({
+        owner_id: user?.id,
+        group_by: organize_by,
         q: q,
-        itemType: item_type,
+        item_type: item_type,
         skip: pageParam as number,
         limit: COLLECTIONS_LIMIT,
       }),
@@ -190,7 +190,7 @@ function ItemsTable() {
   // Fetch outgoing loans once for all cards
   useQuery({
     queryKey: ["loans", "outgoing"],
-    queryFn: () => LoansService.readOutgoingLoanRequests({}),
+    queryFn: () => Loans.readOutgoingLoanRequests({}),
     enabled: !!user,
   })
 
@@ -415,7 +415,7 @@ function ItemsTable() {
   )
 }
 
-function Items() {
+function ItemsPage() {
   return (
     <Container maxW="full">
       <ItemsTable />

@@ -4,12 +4,11 @@ import { useNavigate } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 
 import {
-  type Body_login_login_access_token as AccessToken,
-  type ApiError,
-  LoginService,
+  type BodyLoginLoginAccessToken as AccessToken,
+  Login,
   type UserPublic,
   type UserRegister,
-  UsersService,
+  Users,
 } from "@/client"
 import { handleError } from "@/utils"
 
@@ -23,7 +22,7 @@ const useAuth = () => {
   const queryClient = useQueryClient()
   const { data: user, isError } = useQuery<UserPublic | null, Error>({
     queryKey: ["currentUser"],
-    queryFn: UsersService.readUserMe,
+    queryFn: () => Users.readUserMe(),
     enabled: isLoggedIn(),
     retry: false,
   })
@@ -36,7 +35,7 @@ const useAuth = () => {
 
   const signUpMutation = useMutation({
     mutationFn: (data: UserRegister) =>
-      UsersService.registerUser({ requestBody: data }),
+      Users.registerUser({ userRegister: data }),
 
     onSuccess: (_data, variables) => {
       navigate({
@@ -44,7 +43,7 @@ const useAuth = () => {
         search: { email: variables.email },
       })
     },
-    onError: (err: ApiError) => {
+    onError: (err: unknown) => {
       handleError(err)
     },
     onSettled: () => {
@@ -53,8 +52,8 @@ const useAuth = () => {
   })
 
   const login = async (data: AccessToken) => {
-    const response = await LoginService.loginAccessToken({
-      formData: data,
+    const response = await Login.loginAccessToken({
+      bodyLoginLoginAccessToken: data,
     })
     localStorage.setItem("access_token", response.access_token)
   }
@@ -64,8 +63,8 @@ const useAuth = () => {
     onSuccess: () => {
       navigate({ to: "/" })
     },
-    onError: (err: ApiError, variables) => {
-      const errDetail = (err.body as any)?.detail
+    onError: (err: unknown, variables) => {
+      const errDetail = (err as any)?.detail
 
       if (errDetail === "User not verified") {
         navigate({

@@ -1,6 +1,6 @@
 "use client"
 
-import { UsersService } from "@/client"
+import { Users } from "@/client"
 import useAuth from "@/hooks/useAuth"
 import type { IconButtonProps, SpanProps } from "@chakra-ui/react"
 import { ClientOnly, IconButton, Skeleton, Span } from "@chakra-ui/react"
@@ -61,8 +61,8 @@ export function useColorMode(): UseColorModeReturn {
 
   const mutation = useMutation({
     mutationFn: (newTheme: string) =>
-      UsersService.updateUserSettings({
-        requestBody: { theme_mode: newTheme },
+      Users.updateUserSettings({
+        userSettingsSchema: { theme_mode: newTheme },
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["currentUser"] })

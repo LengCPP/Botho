@@ -2,7 +2,7 @@ import {
   type ForgivenessReason,
   type ForgivenessRequest,
   type LoanPublic,
-  LoansService,
+  Loans,
 } from "@/client"
 import { Button } from "@/components/ui/button"
 import {
@@ -34,7 +34,7 @@ const ForgiveModal = ({ loan, isOpen, onClose }: ForgiveModalProps) => {
 
   const forgiveMutation = useMutation({
     mutationFn: (data: ForgivenessRequest) =>
-      LoansService.forgiveLoan({ id: loan.id, requestBody: data }),
+      Loans.forgiveLoan({ id: loan.id, forgivenessRequest: data }),
     onSuccess: () => {
       showSuccessToast("Loan forgiven successfully")
       queryClient.invalidateQueries({ queryKey: ["loans"] })

@@ -23,7 +23,7 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useMemo, useState } from "react"
 import { FiSend, FiUserPlus, FiUsers } from "react-icons/fi"
 
-import { FriendsService } from "@/client"
+import { Friends } from "@/client"
 import UserCard from "@/components/Common/UserCard"
 import {
   DialogBody,
@@ -40,7 +40,7 @@ import useCustomToast from "@/hooks/useCustomToast"
 import { formatPublicId } from "@/utils"
 
 export const Route = createFileRoute("/_layout/friends")({
-  component: Friends,
+  component: FriendsPage,
 })
 
 const FRIENDS_PER_PAGE = 12
@@ -53,8 +53,8 @@ function AddFriendModal() {
 
   const searchAndRequestMutation = useMutation({
     mutationFn: async (publicId: string) => {
-      const user = await FriendsService.searchUserById({ publicId })
-      return FriendsService.createFriendRequest({ friendId: user.id })
+      const user = await Friends.searchUserById({ public_id: publicId })
+      return Friends.createFriendRequest({ friend_id: user.id })
     },
     onSuccess: () => {
       showSuccessToast("Friend request sent!")
@@ -115,7 +115,7 @@ function AddFriendModal() {
   )
 }
 
-function Friends() {
+function FriendsPage() {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
@@ -128,7 +128,7 @@ function Friends() {
   } = useInfiniteQuery({
     queryKey: ["friendsInfinite"],
     queryFn: ({ pageParam = 0 }) =>
-      FriendsService.readFriends({
+      Friends.readFriends({
         skip: pageParam as number,
         limit: FRIENDS_PER_PAGE,
       }),
@@ -147,17 +147,17 @@ function Friends() {
 
   const { data: requestsReceived, isLoading: isLoadingRequests } = useQuery({
     queryKey: ["friendRequests"],
-    queryFn: () => FriendsService.readFriendRequests({}),
+    queryFn: () => Friends.readFriendRequests({}),
   })
 
   const { data: requestsSent, isLoading: isLoadingSent } = useQuery({
     queryKey: ["friendRequestsSent"],
-    queryFn: () => FriendsService.readSentFriendRequests({}),
+    queryFn: () => Friends.readSentFriendRequests({}),
   })
 
   const acceptMutation = useMutation({
     mutationFn: (id: string) =>
-      FriendsService.acceptFriendRequest({ friendId: id }),
+      Friends.acceptFriendRequest({ friend_id: id }),
     onSuccess: () => {
       showSuccessToast("Friend request accepted!")
       queryClient.invalidateQueries({ queryKey: ["friendsInfinite"] })
@@ -167,7 +167,7 @@ function Friends() {
   })
 
   const removeMutation = useMutation({
-    mutationFn: (id: string) => FriendsService.removeFriend({ friendId: id }),
+    mutationFn: (id: string) => Friends.removeFriend({ friend_id: id }),
     onSuccess: () => {
       showSuccessToast("Friend removed/Request cancelled")
       queryClient.invalidateQueries({ queryKey: ["friendsInfinite"] })

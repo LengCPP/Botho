@@ -4,7 +4,7 @@ import { useNavigate } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import { FiAlertCircle, FiClock } from "react-icons/fi"
 
-import { LoansService } from "@/client"
+import { Loans } from "@/client"
 
 const DISMISS_INTERVAL = 2 * 60 * 60 * 1000 // 2 hours
 
@@ -17,7 +17,7 @@ export const LoanReminderBanner = () => {
 
   const { data: outgoingLoans } = useQuery({
     queryKey: ["loans", "outgoing", "reminder"],
-    queryFn: () => LoansService.readOutgoingLoanRequests({}),
+    queryFn: () => Loans.readOutgoingLoanRequests({}),
     refetchInterval: 30000, // Re-check loans every 30 seconds
   })
 

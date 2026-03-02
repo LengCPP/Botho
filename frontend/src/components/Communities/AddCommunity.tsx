@@ -11,8 +11,8 @@ import { useState } from "react"
 import { Controller, type SubmitHandler, useForm } from "react-hook-form"
 import { FiPlus } from "react-icons/fi"
 
-import { CommunitiesService } from "@/client"
-import type { ApiError } from "@/client/core/ApiError"
+import { Communities } from "@/client"
+
 import type { CommunityCreateExtended } from "@/customTypes"
 import useCustomToast from "@/hooks/useCustomToast"
 import { handleError } from "@/utils"
@@ -51,13 +51,13 @@ const AddCommunity = () => {
 
   const mutation = useMutation({
     mutationFn: (data: CommunityCreateExtended) =>
-      CommunitiesService.createCommunity({ requestBody: data }),
+      Communities.createCommunity({ communityCreate: data }),
     onSuccess: () => {
       showSuccessToast("Community created successfully.")
       reset()
       setIsOpen(false)
     },
-    onError: (err: ApiError) => {
+    onError: (err: unknown) => {
       handleError(err)
     },
     onSettled: () => {

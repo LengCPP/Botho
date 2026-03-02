@@ -23,11 +23,11 @@ import { FiShare2, FiUserCheck, FiUserMinus, FiUserPlus } from "react-icons/fi"
 import { z } from "zod"
 
 import {
-  FriendsService,
+  Friends,
   type ItemPublic,
-  ItemsService,
+  Items,
   type LoanPublic,
-  UsersService,
+  Users,
 } from "@/client"
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import ReviewModal from "@/components/Common/ReviewModal"
@@ -157,7 +157,7 @@ function UserProfilePage() {
 
   const { data: user, isLoading: isLoadingUser } = useQuery({
     queryKey: ["user", userId],
-    queryFn: () => UsersService.readUserById({ userId }),
+    queryFn: () => Users.readUserById({ user_id: userId }),
   })
 
   const isFriend = user?.friendship_status === "ACCEPTED"
@@ -186,17 +186,17 @@ function UserProfilePage() {
       },
     ],
     queryFn: ({ pageParam = 0 }) =>
-      ItemsService.readItems({
-        ownerId: userId,
+      Items.readItems({
+        owner_id: userId,
         skip: pageParam as number,
         limit,
-        sortBy: sort_by,
-        sortOrder: sort_order,
+        sort_by: sort_by,
+        sort_order: sort_order,
         category,
         genre,
         subject,
         author,
-        itemType: item_type as any,
+        item_type: item_type as any,
         q,
         minimal: true,
       }),
@@ -223,11 +223,11 @@ function UserProfilePage() {
   } = useInfiniteQuery({
     queryKey: ["itemFacetsInfinite", userId, organize_by, q, item_type],
     queryFn: ({ pageParam = 0 }) =>
-      ItemsService.readItemFacets({
-        ownerId: userId,
-        groupBy: organize_by,
+      Items.readItemFacets({
+        owner_id: userId,
+        group_by: organize_by,
         q,
-        itemType: item_type,
+        item_type: item_type,
         skip: pageParam as number,
         limit: COLLECTIONS_LIMIT,
       }),
@@ -245,7 +245,7 @@ function UserProfilePage() {
 
   const friendMutation = useMutation({
     mutationFn: (userId: string) =>
-      FriendsService.createFriendRequest({ friendId: userId }),
+      Friends.createFriendRequest({ friend_id: userId }),
     onSuccess: () => {
       showSuccessToast("Friend request sent!")
       queryClient.invalidateQueries({ queryKey: ["user", userId] })
@@ -255,7 +255,7 @@ function UserProfilePage() {
 
   const removeFriendMutation = useMutation({
     mutationFn: (userId: string) =>
-      FriendsService.removeFriend({ friendId: userId }),
+      Friends.removeFriend({ friend_id: userId }),
     onSuccess: () => {
       showSuccessToast("Friend removed")
       setIsRemoveFriendModalOpen(false)

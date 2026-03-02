@@ -1,8 +1,8 @@
 import {
-  CommunitiesService,
+  Communities,
   type ItemPublic,
   type LoanPublic,
-  LoansService,
+  Loans,
 } from "@/client"
 import { ItemActionsMenu } from "@/components/Common/ItemActionsMenu"
 import { useColorModeValue } from "@/components/ui/color-mode"
@@ -60,7 +60,7 @@ export const CompactItemCard = ({
 
   const { data: community } = useQuery({
     queryKey: ["community", communityId],
-    queryFn: () => CommunitiesService.readCommunity({ id: communityId! }),
+    queryFn: () => Communities.readCommunity({ id: communityId! }),
     enabled: !!communityId,
   })
 
@@ -71,7 +71,7 @@ export const CompactItemCard = ({
   // Fetch loan context
   const { data: outgoingLoans } = useQuery({
     queryKey: ["loans", "outgoing"],
-    queryFn: () => LoansService.readOutgoingLoanRequests({}),
+    queryFn: () => Loans.readOutgoingLoanRequests({}),
     enabled: !!user,
   })
 
@@ -91,7 +91,7 @@ export const CompactItemCard = ({
   const borderColor = useColorModeValue("gray.200", "gray.700")
 
   const cancelLoanMutation = useMutation({
-    mutationFn: () => LoansService.cancelLoan({ id: currentLoan!.id }),
+    mutationFn: () => Loans.cancelLoan({ id: currentLoan!.id }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["loans"] })
       queryClient.invalidateQueries({ queryKey: ["communityLoans"] })
@@ -100,7 +100,7 @@ export const CompactItemCard = ({
 
   const signalReturnMutation = useMutation({
     mutationFn: () =>
-      LoansService.signalReturn({ id: (loanProp?.id || currentLoan?.id)! }),
+      Loans.signalReturn({ id: (loanProp?.id || currentLoan?.id)! }),
     onSuccess: (updatedLoan) => {
       queryClient.invalidateQueries({ queryKey: ["loans"] })
       queryClient.invalidateQueries({ queryKey: ["communityLoans"] })

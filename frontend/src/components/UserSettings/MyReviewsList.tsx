@@ -12,12 +12,12 @@ import {
 import { useQuery } from "@tanstack/react-query"
 import { format } from "date-fns"
 import { FiStar } from "react-icons/fi"
-import { ReviewsService } from "../../client"
+import { Reviews } from "../../client"
 
 const MyReviewsList = () => {
   const { data: reviews, isLoading } = useQuery({
     queryKey: ["reviews", "me"],
-    queryFn: () => ReviewsService.readMyReviews(),
+    queryFn: () => Reviews.readMyReviews(),
   })
 
   const borderColor = useColorModeValue("gray.200", "gray.700")

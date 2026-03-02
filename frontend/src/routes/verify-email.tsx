@@ -10,7 +10,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useEffect } from "react"
 import { z } from "zod"
-import { type ApiError, LoginService, type Token } from "../client"
+import { Login, type Token } from "../client"
 
 const verifyEmailSearchSchema = z.object({
   token: z.string(),
@@ -27,7 +27,7 @@ function VerifyEmail() {
   const queryClient = useQueryClient()
 
   const mutation = useMutation({
-    mutationFn: (token: string) => LoginService.verifyEmail({ token }),
+    mutationFn: (token: string) => Login.verifyEmail({ token }),
     onSuccess: (data: Token) => {
       localStorage.setItem("access_token", data.access_token)
       queryClient.invalidateQueries({ queryKey: ["currentUser"] })
@@ -62,8 +62,8 @@ function VerifyEmail() {
       </VStack>
     )
   } else if (mutation.isError) {
-    const error = mutation.error as ApiError
-    const errDetail = (error.body as any)?.detail || "Verification failed."
+    const error = mutation.error as any
+    const errDetail = (error as any)?.detail || "Verification failed."
 
     content = (
       <VStack gap={6}>

@@ -12,7 +12,7 @@ import { Link } from "@tanstack/react-router"
 import { useState } from "react"
 import { FiBell, FiLogOut, FiSettings, FiUser } from "react-icons/fi"
 
-import { NotificationsService } from "@/client"
+import { Notifications } from "@/client"
 import useAuth from "@/hooks/useAuth"
 import { useNotifications } from "@/hooks/useNotifications"
 import {
@@ -48,7 +48,7 @@ const UserMenu = () => {
   }
 
   const markAllAsReadMutation = useMutation({
-    mutationFn: () => NotificationsService.markAllNotificationsAsRead(),
+    mutationFn: () => Notifications.markAllNotificationsAsRead(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notifications"] })
     },

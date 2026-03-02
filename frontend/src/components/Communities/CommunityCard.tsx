@@ -13,7 +13,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { FiStar } from "react-icons/fi"
 
-import { CommunitiesService } from "@/client"
+import { Communities } from "@/client"
 import EditCommunity from "@/components/Communities/EditCommunity"
 import { useColorModeValue } from "@/components/ui/color-mode"
 import type { CommunityPublicExtended } from "@/customTypes"
@@ -41,7 +41,7 @@ const CommunityCard = ({
   const isPrivate = community.is_private
 
   const joinMutation = useMutation({
-    mutationFn: () => CommunitiesService.joinCommunity({ id: community.id }),
+    mutationFn: () => Communities.joinCommunity({ id: community.id }),
     onSuccess: () => {
       showSuccessToast("Joined community!")
       queryClient.invalidateQueries({ queryKey: ["communities"] })
@@ -54,7 +54,7 @@ const CommunityCard = ({
 
   const favoriteMutation = useMutation({
     mutationFn: () =>
-      CommunitiesService.toggleFavoriteCommunity({ id: community.id }),
+      Communities.toggleFavoriteCommunity({ id: community.id }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["communitiesInfinite"] })
       queryClient.invalidateQueries({ queryKey: ["browseCommunitiesInfinite"] })

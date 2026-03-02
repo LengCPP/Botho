@@ -13,7 +13,6 @@ import { useState } from "react"
 import { BsThreeDotsVertical } from "react-icons/bs"
 import { FiAward, FiEdit2, FiShare2, FiUser } from "react-icons/fi"
 
-import type { ApiError } from "@/client"
 import EditProfileModal from "@/components/UserSettings/EditProfileModal"
 import ReputationOverview from "@/components/UserSettings/ReputationOverview"
 import UserInformation from "@/components/UserSettings/UserInformation"
@@ -44,7 +43,7 @@ function Profile() {
       await navigator.clipboard.writeText(formattedId)
       showSuccessToast("User ID copied to clipboard!")
     } catch (err) {
-      handleError({ message: "Failed to copy to clipboard" } as ApiError)
+      handleError({ message: "Failed to copy to clipboard" } as any)
     }
   }
 

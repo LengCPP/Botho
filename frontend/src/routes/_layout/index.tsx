@@ -24,7 +24,7 @@ import {
   FiZap,
 } from "react-icons/fi"
 
-import { DashboardService, ItemsService } from "@/client"
+import { Dashboard, Items } from "@/client"
 import { LoanCalendar } from "@/components/Home/LoanCalendar"
 import { QuickSearch } from "@/components/Home/QuickSearch"
 import { ItemListItem } from "@/components/Items/ItemListItem"
@@ -50,17 +50,17 @@ function HomePage() {
 
   const { data: stats } = useQuery({
     queryKey: ["home-stats"],
-    queryFn: () => DashboardService.getDashboardStats(),
+    queryFn: () => Dashboard.getDashboardStats(),
   })
 
   const { data: recentActivity, isLoading: activityLoading } = useQuery({
     queryKey: ["recent-activity"],
-    queryFn: () => DashboardService.getRecentActivity({ limit: 20 }),
+    queryFn: () => Dashboard.getRecentActivity({ limit: 20 }),
   })
 
   const { data: recommendations, isLoading: recsLoading } = useQuery({
     queryKey: ["recommendations"],
-    queryFn: () => ItemsService.recommendItems({ limit: 20 }),
+    queryFn: () => Items.recommendItems({ limit: 20 }),
   })
 
   const groupedArrivals = groupItems(recentActivity?.data || [])

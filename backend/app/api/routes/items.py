@@ -1408,7 +1408,7 @@ def read_items(
             ).all()
             facets = {
                 "item_type": {
-                    str(t): {"name": str(t), "count": c}
+                    str(t): c
                     for t, c in type_facet_rows
                 }
             }

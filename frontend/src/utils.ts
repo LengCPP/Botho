@@ -1,5 +1,4 @@
-import type { ApiError } from "./client"
-import { OpenAPI } from "./client"
+import { client } from "./client/client.gen"
 import useCustomToast from "./hooks/useCustomToast"
 
 export const emailPattern = {
@@ -45,19 +44,19 @@ export const confirmPasswordRules = (
   return rules
 }
 
-export const handleError = (err: ApiError | Error) => {
+export const handleError = (err: unknown) => {
   const { showErrorToast } = useCustomToast()
   console.error(err)
   let errorMessage = "Something went wrong."
 
-  if ("body" in err && (err.body as any)?.detail) {
-    const errDetail = (err.body as any).detail
+  if (err && typeof err === "object" && "detail" in err) {
+    const errDetail = (err as any).detail
     if (Array.isArray(errDetail) && errDetail.length > 0) {
       errorMessage = errDetail[0].msg
     } else if (typeof errDetail === "string") {
       errorMessage = errDetail
     }
-  } else if (err.message) {
+  } else if (err instanceof Error) {
     errorMessage = err.message
   }
 
@@ -90,7 +89,7 @@ export const getImageUrl = (
 ): string | undefined => {
   if (!url) return undefined
   if (url.startsWith("http")) return url
-  if (url.startsWith("/api")) return `${OpenAPI.BASE}${url}`
+  if (url.startsWith("/api")) return `${client.getConfig().baseUrl}${url}`
   return url
 }
 

@@ -1,9 +1,9 @@
 import {
-  CommunitiesService,
+  Communities,
   type CommunityPublic,
   type ItemPublic,
-  ItemsService,
-  LoansService,
+  Items,
+  Loans,
 } from "@/client"
 import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
@@ -78,7 +78,7 @@ export const FriendItemActionsMenu = ({
   // Fetch user's outgoing loans to check status
   const { data: outgoingLoans } = useQuery({
     queryKey: ["loans", "outgoing"],
-    queryFn: () => LoansService.readOutgoingLoanRequests({}),
+    queryFn: () => Loans.readOutgoingLoanRequests({}),
     enabled: !!currentUser,
   })
 
@@ -95,7 +95,7 @@ export const FriendItemActionsMenu = ({
   // Check if user already has a copy
   const { data: myItemsData } = useQuery({
     queryKey: ["items", "me"],
-    queryFn: () => ItemsService.readItems({ ownerId: currentUser?.id }),
+    queryFn: () => Items.readItems({ owner_id: currentUser?.id }),
     enabled: !!currentUser,
   })
 
@@ -107,7 +107,7 @@ export const FriendItemActionsMenu = ({
   )
 
   const cancelLoanMutation = useMutation({
-    mutationFn: () => LoansService.cancelLoan({ id: currentLoan!.id }),
+    mutationFn: () => Loans.cancelLoan({ id: currentLoan!.id }),
     onSuccess: () => {
       showSuccessToast("Loan request cancelled.")
       queryClient.invalidateQueries({ queryKey: ["loans"] })
@@ -119,7 +119,7 @@ export const FriendItemActionsMenu = ({
 
   const signalReturnMutation = useMutation({
     mutationFn: () =>
-      LoansService.signalReturn({ id: (loanId || currentLoan?.id)! }),
+      Loans.signalReturn({ id: (loanId || currentLoan?.id)! }),
     onSuccess: () => {
       showSuccessToast("Return signaled to owner.")
       queryClient.invalidateQueries({ queryKey: ["loans"] })
@@ -131,9 +131,9 @@ export const FriendItemActionsMenu = ({
 
   const donateMutation = useMutation({
     mutationFn: () =>
-      CommunitiesService.initiateDonation({
+      Communities.initiateDonation({
         id: communityId!,
-        itemId: item.id,
+        item_id: item.id,
       }),
     onSuccess: () => {
       showSuccessToast("Donation request sent!")
@@ -149,7 +149,7 @@ export const FriendItemActionsMenu = ({
 
   const ratifyDonationMutation = useMutation({
     mutationFn: () =>
-      CommunitiesService.ratifyDonation({ id: communityId!, itemId: item.id }),
+      Communities.ratifyDonation({ id: communityId!, item_id: item.id }),
     onSuccess: () => {
       showSuccessToast("Donation ratified!")
       queryClient.invalidateQueries({
@@ -163,9 +163,9 @@ export const FriendItemActionsMenu = ({
 
   const removeItemMutation = useMutation({
     mutationFn: () =>
-      CommunitiesService.removeItemFromCommunity({
+      Communities.removeItemFromCommunity({
         id: communityId!,
-        itemId: item.id,
+        item_id: item.id,
       }),
     onSuccess: () => {
       showSuccessToast("Item removed from community")
@@ -180,7 +180,7 @@ export const FriendItemActionsMenu = ({
   })
 
   const duplicateMutation = useMutation({
-    mutationFn: () => ItemsService.duplicateItem({ id: item.id }),
+    mutationFn: () => Items.duplicateItem({ id: item.id }),
     onSuccess: () => {
       showSuccessToast("Item added to your collection!")
       queryClient.invalidateQueries({ queryKey: ["items"] })

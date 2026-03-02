@@ -1,4 +1,4 @@
-import { type CommunityPublic, type ItemPublic, LoansService } from "@/client"
+import { type CommunityPublic, type ItemPublic, Loans } from "@/client"
 import {
   DialogBody,
   DialogCloseTrigger,
@@ -47,7 +47,7 @@ export function LoanRequestModal({
       start_date: string
       end_date: string
       community_id?: string
-    }) => LoansService.createLoanRequest({ requestBody: data }),
+    }) => Loans.createLoanRequest({ loanCreate: data }),
     onSuccess: () => {
       showSuccessToast("Loan request sent!")
       queryClient.invalidateQueries({ queryKey: ["loans"] })

@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useRef, useState } from "react"
 import { FiCamera } from "react-icons/fi"
 
-import { UsersService } from "@/client"
+import { Users } from "@/client"
 import ImageCropModal from "@/components/Common/ImageCropModal"
 import UserAvatar from "@/components/Common/UserAvatar"
 import type { UserPublicExtended } from "@/customTypes"
@@ -29,7 +29,7 @@ const UserProfilePicture = ({
 
   const uploadMutation = useMutation({
     mutationFn: (file: File) => {
-      return UsersService.uploadUserProfilePicture({ formData: { file: file } })
+      return Users.uploadUserProfilePicture({ bodyUsersUploadUserProfilePicture: { file: file } })
     },
     onSuccess: () => {
       showSuccessToast("Profile picture updated successfully.")

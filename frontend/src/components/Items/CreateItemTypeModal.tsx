@@ -9,7 +9,7 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 
-import { ItemTypesService } from "@/client"
+import { Types } from "@/client"
 import useCustomToast from "@/hooks/useCustomToast"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Field } from "@/components/ui/field"
@@ -81,7 +81,7 @@ export function CreateItemTypeModal({
 
   const mutation = useMutation({
     mutationFn: (body: { name: string; enabled_fields: string[]; label_field: string }) =>
-      ItemTypesService.createItemType({ requestBody: body }),
+      Types.createItemType({ itemTypeDefinitionCreate: body }),
     onSuccess: (data) => {
       showSuccessToast(`Item type "${data.name}" created.`)
       queryClient.invalidateQueries({ queryKey: ["item-type-definitions"] })

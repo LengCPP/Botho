@@ -24,7 +24,7 @@ import {
   FiShare2,
 } from "react-icons/fi"
 
-import { type ItemPublic, type LoanPublic, LoansService } from "@/client"
+import { type ItemPublic, type LoanPublic, Loans } from "@/client"
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import ForgiveModal from "@/components/Common/ForgiveModal"
 import ReviewModal from "@/components/Common/ReviewModal"
@@ -73,12 +73,12 @@ function LoansPage() {
 
   const { data: incoming, isLoading: isLoadingIn } = useQuery({
     queryKey: ["loans", "incoming"],
-    queryFn: () => LoansService.readIncomingLoanRequests({}),
+    queryFn: () => Loans.readIncomingLoanRequests({}),
   })
 
   const { data: outgoing, isLoading: isLoadingOut } = useQuery({
     queryKey: ["loans", "outgoing"],
-    queryFn: () => LoansService.readOutgoingLoanRequests({}),
+    queryFn: () => Loans.readOutgoingLoanRequests({}),
   })
 
   const isLoading = isLoadingIn || isLoadingOut
@@ -249,27 +249,27 @@ function LoansPage() {
     }: { loan: LoanPublic; action: string; params?: any }) => {
       switch (action) {
         case "cancel":
-          return LoansService.cancelLoan({ id: loan.id })
+          return Loans.cancelLoan({ id: loan.id })
         case "respond":
-          return LoansService.respondToLoanRequest({
+          return Loans.respondToLoanRequest({
             id: loan.id,
             accept: params.accept,
           })
         case "ratify":
-          return LoansService.ratifyLoan({ id: loan.id })
+          return Loans.ratifyLoan({ id: loan.id })
         case "return":
-          return LoansService.returnLoan({ id: loan.id })
+          return Loans.returnLoan({ id: loan.id })
         case "extension":
-          return LoansService.respondToExtensionRequest({
+          return Loans.respondToExtensionRequest({
             id: loan.id,
             accept: params.accept,
           })
         case "remind":
-          return LoansService.sendReturnReminder({ id: loan.id })
+          return Loans.sendReturnReminder({ id: loan.id })
         case "default":
-          return LoansService.markLoanDefaulted({ id: loan.id })
+          return Loans.markLoanDefaulted({ id: loan.id })
         case "signalReturn":
-          return LoansService.signalReturn({ id: loan.id })
+          return Loans.signalReturn({ id: loan.id })
         default:
           throw new Error("Unknown action")
       }

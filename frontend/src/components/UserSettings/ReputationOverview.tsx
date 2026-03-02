@@ -1,4 +1,4 @@
-import { ReviewsService, UsersService } from "@/client"
+import { Reviews, Users } from "@/client"
 import { useColorModeValue } from "@/components/ui/color-mode"
 import {
   Badge,
@@ -19,12 +19,12 @@ import { FiAlertCircle, FiAward, FiStar, FiTrendingUp } from "react-icons/fi"
 const ReputationOverview = () => {
   const { data: reputation, isLoading } = useQuery({
     queryKey: ["reputation", "me"],
-    queryFn: () => UsersService.readUserReputationMe(),
+    queryFn: () => Users.readUserReputationMe(),
   })
 
   const { data: reviews } = useQuery({
     queryKey: ["reviews", "me"],
-    queryFn: () => ReviewsService.readMyReviews(),
+    queryFn: () => Reviews.readMyReviews(),
   })
 
   const avgRating =

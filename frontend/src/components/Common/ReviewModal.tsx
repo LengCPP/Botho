@@ -1,6 +1,6 @@
 import {
   type LoanPublic,
-  ReviewsService,
+  Reviews,
   type UserReviewCreate,
 } from "@/client"
 import useAuth from "@/hooks/useAuth"
@@ -67,7 +67,7 @@ const ReviewModal = ({ loan, isOpen, onClose }: ReviewModalProps) => {
 
   const mutation = useMutation({
     mutationFn: (data: UserReviewCreate) =>
-      ReviewsService.createReview({ requestBody: data }),
+      Reviews.createReview({ userReviewCreate: data }),
     onSuccess: () => {
       showSuccessToast("Review submitted successfully!")
       // Invalidate all loan and item related queries to update UI state immediately

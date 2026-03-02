@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { FiTrash2 } from "react-icons/fi"
 
-import { ItemsService } from "@/client"
+import { Items } from "@/client"
 import useCustomToast from "@/hooks/useCustomToast"
 import ConfirmationModal from "../Common/ConfirmationModal"
 
@@ -27,7 +27,7 @@ const DeleteItem = ({
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
   const deleteItem = async (id: string) => {
-    await ItemsService.deleteItem({ id: id })
+    await Items.deleteItem({ id: id })
   }
 
   const mutation = useMutation({

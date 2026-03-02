@@ -12,7 +12,7 @@ import {
 import { useQuery } from "@tanstack/react-query"
 import { FaStar } from "react-icons/fa"
 
-import { type ItemPublic, ItemsService } from "@/client"
+import { type ItemPublic, Items } from "@/client"
 import { formatTypeName } from "@/utils"
 import {
   DialogBody,
@@ -32,7 +32,7 @@ interface ItemDetailModalProps {
 function ReviewSection({ author, title }: { author: string; title: string }) {
   const { data: reviews, isLoading } = useQuery({
     queryKey: ["itemReviews", author, title],
-    queryFn: () => ItemsService.readReviews({ author, title }),
+    queryFn: () => Items.readReviews({ author, title }),
   })
 
   return (

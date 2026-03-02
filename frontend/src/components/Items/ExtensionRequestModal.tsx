@@ -1,4 +1,4 @@
-import { LoansService } from "@/client"
+import { Loans } from "@/client"
 import {
   DialogBody,
   DialogCloseTrigger,
@@ -36,9 +36,9 @@ export function ExtensionRequestModal({
 
   const mutation = useMutation({
     mutationFn: (date: string) =>
-      LoansService.createExtensionRequest({
+      Loans.createExtensionRequest({
         id: loanId,
-        newEndDate: date,
+        new_end_date: date,
       }),
     onSuccess: () => {
       showSuccessToast("Extension request sent!")

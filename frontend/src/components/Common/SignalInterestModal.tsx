@@ -1,4 +1,4 @@
-import { LoansService } from "@/client"
+import { Loans } from "@/client"
 import { Button } from "@/components/ui/button"
 import {
   DialogBody,
@@ -31,7 +31,7 @@ const SignalInterestModal = ({
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
   const signalInterestMutation = useMutation({
-    mutationFn: () => LoansService.signalItemInterest({ itemId }),
+    mutationFn: () => Loans.signalItemInterest({ item_id: itemId }),
     onSuccess: () => {
       showSuccessToast("You'll be notified when this item becomes available.")
       queryClient.invalidateQueries({ queryKey: ["my-interest-signals"] })

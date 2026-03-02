@@ -18,7 +18,7 @@ import {
 import { useEffect, useRef, useState } from "react"
 import { FiPlus, FiX } from "react-icons/fi"
 
-import { InterestsService } from "@/client"
+import { Interests } from "@/client"
 import useCustomToast from "@/hooks/useCustomToast"
 
 interface Interest {
@@ -66,7 +66,7 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
 
   const { data: interests = [], isLoading } = useQuery({
     queryKey: ["interests", debouncedSearchTerm],
-    queryFn: () => InterestsService.readInterests({ q: debouncedSearchTerm }),
+    queryFn: () => Interests.readInterests({ q: debouncedSearchTerm }),
     enabled: isOpen,
     placeholderData: keepPreviousData,
   })
@@ -74,12 +74,12 @@ const InterestsSelect = ({ selectedIds, onChange }: InterestsSelectProps) => {
   // Fetch all for mapping names (caching strategy)
   const { data: allInterests = [] } = useQuery({
     queryKey: ["interests-all"],
-    queryFn: () => InterestsService.readInterests({ limit: 1000 }),
+    queryFn: () => Interests.readInterests({ limit: 1000 }),
   })
 
   const createInterestMutation = useMutation({
     mutationFn: (name: string) =>
-      InterestsService.createInterest({ requestBody: { name } }),
+      Interests.createInterest({ interestCreate: { name } }),
     onSuccess: (newInterest) => {
       showSuccessToast("Interest added!")
       if (!selectedIds.includes(newInterest.id)) {

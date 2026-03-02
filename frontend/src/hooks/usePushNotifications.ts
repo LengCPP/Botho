@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { NotificationsService } from "../client"
+import { Notifications } from "../client"
 import useAuth from "./useAuth"
 import useCustomToast from "./useCustomToast"
 
@@ -64,7 +64,7 @@ export const usePushNotifications = () => {
       }
 
       const { publicKey } =
-        (await NotificationsService.getVapidPublicKey()) as any
+        (await Notifications.getVapidPublicKey()) as any
       const subscribeOptions = {
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(publicKey),
@@ -76,8 +76,8 @@ export const usePushNotifications = () => {
 
       const subJSON = sub.toJSON()
       if (subJSON.endpoint && subJSON.keys?.p256dh && subJSON.keys?.auth) {
-        await NotificationsService.subscribePush({
-          requestBody: {
+        await Notifications.subscribePush({
+          pushSubscriptionCreate: {
             endpoint: subJSON.endpoint,
             p256dh: subJSON.keys.p256dh,
             auth: subJSON.keys.auth,
@@ -101,7 +101,7 @@ export const usePushNotifications = () => {
     setIsLoading(true)
     try {
       await subscription.unsubscribe()
-      await NotificationsService.unsubscribePush({
+      await Notifications.unsubscribePush({
         endpoint: subscription.endpoint,
       })
       setSubscription(null)

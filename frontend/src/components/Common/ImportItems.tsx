@@ -1,4 +1,4 @@
-import { ImportsService, ItemsService, type StagedItemPublic } from "@/client"
+import { Imports, Items, type StagedItemPublic } from "@/client"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   DialogActionTrigger,
@@ -252,7 +252,7 @@ export const ImportItems = ({
   const { data: stagedItems, isLoading: isStagedLoading } = useQuery({
     queryKey: ["stagedItems", communityId, isArchiveImport, page],
     queryFn: () =>
-      ImportsService.readStagedItems({
+      Imports.readStagedItems({
         communityId,
         skip: page * limit,
         limit,
@@ -340,7 +340,7 @@ export const ImportItems = ({
 
   const bulkUpdateMutation = useMutation({
     mutationFn: (data: Record<string, any>) =>
-      (ImportsService as any).bulkUpdateStagedItems({ requestBody: data }),
+      (Imports as any).bulkUpdateStagedItems({ body: data }),
     onSuccess: () => {
       showSuccessToast("Changes saved.")
       setPendingEdits({})
@@ -355,8 +355,8 @@ export const ImportItems = ({
   const processMutation = useMutation({
     mutationFn: (ids: string[]) =>
       isArchiveImport
-        ? ImportsService.syncArchiveItems({ requestBody: ids })
-        : ImportsService.processStagedItems({ requestBody: ids, communityId }),
+        ? Imports.syncArchiveItems({ body: ids })
+        : Imports.processStagedItems({ body: ids, communityId }),
     onSuccess: () => {
       showSuccessToast("Processing started.")
       setSelectedIds([])
@@ -371,7 +371,7 @@ export const ImportItems = ({
   const deleteSelectedMutation = useMutation({
     mutationFn: async () => {
       await Promise.all(
-        selectedIds.map((id) => ImportsService.deleteStagedItem({ id })),
+        selectedIds.map((id) => Imports.deleteStagedItem({ id })),
       )
     },
     onSuccess: () => {
@@ -450,8 +450,8 @@ export const ImportItems = ({
     let totalStaged = 0
     try {
       for (let i = 0; i < chunks.length; i++) {
-        const result: any = await ImportsService.stageItems({
-          requestBody: chunks[i],
+        const result: any = await Imports.stageItems({
+          body: chunks[i],
           mapping: JSON.stringify(mapping),
           communityId,
         })

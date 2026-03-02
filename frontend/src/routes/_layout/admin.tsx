@@ -12,7 +12,7 @@ import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { z } from "zod"
 
-import { UsersService } from "@/client"
+import { Users } from "@/client"
 import AddUser from "@/components/Admin/AddUser"
 import { UserActionsMenu } from "@/components/Common/UserActionsMenu"
 import { useColorModeValue } from "@/components/ui/color-mode"
@@ -44,7 +44,7 @@ function Admin() {
   const { data: users, isLoading } = useQuery({
     queryKey: ["users", { page }],
     queryFn: () =>
-      UsersService.readUsers({ skip: (page - 1) * PER_PAGE, limit: PER_PAGE }),
+      Users.readUsers({ skip: (page - 1) * PER_PAGE, limit: PER_PAGE }),
   })
 
   const bgColor = useColorModeValue("main.50", "gray.900")

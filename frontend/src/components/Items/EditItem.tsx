@@ -16,10 +16,9 @@ import { type SubmitHandler, useForm } from "react-hook-form"
 import { FaExchangeAlt, FaPen } from "react-icons/fa"
 
 import {
-  type ApiError,
   type Body_items_update_item,
   type ItemPublic,
-  ItemsService,
+  Items,
 } from "@/client"
 import { useColorModeValue } from "@/components/ui/color-mode"
 import { BOOK_CLASSIFICATION } from "@/constants"
@@ -132,20 +131,20 @@ const EditItem = ({
 
   const mutation = useMutation({
     mutationFn: async (data: {
-      formData: Body_items_update_item
+      body: Body_items_update_item
       workInfo: any
     }) => {
-      const updatedItem = await ItemsService.updateItem({
+      const updatedItem = await Items.updateItem({
         id: item.id,
-        formData: data.formData,
+        bodyItemsUpdateItem: data.body,
       })
 
       // Update work metadata if author/title are present and tags were modified
       if (data.workInfo && updatedItem.author) {
-        await ItemsService.updateWorkMetadata({
+        await Items.updateWorkMetadata({
           author: updatedItem.author,
           title: updatedItem.title,
-          requestBody: data.workInfo,
+          workMetadataUpdate: data.workInfo,
         })
       }
       return updatedItem
@@ -155,7 +154,7 @@ const EditItem = ({
       setImageFile(null)
       setIsOpen(false)
     },
-    onError: (err: ApiError) => {
+    onError: (err: unknown) => {
       handleError(err)
     },
     onSettled: () => {
@@ -187,7 +186,7 @@ const EditItem = ({
         }
       : null
 
-    mutation.mutate({ formData: itemData, workInfo: formattedWorkInfo })
+    mutation.mutate({ body: itemData, workInfo: formattedWorkInfo })
   }
 
   const selectStyle = {

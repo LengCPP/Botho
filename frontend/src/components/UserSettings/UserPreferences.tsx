@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useTheme } from "next-themes"
 import { useEffect } from "react"
 
-import { UsersService } from "@/client"
+import { Users } from "@/client"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Radio, RadioGroup } from "@/components/ui/radio"
 import type { UserPublicExtended, UserSettingsUpdate } from "@/customTypes"
@@ -26,7 +26,7 @@ const UserPreferences = () => {
 
   const mutation = useMutation({
     mutationFn: (data: UserSettingsUpdate) =>
-      UsersService.updateUserSettings({ requestBody: data }),
+      Users.updateUserSettings({ userSettingsSchema: data }),
     onSuccess: () => {
       showSuccessToast("Preferences updated.")
       queryClient.invalidateQueries({ queryKey: ["currentUser"] })

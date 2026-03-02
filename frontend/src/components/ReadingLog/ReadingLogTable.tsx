@@ -28,7 +28,7 @@ import {
 
 import {
   type ReadingLogPublic,
-  ReadingLogService,
+  Log,
   type ReadingLogStatus,
 } from "@/client"
 import { ItemDetailModal } from "@/components/Items/ItemDetailModal"
@@ -69,7 +69,7 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
     useInfiniteQuery({
       queryKey: ["reading-log-infinite", status],
       queryFn: ({ pageParam = 0 }) =>
-        ReadingLogService.readReadingLog({
+        Log.readReadingLog({
           status,
           skip: pageParam as number,
           limit: LOGS_PER_PAGE,
@@ -86,9 +86,9 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
       id,
       newStatus,
     }: { id: string; newStatus: ReadingLogStatus }) =>
-      ReadingLogService.updateReadingLogEntry({
+      Log.updateReadingLogEntry({
         id,
-        requestBody: { status: newStatus },
+        readingLogUpdate: { status: newStatus },
       }),
     onSuccess: () => {
       showSuccessToast("Status updated")
@@ -98,7 +98,7 @@ const ReadingLogTable = ({ status }: ReadingLogTableProps) => {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => ReadingLogService.deleteReadingLogEntry({ id }),
+    mutationFn: (id: string) => Log.deleteReadingLogEntry({ id }),
     onSuccess: () => {
       showSuccessToast("Entry removed")
       queryClient.invalidateQueries({ queryKey: ["reading-log-infinite"] })

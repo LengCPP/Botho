@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { FiUserPlus } from "react-icons/fi"
 
-import { CommunitiesService, FriendsService } from "@/client"
+import { Communities, Friends } from "@/client"
 import {
   DialogBody,
   DialogCloseTrigger,
@@ -30,7 +30,7 @@ export default function InviteFriend({
 
   const { data: friends, isLoading: isLoadingFriends } = useQuery({
     queryKey: ["friends"],
-    queryFn: () => FriendsService.readFriends({ limit: 100 }),
+    queryFn: () => Friends.readFriends({ limit: 100 }),
     enabled: isOpen,
   })
 
@@ -38,7 +38,7 @@ export default function InviteFriend({
   const { data: allMembers, isLoading: isLoadingMembers } = useQuery({
     queryKey: ["communityMembersAll", communityId],
     queryFn: () =>
-      CommunitiesService.readCommunityMembers({
+      Communities.readCommunityMembers({
         id: communityId,
         limit: 1000,
       }),
@@ -47,9 +47,9 @@ export default function InviteFriend({
 
   const inviteMutation = useMutation({
     mutationFn: (friendId: string) =>
-      CommunitiesService.inviteFriend({
+      Communities.inviteFriend({
         id: communityId,
-        requestBody: { friend_id: friendId },
+        communityInvitationCreate: { friend_id: friendId },
       }),
     onSuccess: () => {
       showSuccessToast("Invitation sent!")

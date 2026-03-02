@@ -12,7 +12,7 @@ import { useEffect, useState } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { FaPen } from "react-icons/fa"
 
-import { type ItemPublic, type ItemReviewCreate, ItemsService } from "@/client"
+import { type ItemPublic, type ItemReviewCreate, Items } from "@/client"
 import { Rating } from "@/components/Common/Rating"
 import {
   DialogBody,
@@ -47,7 +47,7 @@ const AddReview = ({ item }: AddReviewProps) => {
   const { data: reviewsData } = useQuery({
     queryKey: ["reviews", item.author, item.title],
     queryFn: () =>
-      ItemsService.readReviews({
+      Items.readReviews({
         author: item.author || "",
         title: item.title,
       }),
@@ -60,8 +60,8 @@ const AddReview = ({ item }: AddReviewProps) => {
   const { data: conditionData } = useQuery({
     queryKey: ["condition-ratings", item.id],
     queryFn: () =>
-      ItemsService.readItemConditionRatings({
-        itemId: item.id,
+      Items.readItemConditionRatings({
+        item_id: item.id,
       }),
     enabled: !!item.had_possession,
   })
@@ -102,8 +102,8 @@ const AddReview = ({ item }: AddReviewProps) => {
   const mutation = useMutation({
     mutationFn: async (data: CombinedReviewForm) => {
       // Create/Update Review
-      const reviewPromise = ItemsService.createReview({
-        requestBody: {
+      const reviewPromise = Items.createReview({
+        itemReviewCreate: {
           author: data.author,
           title: data.title,
           rating: data.rating,
@@ -113,8 +113,8 @@ const AddReview = ({ item }: AddReviewProps) => {
 
       // Create/Update Condition Rating if possessed
       if (item.had_possession && data.condition_grade) {
-        await ItemsService.createConditionRating({
-          requestBody: {
+        await Items.createConditionRating({
+          itemConditionRatingCreate: {
             item_id: item.id,
             grade: data.condition_grade,
             notes: data.condition_notes,

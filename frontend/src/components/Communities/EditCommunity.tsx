@@ -11,8 +11,8 @@ import { useState } from "react"
 import { Controller, type SubmitHandler, useForm } from "react-hook-form"
 import { FiEdit } from "react-icons/fi"
 
-import { CommunitiesService } from "@/client"
-import type { ApiError } from "@/client/core/ApiError"
+import { Communities } from "@/client"
+
 import type { CommunityUpdate } from "@/client/types.gen"
 import type {
   CommunityPublicExtended,
@@ -59,15 +59,15 @@ const EditCommunity = ({ community }: EditCommunityProps) => {
 
   const mutation = useMutation({
     mutationFn: (data: CommunityUpdateExtended) =>
-      CommunitiesService.updateCommunity({
+      Communities.updateCommunity({
         id: community.id,
-        requestBody: data as unknown as CommunityUpdate,
+        communityUpdate: data as unknown as CommunityUpdate,
       }),
     onSuccess: () => {
       showSuccessToast("Community updated successfully.")
       setIsOpen(false)
     },
-    onError: (err: ApiError) => {
+    onError: (err: unknown) => {
       handleError(err)
     },
     onSettled: () => {

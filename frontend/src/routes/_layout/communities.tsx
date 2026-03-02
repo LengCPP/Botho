@@ -19,7 +19,7 @@ import { useState } from "react"
 import { FiGlobe, FiUsers } from "react-icons/fi"
 import { z } from "zod"
 
-import { CommunitiesService } from "@/client"
+import { Communities } from "@/client"
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import AddCommunity from "@/components/Communities/AddCommunity"
 import CommunityCard from "@/components/Communities/CommunityCard"
@@ -33,7 +33,7 @@ const communitiesSearchSchema = z.object({
 const PER_PAGE = 12
 
 export const Route = createFileRoute("/_layout/communities")({
-  component: Communities,
+  component: CommunitiesPage,
   validateSearch: (search) => communitiesSearchSchema.parse(search),
 })
 
@@ -65,7 +65,7 @@ function CommunitySection({
   )
 }
 
-function Communities() {
+function CommunitiesPage() {
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const [selectedCommunityForJoin, setSelectedCommunityForJoin] =
@@ -81,8 +81,8 @@ function Communities() {
   } = useInfiniteQuery({
     queryKey: ["communitiesInfinite"],
     queryFn: ({ pageParam = 0 }) =>
-      CommunitiesService.readCommunities({
-        memberOnly: true,
+      Communities.readCommunities({
+        member_only: true,
         skip: pageParam as number,
         limit: PER_PAGE,
       }),
@@ -103,7 +103,7 @@ function Communities() {
   } = useInfiniteQuery({
     queryKey: ["browseCommunitiesInfinite"],
     queryFn: ({ pageParam = 0 }) =>
-      CommunitiesService.readCommunities({
+      Communities.readCommunities({
         browse: true,
         skip: pageParam as number,
         limit: PER_PAGE,
@@ -116,7 +116,7 @@ function Communities() {
   })
 
   const joinMutation = useMutation({
-    mutationFn: (id: string) => CommunitiesService.joinCommunity({ id }),
+    mutationFn: (id: string) => Communities.joinCommunity({ id }),
     onSuccess: () => {
       showSuccessToast("Application sent to admins!")
       setSelectedCommunityForJoin(null)

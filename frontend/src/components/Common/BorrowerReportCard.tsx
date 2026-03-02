@@ -1,4 +1,4 @@
-import { UsersService } from "@/client"
+import { Users } from "@/client"
 import { useColorModeValue } from "@/components/ui/color-mode"
 import {
   Badge,
@@ -48,7 +48,7 @@ const BorrowerReportCard = ({ userId }: BorrowerReportCardProps) => {
     error,
   } = useQuery({
     queryKey: ["report-card", userId],
-    queryFn: () => UsersService.readUserReportCard({ userId }),
+    queryFn: () => Users.readUserReportCard({ user_id: userId }),
   })
 
   const borderColor = useColorModeValue("gray.200", "gray.700")

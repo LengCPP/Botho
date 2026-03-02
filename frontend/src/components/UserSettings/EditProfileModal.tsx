@@ -9,8 +9,7 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 
-import { OpenAPI, UsersService } from "@/client"
-import { request as apiRequest } from "@/client/core/request"
+import { Users } from "@/client"
 import type {
   UserProfileUpdate,
   UserPublicExtended,
@@ -74,13 +73,8 @@ const EditProfileModal = ({ user, isOpen, onClose }: EditProfileModalProps) => {
       }
 
       await Promise.all([
-        UsersService.updateUserMe({ requestBody: userUpdate }),
-        apiRequest(OpenAPI, {
-          method: "PATCH",
-          url: "/api/v1/users/me/profile",
-          body: profileUpdate,
-          mediaType: "application/json",
-        }),
+        Users.updateUserMe({ userUpdateMe: userUpdate }),
+        Users.updateUserProfile({ userProfileUpdate: profileUpdate }),
       ])
     },
     onSuccess: () => {

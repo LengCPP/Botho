@@ -21,11 +21,11 @@ import { FiCamera } from "react-icons/fi"
 
 import {
   type Body_items_create_item,
-  CommunitiesService,
-  ItemsService,
-  UtilsService,
+  Communities,
+  Items,
+  Utils,
 } from "@/client"
-import type { ApiError } from "@/client/core/ApiError"
+
 import { BookSearchInput } from "@/components/BookSearchInput"
 import BarcodeScanner from "@/components/Common/BarcodeScanner"
 import { useColorModeValue } from "@/components/ui/color-mode"
@@ -155,8 +155,8 @@ const AddItem = ({
   const { data: myItems } = useQuery({
     queryKey: ["my-items-for-community"],
     queryFn: () =>
-      ItemsService.readItems({
-        ownerId: currentUser?.id,
+      Items.readItems({
+        owner_id: currentUser?.id,
       }),
     enabled: isOpen && !!communityId && mode === "pool" && !!currentUser,
   })
@@ -166,7 +166,7 @@ const AddItem = ({
 
   const poolMutation = useMutation({
     mutationFn: (itemId: string) =>
-      CommunitiesService.addItemToCommunity({ id: communityId!, itemId }),
+      Communities.addItemToCommunity({ id: communityId!, item_id: itemId }),
     onSuccess: (data) => {
       if ((data as any).message === "requested") {
         showSuccessToast("Request sent to admins for approval.")
@@ -182,7 +182,7 @@ const AddItem = ({
       }
       queryClient.invalidateQueries({ queryKey: ["my-items-for-community"] })
     },
-    onError: (err: ApiError) => {
+    onError: (err: unknown) => {
       handleError(err)
     },
   })
@@ -199,7 +199,7 @@ const AddItem = ({
       // Map classification via backend
       if (book.categories && book.categories.length > 0) {
         try {
-          const mapping = (await UtilsService.mapClassification({
+          const mapping = (await Utils.mapClassification({
             q: book.categories[0],
           })) as { category?: string; genre?: string; subject?: string }
 
@@ -254,14 +254,14 @@ const AddItem = ({
 
   const mutation = useMutation({
     mutationFn: async (data: any) => {
-      const newItem = await ItemsService.createItem({ formData: data.formData })
+      const newItem = await Items.createItem({ bodyItemsCreateItem: data.body })
 
       // If work info is provided, update work metadata
       if (data.workInfo && newItem.author) {
-        await ItemsService.updateWorkMetadata({
+        await Items.updateWorkMetadata({
           author: newItem.author,
           title: newItem.title,
-          requestBody: data.workInfo,
+          workMetadataUpdate: data.workInfo,
         })
       }
 
@@ -278,7 +278,7 @@ const AddItem = ({
       setImageFile(null)
       setIsOpen(false)
     },
-    onError: (err: ApiError) => {
+    onError: (err: unknown) => {
       handleError(err)
     },
     onSettled: () => {
@@ -334,7 +334,7 @@ const AddItem = ({
       : null
 
     mutation.mutate({
-      formData: itemData,
+      body: itemData,
       workInfo: formattedWorkInfo,
     })
   }

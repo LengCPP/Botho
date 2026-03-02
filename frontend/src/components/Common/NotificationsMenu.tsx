@@ -2,7 +2,7 @@ import { Box, Flex, HStack, IconButton, Text, VStack } from "@chakra-ui/react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { FaBell } from "react-icons/fa"
-import { NotificationsService } from "../../client"
+import { Notifications } from "../../client"
 import { useNotifications } from "../../hooks/useNotifications"
 import { MenuContent, MenuRoot, MenuTrigger } from "../ui/menu"
 import ConfirmationModal from "./ConfirmationModal"
@@ -15,21 +15,21 @@ const NotificationsMenu = () => {
   const [isDeleteAllModalOpen, setIsDeleteAllModalOpen] = useState(false)
 
   const markAllAsReadMutation = useMutation({
-    mutationFn: () => NotificationsService.markAllNotificationsAsRead(),
+    mutationFn: () => Notifications.markAllNotificationsAsRead(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notifications"] })
     },
   })
 
   const clearReadMutation = useMutation({
-    mutationFn: () => NotificationsService.clearReadNotifications(),
+    mutationFn: () => Notifications.clearReadNotifications(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notifications"] })
     },
   })
 
   const deleteAllMutation = useMutation({
-    mutationFn: () => NotificationsService.deleteAllNotifications(),
+    mutationFn: () => Notifications.deleteAllNotifications(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notifications"] })
       setIsDeleteAllModalOpen(false)

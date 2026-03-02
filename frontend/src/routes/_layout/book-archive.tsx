@@ -34,7 +34,7 @@ import {
 } from "react-icons/fi"
 import { z } from "zod"
 
-import { ItemsService } from "@/client"
+import { Items } from "@/client"
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import { ImportItems } from "@/components/Common/ImportItems"
 import {
@@ -190,7 +190,7 @@ function BooksTable({
     useInfiniteQuery({
       queryKey: ["book-archive-infinite", { filter_missing }],
       queryFn: ({ pageParam = 0 }) =>
-        ItemsService.listBookRegistry({
+        Items.listBookRegistry({
           skip: pageParam as number,
           limit: PER_PAGE,
           filterMissing: filter_missing === "all" ? undefined : filter_missing,
@@ -233,7 +233,7 @@ function BooksTable({
 
   const deleteMutation = useMutation({
     mutationFn: ({ author, title }: { author: string; title: string }) =>
-      ItemsService.deleteWorkMetadata({ author, title }),
+      Items.deleteWorkMetadata({ author, title }),
     onSuccess: () => {
       showSuccessToast("Book deleted from registry")
       queryClient.invalidateQueries({ queryKey: ["book-archive-infinite"] })
@@ -377,7 +377,7 @@ function BookArchive() {
   const { data: firstPage } = useQuery({
     queryKey: ["book-archive-count", { filter_missing }],
     queryFn: () =>
-      ItemsService.listBookRegistry({
+      Items.listBookRegistry({
         skip: 0,
         limit: 1,
         filterMissing: filter_missing === "all" ? undefined : filter_missing,
@@ -403,7 +403,7 @@ function BookArchive() {
       books: { author: string; title: string }[]
       fields_to_overwrite: string[]
       source_api: string
-    }) => ItemsService.triggerEnrichBooks({ requestBody: data }),
+    }) => Items.triggerEnrichBooks({ bookEnrichmentRequest: data }),
     onSuccess: () => {
       showSuccessToast(`Enrichment started for ${selectedKeys.size} books`)
       setSelectedKeys(new Set())
@@ -415,7 +415,7 @@ function BookArchive() {
   })
 
   const maintenanceMutation = useMutation({
-    mutationFn: () => ItemsService.triggerBulkClassify(),
+    mutationFn: () => Items.triggerBulkClassify(),
     onSuccess: () => {
       showSuccessToast("Maintenance task started in background")
     },
@@ -426,7 +426,7 @@ function BookArchive() {
 
   const aiClassifyMutation = useMutation({
     mutationFn: (data: { books: { author: string; title: string }[] }) =>
-      ItemsService.triggerAiClassifyBooks({ requestBody: data as any }),
+      Items.triggerAiClassifyBooks({ bookEnrichmentRequest: data as any }),
     onSuccess: () => {
       showSuccessToast(
         `AI Classification started for ${selectedKeys.size} books`,
@@ -440,7 +440,7 @@ function BookArchive() {
 
   const syncRegistryMutation = useMutation({
     mutationKey: ["sync-registry"],
-    mutationFn: () => ItemsService.syncItemsToRegistry(),
+    mutationFn: () => Items.syncItemsToRegistry(),
     onSuccess: () => {
       showSuccessToast("Registry sync started")
       queryClient.invalidateQueries({ queryKey: ["book-archive"] })
@@ -452,7 +452,7 @@ function BookArchive() {
 
   const cleanupBrokenImagesMutation = useMutation({
     mutationKey: ["cleanup-broken-images"],
-    mutationFn: () => ItemsService.cleanupBrokenImages(),
+    mutationFn: () => Items.cleanupBrokenImages(),
     onSuccess: () => {
       showSuccessToast(
         "Broken image cleanup started — refresh in a moment to see results",

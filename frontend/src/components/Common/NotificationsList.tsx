@@ -13,7 +13,7 @@ import { useNavigate } from "@tanstack/react-router"
 import { useState } from "react"
 import { FaCircle } from "react-icons/fa"
 import { FiTrash2 } from "react-icons/fi"
-import { NotificationsService } from "../../client"
+import { Notifications } from "../../client"
 import { useNotifications } from "../../hooks/useNotifications"
 import SignalInterestModal from "./SignalInterestModal"
 
@@ -47,14 +47,14 @@ const NotificationsList = ({
 
   const markAsReadMutation = useMutation({
     mutationFn: (id: string) =>
-      NotificationsService.markNotificationAsRead({ id }),
+      Notifications.markNotificationAsRead({ id }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notifications"] })
     },
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => NotificationsService.deleteNotification({ id }),
+    mutationFn: (id: string) => Notifications.deleteNotification({ id }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notifications"] })
       setSwipingId(null)

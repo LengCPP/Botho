@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useEffect } from "react"
-import { NotificationsService } from "../client"
-import { OpenAPI } from "../client/core/OpenAPI"
+import { Notifications } from "../client"
+import { client } from "../client/client.gen"
 import useAuth from "./useAuth"
 
 export const useNotifications = (limit = 10) => {
@@ -11,7 +11,7 @@ export const useNotifications = (limit = 10) => {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["notifications", limit],
-    queryFn: () => NotificationsService.readNotifications({ limit }),
+    queryFn: () => Notifications.readNotifications({ limit }),
     enabled: !!user,
   })
 
@@ -19,7 +19,7 @@ export const useNotifications = (limit = 10) => {
     if (!user || !token) return
 
     // Determine the base URL for the API
-    let baseUrl = OpenAPI.BASE
+    let baseUrl = client.getConfig().baseUrl
 
     if (!baseUrl) {
       baseUrl = window.location.origin

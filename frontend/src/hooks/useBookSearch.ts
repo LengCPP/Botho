@@ -1,4 +1,4 @@
-import { ItemsService } from "@/client"
+import { Items } from "@/client"
 import { useQuery } from "@tanstack/react-query"
 
 export interface BookResult {
@@ -25,7 +25,7 @@ const fetchBooks = async (
   // Local Registry Check first
   try {
     if (searchType === "isbn") {
-      const localBook = await ItemsService.lookupBookRegistry({ isbn: query })
+      const localBook = await Items.lookupBookRegistry({ isbn: query })
       if (localBook) {
         localResults.push({
           title: localBook.title,
@@ -38,7 +38,7 @@ const fetchBooks = async (
         })
       }
     } else {
-      const results = await ItemsService.searchBookRegistry({
+      const results = await Items.searchBookRegistry({
         q: query,
         limit: 5,
       })

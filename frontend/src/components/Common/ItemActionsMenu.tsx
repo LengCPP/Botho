@@ -1,8 +1,8 @@
 import {
-  CommunitiesService,
+  Communities,
   type ItemPublic,
-  ItemsService,
-  LoansService,
+  Items,
+  Loans,
 } from "@/client"
 import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
@@ -71,14 +71,14 @@ export const ItemActionsMenu = ({
 
   const { data: community } = useQuery({
     queryKey: ["community", communityId],
-    queryFn: () => CommunitiesService.readCommunity({ id: communityId! }),
+    queryFn: () => Communities.readCommunity({ id: communityId! }),
     enabled: !!communityId,
   })
 
   // Fetch loan context to check if already requested
   const { data: outgoingLoans } = useQuery({
     queryKey: ["loans", "outgoing"],
-    queryFn: () => LoansService.readOutgoingLoanRequests({}),
+    queryFn: () => Loans.readOutgoingLoanRequests({}),
     enabled: !!user && !isOwner,
   })
 
@@ -90,9 +90,9 @@ export const ItemActionsMenu = ({
 
   const donateMutation = useMutation({
     mutationFn: () =>
-      CommunitiesService.initiateDonation({
+      Communities.initiateDonation({
         id: communityId!,
-        itemId: item.id,
+        item_id: item.id,
       }),
     onSuccess: () => {
       showSuccessToast("Donation request sent!")
@@ -111,9 +111,9 @@ export const ItemActionsMenu = ({
 
   const removeItemMutation = useMutation({
     mutationFn: () =>
-      CommunitiesService.removeItemFromCommunity({
+      Communities.removeItemFromCommunity({
         id: communityId!,
-        itemId: item.id,
+        item_id: item.id,
       }),
     onSuccess: () => {
       showSuccessToast("Item removed from community")
@@ -131,7 +131,7 @@ export const ItemActionsMenu = ({
   })
 
   const duplicateMutation = useMutation({
-    mutationFn: () => ItemsService.duplicateItem({ id: item.id }),
+    mutationFn: () => Items.duplicateItem({ id: item.id }),
     onSuccess: () => {
       showSuccessToast("Another copy added to your collection!")
       queryClient.invalidateQueries({ queryKey: ["items"] })

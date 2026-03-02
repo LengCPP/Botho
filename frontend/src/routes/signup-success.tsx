@@ -3,7 +3,7 @@ import { useMutation } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import { z } from "zod"
-import { LoginService } from "../client"
+import { Login } from "../client"
 import useCustomToast from "../hooks/useCustomToast"
 
 const signupSuccessSearchSchema = z.object({
@@ -32,7 +32,7 @@ function SignupSuccess() {
 
   const mutation = useMutation({
     mutationFn: (email: string) =>
-      LoginService.resendVerificationEmail({ email }),
+      Login.resendVerificationEmail({ email }),
     onSuccess: () => {
       showSuccessToast("Verification email resent successfully.")
       setCooldown(60)

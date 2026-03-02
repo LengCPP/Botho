@@ -32,7 +32,7 @@ import {
   FiTrash2,
 } from "react-icons/fi"
 
-import { type ItemPublic, ItemsService } from "@/client"
+import { type ItemPublic, Items } from "@/client"
 import ConfirmationModal from "@/components/Common/ConfirmationModal"
 import { ImportItems } from "@/components/Common/ImportItems"
 import useCustomToast from "@/hooks/useCustomToast"
@@ -217,18 +217,18 @@ export const ManageItems: React.FC<ManageItemsProps> = ({
     queryKey: ["manage-items", ownerId, activeTab],
     queryFn: ({ pageParam = 0 }) => {
       const params: any = {
-        ownerId,
+        owner_id: ownerId,
         skip: pageParam,
         limit: 50,
         minimal: true,
       }
-      if (activeTab === "lost") params.lostOnly = true
-      if (activeTab === "private") params.privateOnly = true
+      if (activeTab === "lost") params.lost_only = true
+      if (activeTab === "private") params.private_only = true
       if (activeTab === "catalogue") {
-        params.excludeLost = true
-        params.excludePrivate = true
+        params.exclude_lost = true
+        params.exclude_private = true
       }
-      return ItemsService.readItems(params)
+      return Items.readItems(params)
     },
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => {
@@ -258,7 +258,7 @@ export const ManageItems: React.FC<ManageItemsProps> = ({
 
   const batchDeleteMutation = useMutation({
     mutationFn: (ids: string[]) =>
-      ItemsService.batchDeleteItems({ requestBody: { item_ids: ids } }),
+      Items.batchDeleteItems({ itemBatchAction: { item_ids: ids } }),
     onSuccess: () => {
       showSuccessToast("Items deleted")
       setSelectedIds([])
@@ -270,7 +270,7 @@ export const ManageItems: React.FC<ManageItemsProps> = ({
 
   const batchLostMutation = useMutation({
     mutationFn: (ids: string[]) =>
-      ItemsService.batchMarkLost({ requestBody: { item_ids: ids } }),
+      Items.batchMarkLost({ itemBatchAction: { item_ids: ids } }),
     onSuccess: () => {
       showSuccessToast("Items marked as lost")
       setSelectedIds([])
@@ -282,7 +282,7 @@ export const ManageItems: React.FC<ManageItemsProps> = ({
 
   const batchFoundMutation = useMutation({
     mutationFn: (ids: string[]) =>
-      (ItemsService as any).batchMarkFound({ requestBody: { item_ids: ids } }),
+      (Items as any).batchMarkFound({ itemBatchAction: { item_ids: ids } }),
     onSuccess: () => {
       showSuccessToast("Items marked as found")
       setSelectedIds([])
@@ -294,7 +294,7 @@ export const ManageItems: React.FC<ManageItemsProps> = ({
 
   const batchPrivateMutation = useMutation({
     mutationFn: (ids: string[]) =>
-      ItemsService.batchTogglePrivacy({ requestBody: { item_ids: ids } }),
+      Items.batchTogglePrivacy({ itemBatchAction: { item_ids: ids } }),
     onSuccess: () => {
       showSuccessToast("Privacy toggled for items")
       setSelectedIds([])
@@ -306,7 +306,7 @@ export const ManageItems: React.FC<ManageItemsProps> = ({
 
   const batchSyncMutation = useMutation({
     mutationFn: (ids: string[]) =>
-      ItemsService.batchSyncFromArchive({ requestBody: { item_ids: ids } }),
+      Items.batchSyncFromArchive({ itemBatchAction: { item_ids: ids } }),
     onSuccess: () => {
       showSuccessToast("Sync task started in background")
       setSelectedIds([])
