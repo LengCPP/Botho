@@ -1,4 +1,5 @@
-import { Outlet, createRootRoute } from "@tanstack/react-router"
+import type { QueryClient } from "@tanstack/react-query"
+import { Outlet, createRootRouteWithContext } from "@tanstack/react-router"
 import React, { Suspense } from "react"
 
 import NotFound from "@/components/Common/NotFound"
@@ -23,7 +24,7 @@ const TanStackDevtools = import.meta.env.PROD
   ? () => null
   : React.lazy(loadDevtools)
 
-export const Route = createRootRoute({
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   component: () => (
     <>
       <SyncColorMode />

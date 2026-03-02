@@ -193,7 +193,7 @@ function BooksTable({
         Items.listBookRegistry({
           skip: pageParam as number,
           limit: PER_PAGE,
-          filterMissing: filter_missing === "all" ? undefined : filter_missing,
+          filter_missing: filter_missing === "all" ? undefined : filter_missing,
         }),
       getNextPageParam: (lastPage, allPages) => {
         const loadedCount = (allPages?.length || 0) * PER_PAGE
@@ -380,7 +380,7 @@ function BookArchive() {
       Items.listBookRegistry({
         skip: 0,
         limit: 1,
-        filterMissing: filter_missing === "all" ? undefined : filter_missing,
+        filter_missing: filter_missing === "all" ? undefined : filter_missing,
       }),
   })
   const totalCount = firstPage?.count || 0

@@ -5,6 +5,7 @@ import {
   EmptyState,
   HStack,
   Heading,
+  Skeleton,
   VStack,
 } from "@chakra-ui/react"
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query"
@@ -19,6 +20,7 @@ import {
   Items,
   type LoanPublic,
   Loans,
+  Users,
 } from "@/client"
 import ReviewModal from "@/components/Common/ReviewModal"
 import AddItem from "@/components/Items/AddItem"
@@ -61,9 +63,36 @@ const itemsSearchSchema = z.object({
 
 const COLLECTIONS_LIMIT = 12
 
+function ItemsLoadingSkeleton() {
+  return (
+    <Container maxW="full" pt={12}>
+      <VStack align="stretch" gap={4}>
+        <Skeleton height="40px" width="180px" />
+        <Skeleton height="48px" />
+        <Skeleton height="350px" />
+      </VStack>
+    </Container>
+  )
+}
+
 export const Route = createFileRoute("/_layout/items")({
   component: ItemsPage,
   validateSearch: (search) => itemsSearchSchema.parse(search),
+  pendingComponent: ItemsLoadingSkeleton,
+  loader: async ({ context: { queryClient } }) => {
+    // Ensure the current user is warm in cache before the component renders
+    await queryClient.ensureQueryData({
+      queryKey: ["currentUser"],
+      queryFn: () => Users.readUserMe(),
+      staleTime: 30_000,
+    })
+    // Kick off outgoing loans in the background (used by every item card)
+    void queryClient.prefetchQuery({
+      queryKey: ["loans", "outgoing"],
+      queryFn: () => Loans.readOutgoingLoanRequests({}),
+      staleTime: 30_000,
+    })
+  },
 })
 
 function ItemsTable() {

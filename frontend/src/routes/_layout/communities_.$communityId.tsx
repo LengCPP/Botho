@@ -15,6 +15,7 @@ import {
   Input,
   Separator,
   SimpleGrid,
+  Skeleton,
   Tabs,
   Text,
   Textarea,
@@ -140,9 +141,29 @@ const searchSchema = z.object({
 // ROUTE SETUP
 // ============================================================================
 
+function CommunityLoadingSkeleton() {
+  return (
+    <Container maxW="full" pt={12}>
+      <VStack align="stretch" gap={4}>
+        <Skeleton height="48px" width="280px" />
+        <Skeleton height="40px" />
+        <Skeleton height="450px" />
+      </VStack>
+    </Container>
+  )
+}
+
 export const Route = createFileRoute("/_layout/communities_/$communityId")({
   component: CommunityBoard,
   validateSearch: (s) => searchSchema.parse(s),
+  pendingComponent: CommunityLoadingSkeleton,
+  loader: async ({ context: { queryClient }, params }) => {
+    await queryClient.ensureQueryData({
+      queryKey: ["community", params.communityId],
+      queryFn: () => Communities.readCommunity({ id: params.communityId }),
+      staleTime: 30_000,
+    })
+  },
 })
 
 // ============================================================================
@@ -589,19 +610,13 @@ function CommunityBoard() {
   // Disband vote status
   const { data: disbandVote, refetch: refetchDisbandVote } = useQuery({
     queryKey: ["disbandVote", cId],
-    queryFn: () =>
-      fetch(`/api/v1/communities/${cId}/disband-vote`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
-      }).then((r) => (r.ok ? r.json() : null)),
+    queryFn: () => Communities.getDisbandVote({ id: cId }),
     enabled: !!isAdmin && !!isMember,
   })
 
   const castDisbandVoteMutation = useMutation({
     mutationFn: (vote: boolean) =>
-      fetch(`/api/v1/communities/${cId}/disband-vote?vote=${vote}`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
-      }).then((r) => r.json()),
+      Communities.castDisbandVote({ id: cId, vote }),
     onSuccess: (data) => {
       if (data?.message?.includes("disbanded")) {
         showSuccessToast("Community disbanded")
@@ -618,15 +633,7 @@ function CommunityBoard() {
   })
 
   const resignMutation = useMutation({
-    mutationFn: () =>
-      fetch(`/api/v1/communities/${cId}/resign`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
-      }).then(async (r) => {
-        const data = await r.json()
-        if (!r.ok) throw new Error(data.detail || "Failed")
-        return data
-      }),
+    mutationFn: () => Communities.resignFromCommunity({ id: cId }),
     onSuccess: () => {
       showSuccessToast("Resigned successfully")
       queryClient.invalidateQueries({ queryKey: ["community", cId] })
@@ -637,14 +644,7 @@ function CommunityBoard() {
 
   const castDemotionVoteMutation = useMutation({
     mutationFn: ({ userId, vote }: { userId: string; vote: boolean }) =>
-      fetch(`/api/v1/communities/${cId}/members/${userId}/demotion-vote?vote=${vote}`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
-      }).then(async (r) => {
-        const data = await r.json()
-        if (!r.ok) throw new Error(data.detail || "Failed")
-        return data
-      }),
+      Communities.castDemotionVote({ id: cId, user_id: userId, vote }),
     onSuccess: (data) => {
       if (data?.message) {
         showSuccessToast(data.message)
