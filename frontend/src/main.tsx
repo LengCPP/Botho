@@ -35,7 +35,14 @@ if (navigator.storage?.persist) {
   })
 }
 
-const queryClient = new QueryClient()
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60_000,
+      gcTime: 5 * 60_000,
+    },
+  },
+})
 
 const router = createRouter({ routeTree, context: { queryClient } })
 declare module "@tanstack/react-router" {

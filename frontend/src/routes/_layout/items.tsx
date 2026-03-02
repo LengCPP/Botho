@@ -8,7 +8,7 @@ import {
   Skeleton,
   VStack,
 } from "@chakra-ui/react"
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query"
+import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { FaChevronLeft } from "react-icons/fa"
@@ -174,6 +174,7 @@ function ItemsTable() {
       return loadedCount < lastPage.count ? loadedCount : undefined
     },
     initialPageParam: 0,
+    placeholderData: keepPreviousData,
     enabled:
       !!user &&
       tab === "items" &&
@@ -206,6 +207,7 @@ function ItemsTable() {
       return loaded < (last.count || 0) ? loaded : undefined
     },
     initialPageParam: 0,
+    placeholderData: keepPreviousData,
     enabled:
       !!user &&
       tab === "items" &&

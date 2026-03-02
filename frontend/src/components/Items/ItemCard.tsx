@@ -27,7 +27,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import type React from "react"
-import { useState } from "react"
+import { memo, useState } from "react"
 import {
   FiArrowLeft,
   FiBell,
@@ -916,4 +916,4 @@ const ItemCard = ({
   )
 }
 
-export default ItemCard
+export default memo(ItemCard)

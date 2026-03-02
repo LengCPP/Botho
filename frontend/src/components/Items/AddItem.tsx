@@ -283,6 +283,7 @@ const AddItem = ({
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["items"] })
+      queryClient.invalidateQueries({ queryKey: ["currentUser"] })
       if (communityId) {
         queryClient.invalidateQueries({
           queryKey: ["communityItems", communityId],

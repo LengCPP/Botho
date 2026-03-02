@@ -54,6 +54,18 @@ export default defineConfig({
       "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-react": ["react", "react-dom"],
+          "vendor-chakra": ["@chakra-ui/react"],
+          "vendor-query": ["@tanstack/react-query", "@tanstack/react-router"],
+          "vendor-icons": ["react-icons"],
+        },
+      },
+    },
+  },
   test: {
     environment: "jsdom",
     setupFiles: ["./src/setupTests.ts"],

@@ -24,6 +24,7 @@ import {
 } from "@chakra-ui/react"
 import { Tooltip } from "@/components/ui/tooltip"
 import {
+  keepPreviousData,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -387,6 +388,7 @@ function CommunityBoard() {
       return loaded < last.count ? loaded : undefined
     },
     initialPageParam: 0,
+    placeholderData: keepPreviousData,
     enabled:
       !!isMember && tab === "items" && (isFiltered || display_type === "items"),
   })
@@ -413,6 +415,7 @@ function CommunityBoard() {
       return loaded < (last.count || 0) ? loaded : undefined
     },
     initialPageParam: 0,
+    placeholderData: keepPreviousData,
     enabled:
       !!isMember &&
       tab === "items" &&

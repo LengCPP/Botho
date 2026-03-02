@@ -277,6 +277,14 @@ function LoansPage() {
     onSuccess: (data, variables) => {
       showSuccessToast("Action completed successfully")
       queryClient.invalidateQueries({ queryKey: ["loans"] })
+      // Actions that change item availability need item caches refreshed too
+      const affectsAvailability = ["ratify", "return", "default", "respond", "signalReturn"]
+      if (affectsAvailability.includes(variables.action)) {
+        queryClient.invalidateQueries({ queryKey: ["items"] })
+        queryClient.invalidateQueries({ queryKey: ["itemsInfinite"] })
+        queryClient.invalidateQueries({ queryKey: ["communityItems"] })
+        queryClient.invalidateQueries({ queryKey: ["communityItemsInfinite"] })
+      }
       setConfirmConfig(null)
       if (variables.action === "return") {
         setSelectedLoanForReview(variables.loan)

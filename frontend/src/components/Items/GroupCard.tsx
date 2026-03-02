@@ -1,5 +1,6 @@
 import type { ItemPublic } from "@/client"
 import { useColorModeValue } from "@/components/ui/color-mode"
+import { memo } from "react"
 import { getImageUrl } from "@/utils"
 import {
   Badge,
@@ -25,7 +26,7 @@ interface GroupCardProps {
 }
 
 /* Reusable card for displaying item collections (subject, genre, etc.) */
-export function GroupCard({
+function GroupCardBase({
   name,
   type,
   item_type,
@@ -236,3 +237,5 @@ export function GroupCard({
     </Card.Root>
   )
 }
+
+export const GroupCard = memo(GroupCardBase)

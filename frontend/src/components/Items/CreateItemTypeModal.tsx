@@ -3,11 +3,12 @@ import {
   Grid,
   HStack,
   Input,
+  NativeSelect,
   Text,
   VStack,
 } from "@chakra-ui/react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import { useCallback, useState } from "react"
 
 import { Types } from "@/client"
 import useCustomToast from "@/hooks/useCustomToast"
@@ -76,8 +77,17 @@ export function CreateItemTypeModal({
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
   const [name, setName] = useState("")
-  const [enabledFields, setEnabledFields] = useState<string[]>([])
+  const [enabledFields, setEnabledFields] = useState<Set<string>>(new Set())
   const [labelField, setLabelField] = useState("title")
+
+  const toggleField = useCallback((key: string, checked: boolean) => {
+    setEnabledFields((prev) => {
+      const next = new Set(prev)
+      if (checked) next.add(key)
+      else next.delete(key)
+      return next
+    })
+  }, [])
 
   const mutation = useMutation({
     mutationFn: (body: { name: string; enabled_fields: string[]; label_field: string }) =>
@@ -95,7 +105,7 @@ export function CreateItemTypeModal({
 
   const handleClose = () => {
     setName("")
-    setEnabledFields([])
+    setEnabledFields(new Set())
     setLabelField("title")
     onClose()
   }
@@ -105,7 +115,7 @@ export function CreateItemTypeModal({
       showErrorToast("Type name is required")
       return
     }
-    mutation.mutate({ name: name.trim(), enabled_fields: enabledFields, label_field: labelField })
+    mutation.mutate({ name: name.trim(), enabled_fields: Array.from(enabledFields), label_field: labelField })
   }
 
   const groups = Array.from(new Set(AVAILABLE_FIELDS.map((f) => f.group)))
@@ -138,23 +148,20 @@ export function CreateItemTypeModal({
               <Text fontSize="xs" color="fg.muted">
                 Which field should serve as the main identifier for this type?
               </Text>
-              <select
-                id="label-field"
-                value={labelField}
-                onChange={(e) => setLabelField(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "8px",
-                  borderRadius: "4px",
-                  border: "1px solid #ccc",
-                }}
-              >
-                {LABEL_FIELD_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-                  </option>
-                ))}
-              </select>
+              <NativeSelect.Root size="sm">
+                <NativeSelect.Field
+                  id="label-field"
+                  value={labelField}
+                  onChange={(e) => setLabelField(e.target.value)}
+                >
+                  {LABEL_FIELD_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                    </option>
+                  ))}
+                </NativeSelect.Field>
+                <NativeSelect.Indicator />
+              </NativeSelect.Root>
             </VStack>
 
             <VStack align="stretch" gap={2}>
@@ -172,16 +179,10 @@ export function CreateItemTypeModal({
                       {AVAILABLE_FIELDS.filter((f) => f.group === group).map((field) => (
                         <Checkbox
                           key={field.key}
-                          checked={enabledFields.includes(field.key)}
-                          onCheckedChange={({ checked }) => {
-                            if (checked) {
-                              setEnabledFields((prev) => [...prev, field.key])
-                            } else {
-                              setEnabledFields((prev) =>
-                                prev.filter((f) => f !== field.key),
-                              )
-                            }
-                          }}
+                          checked={enabledFields.has(field.key)}
+                          onCheckedChange={({ checked }) =>
+                            toggleField(field.key, !!checked)
+                          }
                         >
                           {field.label}
                         </Checkbox>

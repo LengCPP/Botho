@@ -4,6 +4,7 @@ import {
   Flex,
   HStack,
   Input,
+  NativeSelect,
   Popover,
   Portal,
   Separator,
@@ -22,7 +23,6 @@ import {
 } from "react-icons/fa"
 import { FiSearch, FiX } from "react-icons/fi"
 
-import { useColorModeValue } from "@/components/ui/color-mode"
 import { InputGroup } from "@/components/ui/input-group"
 
 import {
@@ -105,6 +105,7 @@ export function ItemsViewOptions({
   filterLabel = "Filter",
 }: ItemsViewOptionsProps) {
   const [localQ, setLocalQ] = useState(q || "")
+  const [filterOpen, setFilterOpen] = useState(false)
   // Track the external 'q' to avoid resetting local state on internal changes
   const lastExternalQ = useRef(q || "")
   // Track the last value we sent to the parent to avoid infinite loops
@@ -136,23 +137,9 @@ export function ItemsViewOptions({
         lastExternalQ.current = localQ // Prevent the sync effect from firing back
         onChangeQ(localQ)
       }
-    }, 500)
+    }, 300)
     return () => clearTimeout(timer)
   }, [localQ, onChangeQ])
-
-  const selectBg = useColorModeValue("white", "gray.800")
-  const selectColor = useColorModeValue("black", "white")
-  const selectBorder = useColorModeValue("gray.300", "gray.600")
-
-  const selectStyle = {
-    padding: "8px",
-    borderRadius: "4px",
-    border: `1px solid ${selectBorder}`,
-    backgroundColor: selectBg,
-    color: selectColor,
-    fontSize: "14px",
-    width: "100%",
-  }
 
   // Labels for display
   const sortLabels: Record<string, string> = {
@@ -260,7 +247,7 @@ export function ItemsViewOptions({
 
       {/* Organize By / Filter Button */}
       {showFilter && (
-        <Popover.Root>
+        <Popover.Root open={filterOpen} onOpenChange={({ open }) => setFilterOpen(open)}>
           <Popover.Trigger asChild>
             <Button
               variant="outline"
@@ -288,7 +275,10 @@ export function ItemsViewOptions({
                               size="sm"
                               variant={organizeBy === opt ? "solid" : "ghost"}
                               justifyContent="flex-start"
-                              onClick={() => onChangeOrganizeBy(opt)}
+                              onClick={() => {
+                                onChangeOrganizeBy(opt)
+                                setFilterOpen(false)
+                              }}
                             >
                               {opt.charAt(0).toUpperCase() + opt.slice(1)}
                             </Button>
@@ -306,32 +296,23 @@ export function ItemsViewOptions({
                         <Text fontSize="sm" fontWeight="bold" mb={1}>
                           Category
                         </Text>
-                        <select
-                          id="category-filter"
-                          name="category"
-                          value={category || ""}
-                          onChange={(e) => {
-                            onChangeCategory(e.target.value || undefined)
-                            if (onChangeGenre) onChangeGenre(undefined)
-                          }}
-                          style={selectStyle}
-                        >
-                          <option
-                            value=""
-                            style={{ backgroundColor: selectBg }}
+                        <NativeSelect.Root size="sm">
+                          <NativeSelect.Field
+                            id="category-filter"
+                            name="category"
+                            value={category || ""}
+                            onChange={(e) => {
+                              onChangeCategory(e.target.value || undefined)
+                              if (onChangeGenre) onChangeGenre(undefined)
+                            }}
                           >
-                            All Categories
-                          </option>
-                          {Object.keys(BOOK_CLASSIFICATION).map((cat) => (
-                            <option
-                              key={cat}
-                              value={cat}
-                              style={{ backgroundColor: selectBg }}
-                            >
-                              {cat}
-                            </option>
-                          ))}
-                        </select>
+                            <option value="">All Categories</option>
+                            {Object.keys(BOOK_CLASSIFICATION).map((cat) => (
+                              <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                          </NativeSelect.Field>
+                          <NativeSelect.Indicator />
+                        </NativeSelect.Root>
                       </Box>
                     )}
 
@@ -340,33 +321,23 @@ export function ItemsViewOptions({
                         <Text fontSize="sm" fontWeight="bold" mb={1}>
                           Genre
                         </Text>
-                        <select
-                          id="genre-filter"
-                          name="genre"
-                          value={genre || ""}
-                          onChange={(e) =>
-                            onChangeGenre(e.target.value || undefined)
-                          }
-                          style={selectStyle}
-                          disabled={!category}
-                        >
-                          <option
-                            value=""
-                            style={{ backgroundColor: selectBg }}
+                        <NativeSelect.Root size="sm" disabled={!category}>
+                          <NativeSelect.Field
+                            id="genre-filter"
+                            name="genre"
+                            value={genre || ""}
+                            onChange={(e) =>
+                              onChangeGenre(e.target.value || undefined)
+                            }
                           >
-                            All Genres
-                          </option>
-                          {category &&
-                            BOOK_CLASSIFICATION[category]?.map((gen) => (
-                              <option
-                                key={gen}
-                                value={gen}
-                                style={{ backgroundColor: selectBg }}
-                              >
-                                {gen}
-                              </option>
-                            ))}
-                        </select>
+                            <option value="">All Genres</option>
+                            {category &&
+                              BOOK_CLASSIFICATION[category]?.map((gen) => (
+                                <option key={gen} value={gen}>{gen}</option>
+                              ))}
+                          </NativeSelect.Field>
+                          <NativeSelect.Indicator />
+                        </NativeSelect.Root>
                       </Box>
                     )}
 

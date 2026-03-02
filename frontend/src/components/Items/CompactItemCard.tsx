@@ -20,7 +20,7 @@ import {
   VStack,
 } from "@chakra-ui/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import { memo, useState } from "react"
 import {
   FiBookOpen,
   FiChevronRight,
@@ -42,7 +42,7 @@ interface CompactItemCardProps {
   onExtensionRequest?: (loan: LoanPublic) => void
 }
 
-export const CompactItemCard = ({
+const CompactItemCardBase = ({
   item: itemProp,
   loan: loanProp,
   communityId,
@@ -323,3 +323,5 @@ export const CompactItemCard = ({
     </Box>
   )
 }
+
+export const CompactItemCard = memo(CompactItemCardBase)

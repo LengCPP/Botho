@@ -1,4 +1,5 @@
 import { SimpleGrid } from "@chakra-ui/react"
+import { memo } from "react"
 import { GroupCard } from "./GroupCard"
 
 export interface CollectionItem {
@@ -16,7 +17,7 @@ interface CollectionGridProps {
   onOpen: (name: string, itemType?: string, ownerId?: string) => void
 }
 
-export function CollectionGrid({ items, type, onOpen }: CollectionGridProps) {
+function CollectionGridBase({ items, type, onOpen }: CollectionGridProps) {
   return (
     <SimpleGrid columns={{ base: 1, md: 2, lg: 3, xl: 4 }} gap={6}>
       {items.map((item, i) => (
@@ -34,3 +35,5 @@ export function CollectionGrid({ items, type, onOpen }: CollectionGridProps) {
     </SimpleGrid>
   )
 }
+
+export const CollectionGrid = memo(CollectionGridBase)
