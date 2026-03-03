@@ -194,7 +194,7 @@ async def maintenance_bulk_classify(user_id: uuid.UUID):
 
     from app.api.websocket_manager import notification_manager
     from app.core.db import engine
-    from app.search import sync_item_to_search
+    from app.search import _build_item_document, _build_work_document, _push_doc
     from app.state import classification_state
 
     logger = logging.getLogger(__name__)
@@ -270,16 +270,23 @@ async def maintenance_bulk_classify(user_id: uuid.UUID):
 
                         session.add(book)
                         session.flush()
-                        sync_item_to_search(book)
+                        # Build docs while session is still open (accesses lazy-loaded attrs)
+                        item_doc = _build_item_document(book)
 
                         # Convert subjects string to tags list
                         tags = [s.strip() for s in sub_raw.split(",")] if sub_raw else []
 
                         # Ensure WorkMetadata also gets updated (overwrite=True so AI results
                         # replace stale archive data, not just fill empty fields)
-                        ensure_work_metadata(session, book.author, book.title, category=cat, genre=gen, tags=tags, overwrite=True)
+                        meta = ensure_work_metadata(session, book.author, book.title, category=cat, genre=gen, tags=tags, overwrite=True, sync_search=False)
+                        work_doc = _build_work_document(meta) if meta else None
                         classified_count += 1
                         chunk_classified += 1
+
+                        # Non-blocking Meilisearch pushes (after doc dicts are built)
+                        await asyncio.to_thread(_push_doc, "items", item_doc)
+                        if work_doc:
+                            await asyncio.to_thread(_push_doc, "works", work_doc)
 
                     if chunk_classified > 0:
                         session.commit() # Commit after EACH successful chunk
@@ -312,7 +319,7 @@ async def ai_classify_specific_books(
     from app.ai import classify_books
     from app.api.websocket_manager import notification_manager
     from app.core.db import engine
-    from app.search import sync_item_to_search
+    from app.search import _build_item_document, _push_doc
 
     logger = logging.getLogger(__name__)
     logger.info(f"Starting AI classification for {len(books_to_classify)} specific books...")
@@ -365,16 +372,20 @@ async def ai_classify_specific_books(
 
                         # Also sync items that use this metadata
                         items = session.exec(select(Item).where(Item.author == meta.author, Item.title == meta.title)).all()
+                        item_docs = []
                         for item in items:
                             if cat: item.category = cat
                             if gen: item.genre = gen
                             if sub_raw: item.subject = sub_raw
                             session.add(item)
-                            sync_item_to_search(item)
+                            item_docs.append(_build_item_document(item))
 
                         classified_count += 1
 
                     session.commit() # Commit after each successful chunk
+                    # Non-blocking Meilisearch pushes after commit
+                    for doc in item_docs:
+                        await asyncio.to_thread(_push_doc, "items", doc)
                 except Exception as e:
                     logger.error(f"Error processing AI classification chunk {i//CHUNK_SIZE + 1}: {e}")
                     session.rollback()
@@ -477,9 +488,10 @@ async def sync_items_from_archive(
     """
     from app.api.websocket_manager import notification_manager
     from app.core.db import engine
-    from app.search import sync_item_to_search
+    from app.search import _build_item_document, _push_doc
 
     affected_owners = set()
+    item_docs_to_push: list[dict] = []
     with Session(engine) as session:
         count = 0
         for item_id in item_ids:
@@ -523,12 +535,16 @@ async def sync_items_from_archive(
 
             if updated:
                 session.add(item)
-                sync_item_to_search(item)
+                item_docs_to_push.append(_build_item_document(item))
                 affected_owners.add(item.owner_id)
                 count += 1
 
         session.commit()
-        
+
+        # Non-blocking Meilisearch pushes (docs built while session was open)
+        for doc in item_docs_to_push:
+            await asyncio.to_thread(_push_doc, "items", doc)
+
         # Rebuild indexes for all affected owners
         for owner_id in affected_owners:
             rebuild_collection_index_task(owner_id)
@@ -547,7 +563,7 @@ async def enrich_specific_books(
     """Background task to enrich specific books using external APIs and syncing with WorkMetadata (no AI)."""
     from app.api.websocket_manager import notification_manager
     from app.core.db import engine
-    from app.search import sync_item_to_search
+    from app.search import _build_item_document, _build_work_document, _push_doc
     from app.storage import upload_image_from_url
 
     # Default to NO fields overwritten if not specified (safe default)
@@ -631,6 +647,7 @@ async def enrich_specific_books(
                 # Subjects should ONLY be added to and not replaced
                 final_tags = list(set(final_tags) | set(new_tags))
 
+            work_doc: dict | None = None
             if final_isbn or final_desc or final_img or final_cat or final_genre or final_tags:
                 meta = ensure_work_metadata(
                     session,
@@ -642,10 +659,13 @@ async def enrich_specific_books(
                     category=final_cat,
                     genre=final_genre,
                     tags=final_tags,
-                    overwrite=True
+                    overwrite=True,
+                    sync_search=False,
                 )
+                work_doc = _build_work_document(meta) if meta else None
                 count += 1
 
+            item_docs: list[dict] = []
             for item in items:
                 updated = False
                 if not meta: continue
@@ -661,7 +681,7 @@ async def enrich_specific_books(
                     item.category, updated = meta.category, True
                 if ("genre" in fields_to_overwrite or not item.genre) and meta.genre:
                     item.genre, updated = meta.genre, True
-                
+
                 if meta.tags:
                     existing_tags = [t.strip() for t in (item.subject.split(",") if item.subject else []) if t.strip()]
                     # Subjects should ONLY be added to and not replaced
@@ -672,9 +692,14 @@ async def enrich_specific_books(
 
                 if updated:
                     session.add(item)
-                    sync_item_to_search(item)
+                    item_docs.append(_build_item_document(item))
 
         session.commit()
+        # Non-blocking Meilisearch pushes (docs built while session was open)
+        if work_doc:
+            await asyncio.to_thread(_push_doc, "works", work_doc)
+        for doc in item_docs:
+            await asyncio.to_thread(_push_doc, "items", doc)
         await notification_manager.send_personal_message({"type": "BOOK_ARCHIVE_UPDATED", "count": count}, user_id)
 
 
@@ -716,7 +741,8 @@ def ensure_work_metadata(
     genre: str | None = None,
     image_url: str | None = None,
     tags: list[str] | None = None,
-    overwrite: bool = False
+    overwrite: bool = False,
+    sync_search: bool = True,
 ) -> WorkMetadata | None:
     meta = None
 
@@ -768,8 +794,9 @@ def ensure_work_metadata(
             meta.tags = list(current_tags | new_tags)
         session.add(meta)
     session.flush()
-    from app.search import sync_work_metadata_to_search
-    sync_work_metadata_to_search(meta)
+    if sync_search:
+        from app.search import sync_work_metadata_to_search
+        sync_work_metadata_to_search(meta)
     return meta
 
 

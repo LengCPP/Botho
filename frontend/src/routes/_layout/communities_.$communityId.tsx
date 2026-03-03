@@ -594,9 +594,9 @@ function CommunityBoard() {
     mutationFn: () => Communities.leaveCommunity({ id: cId }),
     onSuccess: () => {
       showSuccessToast("Left")
-      queryClient.invalidateQueries({
-        queryKey: ["communities"],
-      })
+      queryClient.invalidateQueries({ queryKey: ["communities"] })
+      queryClient.invalidateQueries({ queryKey: ["communitiesInfinite"] })
+      queryClient.invalidateQueries({ queryKey: ["browseCommunitiesInfinite"] })
       navigate({ to: "/communities" })
     },
     onError: () => showErrorToast("Failed"),

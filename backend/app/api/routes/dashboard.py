@@ -96,18 +96,18 @@ def get_recent_activity(
     Get recently added items from friends and communities.
     """
     # 1. Get Social Graph (Friends & Communities)
-    # Friends
-    friends_stmt = select(Friendship).where(
-        (Friendship.user_id == current_user.id) | (Friendship.friend_id == current_user.id),
-        Friendship.status == FriendshipStatus.ACCEPTED
-    )
-    friendships = session.exec(friends_stmt).all()
-    friend_ids = set()
-    for f in friendships:
-        if f.user_id == current_user.id:
-            friend_ids.add(f.friend_id)
-        else:
-            friend_ids.add(f.user_id)
+    # Friends — single UNION query instead of loading all Friendship rows into Python
+    friend_ids = set(session.exec(
+        select(Friendship.friend_id).where(
+            Friendship.user_id == current_user.id,
+            Friendship.status == FriendshipStatus.ACCEPTED,
+        ).union(
+            select(Friendship.user_id).where(
+                Friendship.friend_id == current_user.id,
+                Friendship.status == FriendshipStatus.ACCEPTED,
+            )
+        )
+    ).all())
 
     # Communities
     comm_stmt = select(CommunityMember.community_id).where(

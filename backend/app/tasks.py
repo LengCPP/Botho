@@ -225,7 +225,7 @@ async def classify_pending_books():
             # Lazy imports to avoid circular-import issues at module level.
             from app.ai import classify_books
             from app.api.utils import ensure_work_metadata, map_book_classification
-            from app.search import sync_item_to_search
+            from app.search import _build_item_document, _build_work_document, _push_doc
 
             # ------------------------------------------------------------------
             # 2. Classify each book individually with its own write session.
@@ -251,6 +251,8 @@ async def classify_pending_books():
                         cat_raw, gen_raw, sub_raw = results[0]
                         cat, gen, _ = map_book_classification([cat_raw, gen_raw])
 
+                        item_doc: dict | None = None
+                        work_doc: dict | None = None
                         with Session(engine) as ws:
                             book = ws.get(Item, book_info["id"])
                             if book:
@@ -263,10 +265,11 @@ async def classify_pending_books():
 
                                 ws.add(book)
                                 ws.flush()
-                                sync_item_to_search(book)
+                                # Build docs while session is open (lazy-load safe)
+                                item_doc = _build_item_document(book)
 
                                 tags = [s.strip() for s in sub_raw.split(",")] if sub_raw else []
-                                ensure_work_metadata(
+                                meta = ensure_work_metadata(
                                     ws,
                                     book.author,
                                     book.title,
@@ -274,8 +277,15 @@ async def classify_pending_books():
                                     genre=gen,
                                     tags=tags,
                                     overwrite=True,
+                                    sync_search=False,
                                 )
+                                work_doc = _build_work_document(meta) if meta else None
                                 ws.commit()
+                        # Non-blocking Meilisearch pushes outside the session context
+                        if item_doc:
+                            await asyncio.to_thread(_push_doc, "items", item_doc)
+                        if work_doc:
+                            await asyncio.to_thread(_push_doc, "works", work_doc)
                                 logger.info(
                                     "Classification worker: '%s' → %s / %s",
                                     book.title,

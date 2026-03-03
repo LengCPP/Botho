@@ -142,18 +142,16 @@ const ItemCard = ({
     },
   })
 
-  const { data: readingLogData } = useQuery({
-    queryKey: ["reading-log-status", item.author, item.title],
-    queryFn: () =>
-      Log.readReadingLog({
-        author: item.author || "",
-        title: item.title,
-        limit: 1,
-      }),
-    enabled: !!item.author && !!item.title && !!user,
+  // Shared query — all cards reuse the same cache key, one request total.
+  const { data: readingLogAll } = useQuery({
+    queryKey: ["reading-log-all"],
+    queryFn: () => Log.readReadingLog({ limit: 500 }),
+    enabled: !!user,
   })
 
-  const readingLogEntry = readingLogData?.data[0]
+  const readingLogEntry = readingLogAll?.data.find(
+    (e) => e.author === item.author && e.title === item.title,
+  )
 
   const readingLogMutation = useMutation({
     mutationFn: async () => {
@@ -183,9 +181,7 @@ const ItemCard = ({
             ? "Added to Reading List"
             : "Marked as Completed"
         showSuccessToast(msg)
-        queryClient.invalidateQueries({
-          queryKey: ["reading-log-status", item.author, item.title],
-        })
+        queryClient.invalidateQueries({ queryKey: ["reading-log-all"] })
         queryClient.invalidateQueries({ queryKey: ["reading-log"] })
       }
       setIsReadingLogConfirmOpen(false)
