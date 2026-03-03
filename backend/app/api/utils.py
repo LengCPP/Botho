@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import json
 import uuid
 from datetime import datetime
 from typing import Any
@@ -1180,8 +1182,16 @@ def get_community_admin_count(session: Session, community_id: uuid.UUID) -> int:
 def is_community_admin(
     session: Session, community_id: uuid.UUID, user_id: uuid.UUID
 ) -> bool:
-    """Return True if the user is an accepted admin of the community."""
-    return (
+    """Return True if the user is an accepted admin of the community.
+    Result is cached per-request via starlette-context to avoid repeated DB queries."""
+    from starlette_context import context as req_ctx
+    key = f"is_admin_{community_id}_{user_id}"
+    try:
+        if key in req_ctx:
+            return req_ctx[key]
+    except RuntimeError:
+        pass  # outside request context (e.g. background tasks)
+    result = (
         session.exec(
             select(CommunityMember).where(
                 CommunityMember.community_id == community_id,
@@ -1192,12 +1202,25 @@ def is_community_admin(
         ).first()
         is not None
     )
+    try:
+        req_ctx[key] = result
+    except RuntimeError:
+        pass
+    return result
 
 
 def is_community_staff(
     session: Session, community_id: uuid.UUID, user_id: uuid.UUID
 ) -> bool:
-    """Return True if the user is an accepted admin or moderator of the community."""
+    """Return True if the user is an accepted admin or moderator of the community.
+    Result is cached per-request via starlette-context to avoid repeated DB queries."""
+    from starlette_context import context as req_ctx
+    key = f"is_staff_{community_id}_{user_id}"
+    try:
+        if key in req_ctx:
+            return req_ctx[key]
+    except RuntimeError:
+        pass
     member = session.exec(
         select(CommunityMember).where(
             CommunityMember.community_id == community_id,
@@ -1205,10 +1228,15 @@ def is_community_staff(
             CommunityMember.status == CommunityMemberStatus.ACCEPTED,
         )
     ).first()
-    return member is not None and member.role in (
+    result = member is not None and member.role in (
         CommunityMemberRole.ADMIN,
         CommunityMemberRole.MODERATOR,
     )
+    try:
+        req_ctx[key] = result
+    except RuntimeError:
+        pass
+    return result
 
 
 def require_community_membership(
@@ -1225,3 +1253,21 @@ def require_community_membership(
     if not member:
         raise HTTPException(status_code=403, detail="Not a member of this community")
     return member
+
+
+def encode_item_cursor(item: Any) -> str:
+    """Encode an item's (created_at, id) into a base64url cursor string."""
+    payload = {"ts": item.created_at.isoformat(), "id": str(item.id)}
+    return base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+
+
+def decode_item_cursor(cursor: str) -> tuple[datetime, uuid.UUID] | None:
+    """Decode a base64url cursor into (created_at, id). Returns None on any error."""
+    try:
+        padded = cursor + "=" * (-len(cursor) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded))
+        ts = datetime.fromisoformat(payload["ts"])
+        uid = uuid.UUID(payload["id"])
+        return ts, uid
+    except Exception:
+        return None

@@ -152,9 +152,9 @@ function ItemsTable() {
         q,
       },
     ],
-    queryFn: ({ pageParam = 0 }) =>
+    queryFn: ({ pageParam }) =>
       Items.readItems({
-        skip: pageParam as number,
+        cursor: pageParam as string | undefined,
         limit: limit,
         sort_by: sort_by,
         sort_order: sort_order,
@@ -169,11 +169,8 @@ function ItemsTable() {
         exclude_lost: true,
         exclude_private: true,
       }),
-    getNextPageParam: (lastPage, allPages) => {
-      const loadedCount = allPages.length * limit
-      return loadedCount < lastPage.count ? loadedCount : undefined
-    },
-    initialPageParam: 0,
+    getNextPageParam: (lastPage) => (lastPage as any).next_cursor ?? undefined,
+    initialPageParam: undefined,
     placeholderData: keepPreviousData,
     enabled:
       !!user &&
@@ -193,20 +190,17 @@ function ItemsTable() {
     isLoading: isLoadingFacets,
   } = useInfiniteQuery({
     queryKey: ["itemFacetsInfinite", user?.id, organize_by, q, item_type],
-    queryFn: ({ pageParam = 0 }) =>
+    queryFn: ({ pageParam }) =>
       Items.readItemFacets({
         owner_id: user?.id,
         group_by: organize_by,
         q: q,
         item_type: item_type,
-        skip: pageParam as number,
+        cursor: pageParam as string | undefined,
         limit: COLLECTIONS_LIMIT,
       }),
-    getNextPageParam: (last: any, all) => {
-      const loaded = all.length * COLLECTIONS_LIMIT
-      return loaded < (last.count || 0) ? loaded : undefined
-    },
-    initialPageParam: 0,
+    getNextPageParam: (last: any) => (last as any).next_cursor ?? undefined,
+    initialPageParam: undefined,
     placeholderData: keepPreviousData,
     enabled:
       !!user &&

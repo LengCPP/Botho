@@ -1369,6 +1369,10 @@ export type ItemsMinimalPublic = {
     facets?: {
         [key: string]: unknown;
     } | null;
+    /**
+     * Next Cursor
+     */
+    next_cursor?: string | null;
 };
 
 /**
@@ -1399,6 +1403,10 @@ export type ItemsPublic = {
             [key: string]: unknown;
         };
     } | null;
+    /**
+     * Next Cursor
+     */
+    next_cursor?: string | null;
 };
 
 /**
@@ -3316,9 +3324,9 @@ export type ItemsReadItemFacetsData = {
          */
         item_type?: string | null;
         /**
-         * Skip
+         * Cursor
          */
-        skip?: number;
+        cursor?: string | null;
         /**
          * Limit
          */
@@ -3357,6 +3365,10 @@ export type ItemsReadItemsData = {
          * Limit
          */
         limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
         /**
          * Owner Id
          */
@@ -4907,9 +4919,9 @@ export type CommunitiesReadCommunityItemFacetsData = {
          */
         q?: string | null;
         /**
-         * Skip
+         * Cursor
          */
-        skip?: number;
+        cursor?: string | null;
         /**
          * Limit
          */
@@ -4953,6 +4965,10 @@ export type CommunitiesReadCommunityItemsData = {
          * Limit
          */
         limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
         /**
          * Sort By
          */

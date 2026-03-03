@@ -185,10 +185,10 @@ function UserProfilePage() {
         q,
       },
     ],
-    queryFn: ({ pageParam = 0 }) =>
+    queryFn: ({ pageParam }) =>
       Items.readItems({
         owner_id: userId,
-        skip: pageParam as number,
+        cursor: pageParam as string | undefined,
         limit,
         sort_by: sort_by,
         sort_order: sort_order,
@@ -200,11 +200,8 @@ function UserProfilePage() {
         q,
         minimal: true,
       }),
-    getNextPageParam: (last, all) => {
-      const loaded = all.length * limit
-      return loaded < last.count ? loaded : undefined
-    },
-    initialPageParam: 0,
+    getNextPageParam: (last) => (last as any).next_cursor ?? undefined,
+    initialPageParam: undefined,
     enabled:
       canSeeAll &&
       (!!subject ||
@@ -222,20 +219,17 @@ function UserProfilePage() {
     isFetchingNextPage: isFetchingNextFacets,
   } = useInfiniteQuery({
     queryKey: ["itemFacetsInfinite", userId, organize_by, q, item_type],
-    queryFn: ({ pageParam = 0 }) =>
+    queryFn: ({ pageParam }) =>
       Items.readItemFacets({
         owner_id: userId,
         group_by: organize_by,
         q,
         item_type: item_type,
-        skip: pageParam as number,
+        cursor: pageParam as string | undefined,
         limit: COLLECTIONS_LIMIT,
       }),
-    getNextPageParam: (last: any, all) => {
-      const loaded = all.length * COLLECTIONS_LIMIT
-      return loaded < (last.count || 0) ? loaded : undefined
-    },
-    initialPageParam: 0,
+    getNextPageParam: (last: any) => (last as any).next_cursor ?? undefined,
+    initialPageParam: undefined,
     enabled:
       canSeeAll &&
       display_type === "collections" &&

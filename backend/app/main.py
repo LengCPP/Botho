@@ -1,14 +1,15 @@
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 
 import sentry_sdk
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from starlette.middleware.cors import CORSMiddleware
+from starlette_context.middleware import RawContextMiddleware
 
 from app.api.main import api_router
 from app.core.config import settings
@@ -31,6 +32,8 @@ def custom_generate_unique_id(route: APIRoute) -> str:
 if settings.SENTRY_DSN and settings.ENVIRONMENT != "local":
     sentry_sdk.init(dsn=str(settings.SENTRY_DSN), enable_tracing=True)
 
+scheduler = AsyncIOScheduler(timezone="UTC")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialize Search
@@ -42,18 +45,19 @@ async def lifespan(app: FastAPI):
     # Warn once at startup if push notifications are not configured
     check_vapid_config()
 
-    # Start background tasks
-    task = asyncio.create_task(check_overdue_loans())
-    task2 = asyncio.create_task(check_expired_suspensions())
-    task3 = asyncio.create_task(check_expired_board_content())
-    task4 = asyncio.create_task(classify_pending_books())
+    # Schedule background tasks via APScheduler
+    scheduler.add_job(check_overdue_loans, "interval", hours=1)
+    scheduler.add_job(check_expired_suspensions, "interval", minutes=5)
+    scheduler.add_job(check_expired_board_content, "interval", hours=24)
+    scheduler.add_job(classify_pending_books, "interval", seconds=30, max_instances=1)
+    scheduler.start()
+    logger.info("APScheduler started with %d job(s)", len(scheduler.get_jobs()))
+
     yield
-    # Cancel background tasks and wait for clean shutdown
-    task.cancel()
-    task2.cancel()
-    task3.cancel()
-    task4.cancel()
-    await asyncio.gather(task, task2, task3, task4, return_exceptions=True)
+
+    scheduler.shutdown(wait=False)
+    logger.info("APScheduler shut down")
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -65,6 +69,7 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(RawContextMiddleware)
 
 # Set all CORS enabled origins
 if settings.all_cors_origins:

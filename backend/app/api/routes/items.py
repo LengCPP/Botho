@@ -23,6 +23,8 @@ from app.api.utils import (
     ai_classify_specific_books,
     check_item_availability,
     check_possession,
+    decode_item_cursor,
+    encode_item_cursor,
     enrich_specific_books,
     ensure_work_metadata,
     filter_owner_privacy,
@@ -723,7 +725,7 @@ def read_item_facets(
     owner_id: uuid.UUID | None = None,
     q: str | None = Query(default=None, max_length=200),
     item_type: str | None = None,
-    skip: int = Query(default=0, ge=0),
+    cursor: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=settings.MAX_PAGE_SIZE),
 ) -> Any:
     """
@@ -845,6 +847,8 @@ def read_item_facets(
             return apply_q_filter(stmt, q)
         return stmt
 
+    from sqlalchemy import case as sa_case
+
     if group_by == "author":
         core_stmt = select(
             Item.author, Item.item_type, func.count(Item.id).label("count"), func.array_agg(Item.image_url).label("imgs")
@@ -855,7 +859,11 @@ def read_item_facets(
         group_stmt = core_stmt.group_by(Item.author, Item.item_type)
         total_count = session.exec(select(func.count()).select_from(group_stmt.subquery())).one()
 
-        rows = session.exec(group_stmt.order_by(Item.author.asc()).offset(skip).limit(limit)).all()
+        subq = group_stmt.subquery("fq")
+        ordered_stmt = select(subq).order_by(subq.c.author.asc().nulls_last(), subq.c.item_type.asc())
+        if cursor:
+            ordered_stmt = ordered_stmt.where(or_(subq.c.author > cursor, subq.c.author.is_(None)))
+        rows = session.execute(ordered_stmt.limit(limit)).all()
         for author, i_type, count, imgs in rows:
             valid_imgs = [img for img in (imgs or []) if img][:5]
             results.append({"name": author or "Others", "item_type": i_type, "count": count, "sample_images": valid_imgs})
@@ -870,7 +878,11 @@ def read_item_facets(
         group_stmt = core_stmt.group_by("name", Item.item_type)
         total_count = session.exec(select(func.count()).select_from(group_stmt.subquery())).one()
 
-        rows = session.exec(group_stmt.order_by(text("name ASC")).offset(skip).limit(limit)).all()
+        subq = group_stmt.subquery("fq")
+        ordered_stmt = select(subq).order_by(subq.c.name.asc().nulls_last(), subq.c.item_type.asc())
+        if cursor:
+            ordered_stmt = ordered_stmt.where(or_(subq.c.name > cursor, subq.c.name.is_(None)))
+        rows = session.execute(ordered_stmt.limit(limit)).all()
         for name, i_type, count, imgs in rows:
             valid_imgs = [img for img in (imgs or []) if img][:5]
             results.append({"name": name or "Others", "item_type": i_type, "count": count, "sample_images": valid_imgs})
@@ -885,7 +897,11 @@ def read_item_facets(
         group_stmt = core_stmt.group_by("name", Item.item_type)
         total_count = session.exec(select(func.count()).select_from(group_stmt.subquery())).one()
 
-        rows = session.exec(group_stmt.order_by(text("name ASC")).offset(skip).limit(limit)).all()
+        subq = group_stmt.subquery("fq")
+        ordered_stmt = select(subq).order_by(subq.c.name.asc().nulls_last(), subq.c.item_type.asc())
+        if cursor:
+            ordered_stmt = ordered_stmt.where(or_(subq.c.name > cursor, subq.c.name.is_(None)))
+        rows = session.execute(ordered_stmt.limit(limit)).all()
         for name, i_type, count, imgs in rows:
             valid_imgs = [img for img in (imgs or []) if img][:5]
             results.append({"name": name or "Others", "item_type": i_type, "count": count, "sample_images": valid_imgs})
@@ -914,9 +930,17 @@ def read_item_facets(
         try:
             total_count = session.exec(select(func.count()).select_from(full_stmt.subquery())).one()
             subq = full_stmt.subquery()
-            rows = session.execute(
-                select(subq).order_by(text("item_type"), text("name ASC")).offset(skip).limit(limit)
-            ).all()
+            # "Others" always last regardless of alphabetical position
+            ordered_stmt = select(subq).order_by(
+                sa_case((subq.c.name == "Others", 1), else_=0).asc(),
+                subq.c.item_type.asc(),
+                subq.c.name.asc(),
+            )
+            if cursor:
+                ordered_stmt = ordered_stmt.where(
+                    or_(subq.c.name > cursor, subq.c.name == "Others")
+                )
+            rows = session.execute(ordered_stmt.limit(limit)).all()
             for row in rows:
                 name, i_type, count, imgs = row[0], row[1], row[2], row[3]
                 valid_imgs = [img for img in (imgs or []) if img][:5]
@@ -924,7 +948,13 @@ def read_item_facets(
         except Exception:
             logger.warning("Subject facet processing failed", exc_info=True)
 
-    return {"data": results, "count": total_count}
+    next_cursor = None
+    if len(results) == limit and results:
+        last_name = results[-1]["name"]
+        if last_name and last_name != "Others":
+            next_cursor = last_name
+
+    return {"data": results, "count": total_count, "next_cursor": next_cursor}
 
 
 @router.get("/", response_model=ItemsPublic | ItemsMinimalPublic)
@@ -933,6 +963,7 @@ def read_items(
     current_user: CurrentUser,
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=settings.MAX_PAGE_SIZE),
+    cursor: str | None = Query(default=None),
     owner_id: uuid.UUID | None = None,
     sort_by: str = "created_at",
     sort_order: str = "desc",
@@ -1419,10 +1450,25 @@ def read_items(
         elif sort_by == "author":
             sort_column = Item.author
 
+        # Apply keyset pagination when sort_by is created_at and cursor is provided
+        use_keyset = sort_by == "created_at" and cursor
+        cursor_data = decode_item_cursor(cursor) if use_keyset else None
+        if cursor_data:
+            cursor_ts, cursor_id = cursor_data
+            from sqlalchemy import and_ as sa_and
+            if sort_order == "desc":
+                statement = statement.where(
+                    or_(Item.created_at < cursor_ts, sa_and(Item.created_at == cursor_ts, Item.id < cursor_id))
+                )
+            else:
+                statement = statement.where(
+                    or_(Item.created_at > cursor_ts, sa_and(Item.created_at == cursor_ts, Item.id > cursor_id))
+                )
+
         if sort_order == "desc":
-            statement = statement.order_by(sort_column.desc())
+            statement = statement.order_by(sort_column.desc(), Item.id.desc())
         else:
-            statement = statement.order_by(sort_column.asc())
+            statement = statement.order_by(sort_column.asc(), Item.id.asc())
 
         from sqlalchemy.orm import selectinload
 
@@ -1436,7 +1482,10 @@ def read_items(
                 selectinload(Item.community_owner),
                 selectinload(Item.communities),
             )
-        items = session.exec(statement.offset(skip).limit(limit)).all()
+        if cursor_data:
+            items = session.exec(statement.limit(limit)).all()
+        else:
+            items = session.exec(statement.offset(skip).limit(limit)).all()
 
     if not items:
         return ItemsPublic(data=[], count=count, facets=facets, facet_stats=facet_stats)
@@ -1521,7 +1570,12 @@ def read_items(
                     subject=item.subject,
                 )
             )
-        return ItemsMinimalPublic(data=minimal_items, count=count, facets=facets)
+        next_cursor_val = (
+            encode_item_cursor(items[-1])
+            if sort_by == "created_at" and len(items) == limit
+            else None
+        )
+        return ItemsMinimalPublic(data=minimal_items, count=count, facets=facets, next_cursor=next_cursor_val)
 
     # Full ItemPublic building
     work_keys = {
@@ -1611,8 +1665,13 @@ def read_items(
             )
         )
 
+    next_cursor_val = (
+        encode_item_cursor(items[-1])
+        if sort_by == "created_at" and len(items) == limit
+        else None
+    )
     return ItemsPublic(
-        data=public_items, count=count, facets=facets, facet_stats=facet_stats
+        data=public_items, count=count, facets=facets, facet_stats=facet_stats, next_cursor=next_cursor_val
     )
 
 

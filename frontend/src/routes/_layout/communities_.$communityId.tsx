@@ -368,10 +368,10 @@ function CommunityBoard() {
       cId,
       { sort_by, sort_order, limit, category, genre, subject, author, owner_filter, item_type, q: qP },
     ],
-    queryFn: ({ pageParam = 0 }) =>
+    queryFn: ({ pageParam }) =>
       Communities.readCommunityItems({
         id: cId,
-        skip: pageParam as number,
+        cursor: pageParam as string | undefined,
         limit,
         sort_by,
         sort_order,
@@ -383,11 +383,8 @@ function CommunityBoard() {
         item_type,
         q: qP,
       }),
-    getNextPageParam: (last, all) => {
-      const loaded = all.length * limit
-      return loaded < last.count ? loaded : undefined
-    },
-    initialPageParam: 0,
+    getNextPageParam: (last) => (last as any).next_cursor ?? undefined,
+    initialPageParam: undefined,
     placeholderData: keepPreviousData,
     enabled:
       !!isMember && tab === "items" && (isFiltered || display_type === "items"),
@@ -402,19 +399,16 @@ function CommunityBoard() {
     isFetchingNextPage: isFetchingNextFacets,
   } = useInfiniteQuery({
     queryKey: ["communityFacetsInfinite", cId, organize_by, qP],
-    queryFn: ({ pageParam = 0 }) =>
+    queryFn: ({ pageParam }) =>
       Communities.readCommunityItemFacets({
         id: cId,
         group_by: organize_by,
         q: qP,
-        skip: pageParam,
+        cursor: pageParam as string | undefined,
         limit: COLLECTIONS_LIMIT,
       }),
-    getNextPageParam: (last: any, all) => {
-      const loaded = all.length * COLLECTIONS_LIMIT
-      return loaded < (last.count || 0) ? loaded : undefined
-    },
-    initialPageParam: 0,
+    getNextPageParam: (last: any) => (last as any).next_cursor ?? undefined,
+    initialPageParam: undefined,
     placeholderData: keepPreviousData,
     enabled:
       !!isMember &&

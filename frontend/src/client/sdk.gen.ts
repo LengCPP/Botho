@@ -783,7 +783,7 @@ export class Items {
         owner_id?: string | null;
         q?: string | null;
         item_type?: string | null;
-        skip?: number;
+        cursor?: string | null;
         limit?: number;
     }, options?: Options<never, ThrowOnError>) {
         const params = buildClientParams([parameters], [{ args: [
@@ -791,7 +791,7 @@ export class Items {
                     { in: 'query', key: 'owner_id' },
                     { in: 'query', key: 'q' },
                     { in: 'query', key: 'item_type' },
-                    { in: 'query', key: 'skip' },
+                    { in: 'query', key: 'cursor' },
                     { in: 'query', key: 'limit' }
                 ] }]);
         return (options?.client ?? client).get<ItemsReadItemFacetsResponses, ItemsReadItemFacetsErrors, ThrowOnError, 'data'>({
@@ -813,6 +813,7 @@ export class Items {
     public static readItems<ThrowOnError extends boolean = false>(parameters?: {
         skip?: number;
         limit?: number;
+        cursor?: string | null;
         owner_id?: string | null;
         sort_by?: string;
         sort_order?: string;
@@ -832,6 +833,7 @@ export class Items {
         const params = buildClientParams([parameters], [{ args: [
                     { in: 'query', key: 'skip' },
                     { in: 'query', key: 'limit' },
+                    { in: 'query', key: 'cursor' },
                     { in: 'query', key: 'owner_id' },
                     { in: 'query', key: 'sort_by' },
                     { in: 'query', key: 'sort_order' },
@@ -1879,14 +1881,14 @@ export class Communities {
         id: string;
         group_by?: string;
         q?: string | null;
-        skip?: number;
+        cursor?: string | null;
         limit?: number;
     }, options?: Options<never, ThrowOnError>) {
         const params = buildClientParams([parameters], [{ args: [
                     { in: 'path', key: 'id' },
                     { in: 'query', key: 'group_by' },
                     { in: 'query', key: 'q' },
-                    { in: 'query', key: 'skip' },
+                    { in: 'query', key: 'cursor' },
                     { in: 'query', key: 'limit' }
                 ] }]);
         return (options?.client ?? client).get<CommunitiesReadCommunityItemFacetsResponses, CommunitiesReadCommunityItemFacetsErrors, ThrowOnError, 'data'>({
@@ -1909,6 +1911,7 @@ export class Communities {
         id: string;
         skip?: number;
         limit?: number;
+        cursor?: string | null;
         sort_by?: string;
         sort_order?: string;
         category?: string | null;
@@ -1923,6 +1926,7 @@ export class Communities {
                     { in: 'path', key: 'id' },
                     { in: 'query', key: 'skip' },
                     { in: 'query', key: 'limit' },
+                    { in: 'query', key: 'cursor' },
                     { in: 'query', key: 'sort_by' },
                     { in: 'query', key: 'sort_order' },
                     { in: 'query', key: 'category' },

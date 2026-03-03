@@ -97,7 +97,8 @@ def get_recent_activity(
     """
     # 1. Get Social Graph (Friends & Communities)
     # Friends — single UNION query instead of loading all Friendship rows into Python
-    friend_ids = set(session.exec(
+    # session.exec() on a .union() returns Row tuples in SQLAlchemy 2.x; unpack with [0]
+    friend_ids = {r[0] for r in session.exec(
         select(Friendship.friend_id).where(
             Friendship.user_id == current_user.id,
             Friendship.status == FriendshipStatus.ACCEPTED,
@@ -107,7 +108,7 @@ def get_recent_activity(
                 Friendship.status == FriendshipStatus.ACCEPTED,
             )
         )
-    ).all())
+    ).all()}
 
     # Communities
     comm_stmt = select(CommunityMember.community_id).where(

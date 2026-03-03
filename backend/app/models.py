@@ -1027,12 +1027,14 @@ class ItemsPublic(SQLModel):
     count: int
     facets: dict[str, dict[str, int]] | None = None
     facet_stats: dict[str, dict[str, Any]] | None = None
+    next_cursor: str | None = None
 
 
 class ItemsMinimalPublic(SQLModel):
     data: list[ItemMinimal]
     count: int
     facets: dict[str, Any] | None = None
+    next_cursor: str | None = None
 
 
 class StagedItemPublic(SQLModel):

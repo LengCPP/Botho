@@ -9,6 +9,8 @@ from app.api.deps import CurrentUser, SessionDep
 from app.core.config import settings
 from app.api.utils import (
     _write_log,
+    decode_item_cursor,
+    encode_item_cursor,
     filter_loan_privacy,
     filter_owner_privacy,
     filter_user_privacy,
@@ -1431,7 +1433,7 @@ def read_community_item_facets(
     id: uuid.UUID,
     group_by: str = "category",  # category, genre, author, subject, ownership
     q: str | None = Query(default=None, max_length=200),
-    skip: int = Query(default=0, ge=0),
+    cursor: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=settings.MAX_PAGE_SIZE),
 ) -> Any:
     """
@@ -1474,6 +1476,7 @@ def read_community_item_facets(
 
     results = []
     total_count = 0
+    next_cursor: str | None = None
 
     def apply_q_filter(stmt, query_str):
         pattern = f"%{query_str}%"
@@ -1495,6 +1498,8 @@ def read_community_item_facets(
             return apply_q_filter(stmt, q)
         return stmt
 
+    from sqlalchemy import case as sa_case
+
     if group_by == "author":
         core_stmt = select(
             Item.author, Item.item_type, func.count(Item.id).label("count"), func.array_agg(Item.image_url).label("imgs")
@@ -1502,7 +1507,11 @@ def read_community_item_facets(
         core_stmt = build_search_condition(core_stmt)
         group_stmt = core_stmt.group_by(Item.author, Item.item_type)
         total_count = session.exec(select(func.count()).select_from(group_stmt.subquery())).one()
-        rows = session.exec(group_stmt.order_by(Item.author.asc()).offset(skip).limit(limit)).all()
+        subq = group_stmt.subquery("fq")
+        ordered_stmt = select(subq).order_by(subq.c.author.asc().nulls_last(), subq.c.item_type.asc())
+        if cursor:
+            ordered_stmt = ordered_stmt.where(or_(subq.c.author > cursor, subq.c.author.is_(None)))
+        rows = session.execute(ordered_stmt.limit(limit)).all()
         for author, i_type, count, imgs in rows:
             results.append({"name": author or "Others", "item_type": i_type, "count": count, "sample_images": [img for img in (imgs or []) if img][:5]})
 
@@ -1513,7 +1522,11 @@ def read_community_item_facets(
         core_stmt = build_search_condition(core_stmt)
         group_stmt = core_stmt.group_by("name", Item.item_type)
         total_count = session.exec(select(func.count()).select_from(group_stmt.subquery())).one()
-        rows = session.exec(group_stmt.order_by(text("name ASC")).offset(skip).limit(limit)).all()
+        subq = group_stmt.subquery("fq")
+        ordered_stmt = select(subq).order_by(subq.c.name.asc().nulls_last(), subq.c.item_type.asc())
+        if cursor:
+            ordered_stmt = ordered_stmt.where(or_(subq.c.name > cursor, subq.c.name.is_(None)))
+        rows = session.execute(ordered_stmt.limit(limit)).all()
         for name, i_type, count, imgs in rows:
             results.append({"name": name or "Others", "item_type": i_type, "count": count, "sample_images": [img for img in (imgs or []) if img][:5]})
 
@@ -1524,7 +1537,11 @@ def read_community_item_facets(
         core_stmt = build_search_condition(core_stmt)
         group_stmt = core_stmt.group_by("name", Item.item_type)
         total_count = session.exec(select(func.count()).select_from(group_stmt.subquery())).one()
-        rows = session.exec(group_stmt.order_by(text("name ASC")).offset(skip).limit(limit)).all()
+        subq = group_stmt.subquery("fq")
+        ordered_stmt = select(subq).order_by(subq.c.name.asc().nulls_last(), subq.c.item_type.asc())
+        if cursor:
+            ordered_stmt = ordered_stmt.where(or_(subq.c.name > cursor, subq.c.name.is_(None)))
+        rows = session.execute(ordered_stmt.limit(limit)).all()
         for name, i_type, count, imgs in rows:
             results.append({"name": name or "Others", "item_type": i_type, "count": count, "sample_images": [img for img in (imgs or []) if img][:5]})
 
@@ -1532,7 +1549,7 @@ def read_community_item_facets(
         core_stmt = select(
             Item.owner_id, User.full_name, User.email, func.count(Item.id).label("count"), func.array_agg(Item.image_url).label("imgs")
         ).outerjoin(User, User.id == Item.owner_id).where(base_filter)
-        
+
         if q:
             pattern = f"%{q}%"
             if search_item_ids:
@@ -1550,10 +1567,18 @@ def read_community_item_facets(
                     Item.title.ilike(pattern),
                     Item.author.ilike(pattern)
                 ))
-            
+
         group_stmt = core_stmt.group_by(Item.owner_id, User.full_name, User.email)
         total_count = session.exec(select(func.count()).select_from(group_stmt.subquery())).one()
-        rows = session.exec(group_stmt.order_by(User.full_name.asc()).offset(skip).limit(limit)).all()
+        subq = group_stmt.subquery("fq")
+        ordered_stmt = select(subq).order_by(subq.c.full_name.asc().nulls_last())
+        if cursor:
+            ordered_stmt = ordered_stmt.where(or_(subq.c.full_name > cursor, subq.c.full_name.is_(None)))
+        rows = session.execute(ordered_stmt.limit(limit)).all()
+        if len(rows) == limit and rows:
+            last_fn = rows[-1][1]  # full_name column
+            if last_fn:
+                next_cursor = last_fn
         for owner_id_val, full_name, email, count, imgs in rows:
             display_name = "Community Library" if str(owner_id_val) == str(id) else (full_name or email or "Unknown Member")
             results.append({"name": display_name, "owner_id": str(owner_id_val), "count": count, "sample_images": [img for img in (imgs or []) if img][:5]})
@@ -1576,13 +1601,30 @@ def read_community_item_facets(
         try:
             total_count = session.exec(select(func.count()).select_from(full_stmt.subquery())).one()
             subq = full_stmt.subquery()
-            rows = session.execute(select(subq).order_by(text("item_type"), text("name ASC")).offset(skip).limit(limit)).all()
+            # "Others" always last regardless of alphabetical position
+            ordered_stmt = select(subq).order_by(
+                sa_case((subq.c.name == "Others", 1), else_=0).asc(),
+                subq.c.item_type.asc(),
+                subq.c.name.asc(),
+            )
+            if cursor:
+                ordered_stmt = ordered_stmt.where(
+                    or_(subq.c.name > cursor, subq.c.name == "Others")
+                )
+            rows = session.execute(ordered_stmt.limit(limit)).all()
             for row in rows:
                 results.append({"name": row[0], "item_type": row[1], "count": row[2], "sample_images": [img for img in (row[3] or []) if img][:5]})
         except Exception:
             pass
 
-    return {"data": results, "count": total_count}
+    # For non-ownership branches, compute next_cursor from results
+    if group_by != "ownership":
+        if len(results) == limit and results:
+            last_name = results[-1]["name"]
+            if last_name and last_name != "Others":
+                next_cursor = last_name
+
+    return {"data": results, "count": total_count, "next_cursor": next_cursor}
 
 
 @router.get("/{id}/items", response_model=ItemsPublic)
@@ -1593,6 +1635,7 @@ def read_community_items(
     id: uuid.UUID,
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=settings.MAX_PAGE_SIZE),
+    cursor: str | None = Query(default=None),
     sort_by: str = "created_at",
     sort_order: str = "desc",
     category: str | None = None,
@@ -1769,14 +1812,32 @@ def read_community_items(
         elif sort_by == "author":
             sort_column = Item.author
 
+        # Apply keyset pagination when sort_by is created_at and cursor is provided
+        use_keyset = sort_by == "created_at" and cursor
+        cursor_data = decode_item_cursor(cursor) if use_keyset else None
+        if cursor_data:
+            cursor_ts, cursor_id = cursor_data
+            from sqlalchemy import and_ as sa_and
+            if sort_order == "desc":
+                statement = statement.where(
+                    or_(Item.created_at < cursor_ts, sa_and(Item.created_at == cursor_ts, Item.id < cursor_id))
+                )
+            else:
+                statement = statement.where(
+                    or_(Item.created_at > cursor_ts, sa_and(Item.created_at == cursor_ts, Item.id > cursor_id))
+                )
+
         if sort_order == "desc":
-            statement = statement.order_by(sort_column.desc())
+            statement = statement.order_by(sort_column.desc(), Item.id.desc())
         else:
-            statement = statement.order_by(sort_column.asc())
+            statement = statement.order_by(sort_column.asc(), Item.id.asc())
 
         count_stmt = select(func.count()).select_from(statement.subquery())
         count = session.exec(count_stmt).one()
-        items = session.exec(statement.offset(skip).limit(limit)).all()
+        if cursor_data:
+            items = session.exec(statement.limit(limit)).all()
+        else:
+            items = session.exec(statement.offset(skip).limit(limit)).all()
 
     # Get all CommunityItem meta for pooled items in this batch
     item_ids = [item.id for item in items]
@@ -1867,8 +1928,13 @@ def read_community_items(
 
         items_public.append(item_pub)
 
+    next_cursor_val = (
+        encode_item_cursor(items[-1])
+        if items and sort_by == "created_at" and len(items) == limit
+        else None
+    )
     return ItemsPublic(
-        data=items_public, count=count, facets=facets, facet_stats=facet_stats
+        data=items_public, count=count, facets=facets, facet_stats=facet_stats, next_cursor=next_cursor_val
     )
 
 

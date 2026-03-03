@@ -1,12 +1,14 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import bcrypt
 import jwt
-from passlib.context import CryptContext
 
 from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# bcrypt truncates at 72 bytes; we enforce the limit explicitly so behaviour
+# is consistent across library versions and passwords are never silently cut.
+_MAX_PW_BYTES = 72
 
 
 def create_access_token(subject: str | Any, expires_delta: timedelta) -> str:
@@ -17,8 +19,17 @@ def create_access_token(subject: str | Any, expires_delta: timedelta) -> str:
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return bcrypt.checkpw(
+            plain_password.encode("utf-8")[:_MAX_PW_BYTES],
+            hashed_password.encode("utf-8"),
+        )
+    except Exception:
+        return False
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(
+        password.encode("utf-8")[:_MAX_PW_BYTES],
+        bcrypt.gensalt(),
+    ).decode("utf-8")
