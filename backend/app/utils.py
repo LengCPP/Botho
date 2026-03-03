@@ -13,7 +13,6 @@ from jinja2 import Template
 from jwt.exceptions import InvalidTokenError
 from sqlmodel import Session, select
 
-from app.core import security
 from app.core.config import settings
 
 logging.basicConfig(level=logging.INFO)
@@ -201,7 +200,7 @@ def generate_password_reset_token(email: str, expires_delta: timedelta | None = 
     encoded_jwt = jwt.encode(
         {"exp": exp, "nbf": now, "sub": email},
         settings.SECRET_KEY,
-        algorithm=security.ALGORITHM,
+        algorithm=settings.JWT_ALGORITHM,
     )
     return encoded_jwt
 
@@ -209,7 +208,7 @@ def generate_password_reset_token(email: str, expires_delta: timedelta | None = 
 def verify_password_reset_token(token: str) -> str | None:
     try:
         decoded_token = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
+            token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
         )
         return str(decoded_token["sub"])
     except InvalidTokenError:

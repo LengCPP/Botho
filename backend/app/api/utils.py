@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from fastapi import HTTPException
 from sqlmodel import Session, and_, func, or_, select
 
 from app.models import (
@@ -985,13 +986,14 @@ def filter_loan_privacy(loan: Loan, current_user_id: Any = None, is_admin: bool 
 def check_item_availability(session: Session, item_id: uuid.UUID) -> bool:
     """
     Check if an item is available (not currently loaned out and not lost).
+    Respects item.count: allows up to item.count simultaneous active loans.
     """
     item = session.get(Item, item_id)
     if not item or item.is_lost:
         return False
 
-    active_loan = session.exec(
-        select(Loan).where(
+    active_loan_count = session.exec(
+        select(func.count()).select_from(Loan).where(
             Loan.item_id == item_id,
             Loan.status.in_([
                 LoanStatus.ACTIVE, LoanStatus.ACCEPTED,
@@ -999,8 +1001,8 @@ def check_item_availability(session: Session, item_id: uuid.UUID) -> bool:
                 LoanStatus.DEFAULTED
             ])
         )
-    ).first()
-    return active_loan is None
+    ).one()
+    return active_loan_count < item.count
 
 
 def check_possession(session: Session, user_id: uuid.UUID, item_id: uuid.UUID) -> bool:
@@ -1146,3 +1148,53 @@ def get_community_admin_count(session: Session, community_id: uuid.UUID) -> int:
         )
     )
     return session.exec(statement).one()
+
+
+def is_community_admin(
+    session: Session, community_id: uuid.UUID, user_id: uuid.UUID
+) -> bool:
+    """Return True if the user is an accepted admin of the community."""
+    return (
+        session.exec(
+            select(CommunityMember).where(
+                CommunityMember.community_id == community_id,
+                CommunityMember.user_id == user_id,
+                CommunityMember.role == CommunityMemberRole.ADMIN,
+                CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+            )
+        ).first()
+        is not None
+    )
+
+
+def is_community_staff(
+    session: Session, community_id: uuid.UUID, user_id: uuid.UUID
+) -> bool:
+    """Return True if the user is an accepted admin or moderator of the community."""
+    member = session.exec(
+        select(CommunityMember).where(
+            CommunityMember.community_id == community_id,
+            CommunityMember.user_id == user_id,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+        )
+    ).first()
+    return member is not None and member.role in (
+        CommunityMemberRole.ADMIN,
+        CommunityMemberRole.MODERATOR,
+    )
+
+
+def require_community_membership(
+    session: Session, community_id: uuid.UUID, user_id: uuid.UUID
+) -> CommunityMember:
+    """Return the accepted CommunityMember or raise HTTP 403."""
+    member = session.exec(
+        select(CommunityMember).where(
+            CommunityMember.community_id == community_id,
+            CommunityMember.user_id == user_id,
+            CommunityMember.status == CommunityMemberStatus.ACCEPTED,
+        )
+    ).first()
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member of this community")
+    return member

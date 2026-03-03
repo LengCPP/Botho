@@ -23,6 +23,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { memo, useState } from "react"
 import {
   FiBookOpen,
+  FiChevronLeft,
   FiChevronRight,
   FiClock,
   FiCornerUpLeft,
@@ -280,19 +281,35 @@ const CompactItemCardBase = ({
               {availableCount > 0 ? "Available" : "On Loan"}
             </Badge>
             {items.length > 1 && (
-              <IconButton
-                aria-label="Next Item"
-                size="xs"
-                variant="ghost"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setItemIndex((prev) => (prev + 1) % items.length)
-                }}
-                h="14px"
-                minW="14px"
-              >
-                <FiChevronRight size="10px" />
-              </IconButton>
+              <HStack gap={0}>
+                <IconButton
+                  aria-label="Previous copy"
+                  size="xs"
+                  variant="ghost"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setItemIndex((prev) => (prev - 1 + items.length) % items.length)
+                  }}
+                  h="14px"
+                  minW="14px"
+                >
+                  <FiChevronLeft size="10px" />
+                </IconButton>
+                <Text fontSize="3xs" color="gray.400">{itemIndex + 1}/{items.length}</Text>
+                <IconButton
+                  aria-label="Next copy"
+                  size="xs"
+                  variant="ghost"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setItemIndex((prev) => (prev + 1) % items.length)
+                  }}
+                  h="14px"
+                  minW="14px"
+                >
+                  <FiChevronRight size="10px" />
+                </IconButton>
+              </HStack>
             )}
           </HStack>
         </VStack>

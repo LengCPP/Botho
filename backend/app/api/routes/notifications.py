@@ -17,7 +17,6 @@ from starlette.websockets import WebSocketState
 
 from app.api.deps import CurrentUser, SessionDep
 from app.api.websocket_manager import notification_manager
-from app.core import security
 from app.core.config import settings
 from app.core.db import engine
 from app.models import (
@@ -39,7 +38,7 @@ async def get_current_user_ws(
 ) -> User:
     try:
         payload = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
+            token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
         )
         token_data = TokenPayload(**payload)
     except (InvalidTokenError, ValidationError):

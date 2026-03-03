@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import random
 import uuid
 from typing import Any
 
@@ -151,147 +150,204 @@ async def sync_archive_items(*, request: Request, session: SessionDep, current_u
     background_tasks.add_task(notify_import_finished, current_user.id, "BOOK_ARCHIVE_BATCH_COMPLETED")
     return {"message": "Queued"}
 
+async def _enrich_staged_item(
+    staged_item: StagedItem,
+    session: Session,
+    initial_image: str | None = None,
+) -> dict:
+    """Resolve and merge all external metadata for a staged item.
+
+    Checks the local WorkMetadata archive first, then falls back to Google Books
+    and OpenLibrary. Returns a plain dict so callers are not session-dependent.
+    Raises ValueError if no metadata source is found.
+    """
+    d = staged_item.raw_data
+    t = str(d.get("title", "")).strip()
+    a = str(d.get("author", "")).strip()
+    i = normalize_isbn(str(d.get("isbn", "")).strip() or None)
+
+    m = session.exec(select(WorkMetadata).where(WorkMetadata.isbn == i)).first() if i else None
+    if not m and a:
+        m = session.get(WorkMetadata, (a, t))
+
+    g, ol = await fetch_external_book_metadata(a, t, i)
+    desc, img, cat, gen, subjects = None, initial_image, None, None, []
+
+    if m:
+        t = m.title; a = m.author; desc = m.description; img = m.image_url or img
+        cat = m.category; gen = m.genre; subjects = list(m.tags or []); i = m.isbn or i
+    elif g:
+        t = g.get("title", t); desc = g.get("description")
+        a = ", ".join(g.get("authors", [])) or a
+        i = next((x["identifier"] for x in g.get("industryIdentifiers", []) if x["type"] in ["ISBN_13", "ISBN_10"]), i)
+        if g.get("imageLinks"):
+            try:
+                img = await upload_image_from_url(g["imageLinks"].get("medium") or g["imageLinks"].get("thumbnail"), "items")
+            except Exception as e:
+                logger.warning("Image upload skipped (Google): %s", e)
+        if g.get("categories"):
+            c, gn, sj = map_book_classification(g["categories"])
+            cat = c; gen = gn
+            if sj: subjects.append(sj)
+    elif ol:
+        t = ol.get("title", t); desc = ol.get("description")
+        a = ", ".join([x["name"] if isinstance(x, dict) else x for x in ol.get("authors", [])] or ol.get("author_name", [])) or a
+        try:
+            img = await upload_image_from_url(ol.get("cover_url") or f"https://covers.openlibrary.org/b/id/{ol.get('cover_i')}-L.jpg", "items")
+        except Exception as e:
+            logger.warning("Image upload skipped (OpenLibrary): %s", e)
+        if ol.get("subject"):
+            c, gn, sj = map_book_classification(ol["subject"])
+            cat = c; gen = gn
+            if sj: subjects.append(sj)
+    else:
+        raise ValueError("Book not found in archive or external APIs")
+
+    return {
+        "title": t, "author": a, "isbn": i, "description": desc,
+        "image_url": img, "category": cat, "genre": gen,
+        "subjects": subjects, "raw_data": d,
+    }
+
+
 async def enrich_and_import_to_archive(staged_id: uuid.UUID, owner_id: uuid.UUID):
-    async with enrichment_semaphore:
-        await asyncio.sleep(random.uniform(1, 3))
+    # 1. Mark as PROCESSING (no semaphore)
+    with Session(engine) as session:
+        s = session.get(StagedItem, staged_id)
+        if not s or s.status == StagedItemStatus.COMPLETED:
+            return
+        s.status = StagedItemStatus.PROCESSING; session.add(s); session.commit()
+    await notification_manager.send_personal_message(
+        {"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "PROCESSING"}, owner_id
+    )
+    # 2. Enrich via external APIs (no semaphore — slow I/O should not block other enrichments)
+    try:
         with Session(engine) as session:
             s = session.get(StagedItem, staged_id)
-            if not s or s.status == StagedItemStatus.COMPLETED: return
-            s.status = StagedItemStatus.PROCESSING; session.add(s); session.commit()
-            await notification_manager.send_personal_message({"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "PROCESSING"}, owner_id)
-            try:
-                d = s.raw_data; t, a, i = str(d.get("title", "")).strip(), str(d.get("author", "")).strip(), str(d.get("isbn", "")).strip() or None
-                if not t or not a: raise ValueError("Title/Author required")
-                
-                # Normalize ISBN
-                i = normalize_isbn(i)
-                
-                m = session.exec(select(WorkMetadata).where(WorkMetadata.isbn == i)).first() if i else None
-                if not m: m = session.get(WorkMetadata, (a, t))
-                
-                img = await upload_image_from_url(d["image_url"], "items") if d.get("image_url") else None
-                g, ol = await fetch_external_book_metadata(a, t, i)
-                desc, cat, gen, tags = str(d.get("description", "")).strip() or None, None, None, []
+            if not s:
+                return
+            d = s.raw_data
+            t = str(d.get("title", "")).strip()
+            a = str(d.get("author", "")).strip()
+            if not t or not a:
+                raise ValueError("Title/Author required")
+            initial_img = await upload_image_from_url(d["image_url"], "items") if d.get("image_url") else None
+            enriched = await _enrich_staged_item(s, session, initial_image=initial_img)
+    except Exception as e:
+        with Session(engine) as session:
+            s = session.get(StagedItem, staged_id)
+            if s:
+                s.status, s.error_log = StagedItemStatus.FAILED, str(e)
+                session.add(s); session.commit()
+        await notification_manager.send_personal_message(
+            {"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "FAILED"}, owner_id
+        )
+        return
+    # 3. DB write (semaphore limits concurrent writes)
+    async with enrichment_semaphore:
+        try:
+            with Session(engine) as session:
+                s = session.get(StagedItem, staged_id)
+                if not s:
+                    return
+                ensure_work_metadata(
+                    session, enriched["author"], enriched["title"],
+                    isbn_val=enriched["isbn"], description=enriched["description"],
+                    category=enriched["category"], genre=enriched["genre"],
+                    tags=enriched["subjects"], image_url=enriched["image_url"],
+                )
+                session.delete(s); session.commit()
+        except Exception as e:
+            with Session(engine) as session:
+                s = session.get(StagedItem, staged_id)
+                if s:
+                    s.status, s.error_log = StagedItemStatus.FAILED, str(e)
+                    session.add(s); session.commit()
+            await notification_manager.send_personal_message(
+                {"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "FAILED"}, owner_id
+            )
+            return
+    await notification_manager.send_personal_message(
+        {"type": "BOOK_ARCHIVE_UPDATED", "staged_id": str(staged_id), "status": "COMPLETED"}, owner_id
+    )
 
-                if m:
-                    t, a, desc, img, cat, gen, i = m.title, m.author, m.description or desc, m.image_url or img, m.category or cat, m.genre or gen, m.isbn or i
-                    tags = list(set(tags) | set(m.tags or []))
-                elif g:
-                    t, desc = g.get("title", t), g.get("description", desc)
-                    a, i = ", ".join(g.get("authors", [])) or a, next((x["identifier"] for x in g.get("industryIdentifiers", []) if x["type"] in ["ISBN_13", "ISBN_10"]), i)
-                    if not img and g.get("imageLinks"):
-                        try: img = await upload_image_from_url(g["imageLinks"].get("medium") or g["imageLinks"].get("thumbnail"), "items")
-                        except Exception as e: logger.warning("Image upload skipped (Google): %s", e)
-                    # Map category/genre from Google
-                    if g.get("categories"):
-                        c, gn, sj = map_book_classification(g["categories"])
-                        cat, gen = c, gn
-                        if sj: tags.append(sj)
-                elif ol:
-                    t, desc = ol.get("title", t), ol.get("description") or desc
-                    a = ", ".join([x["name"] if isinstance(x, dict) else x for x in ol.get("authors", [])] or ol.get("author_name", [])) or a
-                    if not img:
-                        try: img = await upload_image_from_url(ol.get("cover_url") or f"https://covers.openlibrary.org/b/id/{ol.get('cover_i')}-L.jpg", "items")
-                        except Exception as e: logger.warning("Image upload skipped (OpenLibrary): %s", e)
-                    # Map category/genre from OpenLibrary
-                    if ol.get("subject"):
-                        c, gn, sj = map_book_classification(ol["subject"])
-                        cat, gen = c, gn
-                        if sj: tags.append(sj)
-                    elif ol.get("subject"):
-                        tags = list(set(tags) | set(ol["subject"]))
-                else:
-                    # Not found in archive or APIs
-                    raise ValueError("Book not found in archive or external APIs")
-
-                ensure_work_metadata(session, a, t, isbn_val=i, description=desc, category=cat, genre=gen, tags=tags, image_url=img)
-                # Success: Delete from staging
-                session.delete(s)
-                session.commit()
-                await notification_manager.send_personal_message({"type": "BOOK_ARCHIVE_UPDATED", "staged_id": str(staged_id), "status": "COMPLETED"}, owner_id)
-            except Exception as e:
-                s.status, s.error_log = StagedItemStatus.FAILED, str(e); session.add(s); session.commit()
-                await notification_manager.send_personal_message({"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "FAILED"}, owner_id)
 
 async def enrich_and_import_item(staged_id: uuid.UUID, owner_id: uuid.UUID, comm_id: uuid.UUID | None):
-    async with enrichment_semaphore:
-        await asyncio.sleep(random.uniform(1, 3))
+    # 1. Mark as PROCESSING (no semaphore)
+    with Session(engine) as session:
+        s = session.get(StagedItem, staged_id)
+        if not s or s.status == StagedItemStatus.COMPLETED:
+            return
+        s.status = StagedItemStatus.PROCESSING; session.add(s); session.commit()
+    await notification_manager.send_personal_message(
+        {"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "PROCESSING"}, owner_id
+    )
+    # 2. Enrich via external APIs (no semaphore — slow I/O should not block other enrichments)
+    try:
         with Session(engine) as session:
             s = session.get(StagedItem, staged_id)
-            if not s or s.status == StagedItemStatus.COMPLETED: return
-            s.status = StagedItemStatus.PROCESSING; session.add(s); session.commit()
-            await notification_manager.send_personal_message({"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "PROCESSING"}, owner_id)
-            try:
-                d = s.raw_data; t, a, i = str(d.get("title", "")).strip(), str(d.get("author", "")).strip(), str(d.get("isbn", "")).strip() or None
-                if not t: raise ValueError("Title required")
-                
-                # Normalize ISBN
-                i = normalize_isbn(i)
-                
-                m = session.exec(select(WorkMetadata).where(WorkMetadata.isbn == i)).first() if i else None
-                if not m and a: m = session.get(WorkMetadata, (a, t))
-                
-                g, ol = await fetch_external_book_metadata(a, t, i)
-                
-                # These must come from API/Archive, not staging
-                desc, img, cat, gen, subjects = None, None, None, None, []
-
-                if m:
-                    t, a, desc, img = m.title, m.author, m.description, m.image_url
-                    cat, gen = m.category, m.genre
-                    subjects = m.tags or []
-                    i = m.isbn or i
-                elif g:
-                    t, desc = g.get("title", t), g.get("description")
-                    a, i = ", ".join(g.get("authors", [])) or a, next((x["identifier"] for x in g.get("industryIdentifiers", []) if x["type"] in ["ISBN_13", "ISBN_10"]), i)
-                    if g.get("imageLinks"):
-                        try: img = await upload_image_from_url(g["imageLinks"].get("medium") or g["imageLinks"].get("thumbnail"), "items")
-                        except Exception as e: logger.warning("Image upload skipped (Google): %s", e)
-                    if g.get("categories"):
-                        c, gn, sj = map_book_classification(g["categories"])
-                        cat, gen = c, gn
-                        if sj: subjects.append(sj)
-                elif ol:
-                    t, desc = ol.get("title", t), ol.get("description")
-                    a = ", ".join([x["name"] if isinstance(x, dict) else x for x in ol.get("authors", [])] or ol.get("author_name", [])) or a
-                    try: img = await upload_image_from_url(ol.get("cover_url") or f"https://covers.openlibrary.org/b/id/{ol.get('cover_i')}-L.jpg", "items")
-                    except Exception as e: logger.warning("Image upload skipped (OpenLibrary): %s", e)
-                    if ol.get("subject"):
-                        c, gn, sj = map_book_classification(ol["subject"])
-                        cat, gen = c, gn
-                        if sj: subjects.append(sj)
-                    elif ol.get("subject"):
-                        subjects = list(set(subjects) | set(ol["subject"]))
-                else:
-                    # Not found in archive or APIs
-                    raise ValueError("Book not found in archive or external APIs. Please edit and add manually.")
-
-                # Final classification string for subject
-                subject_str = ", ".join(subjects) if subjects else None
-
+            if not s:
+                return
+            if not str(s.raw_data.get("title", "")).strip():
+                raise ValueError("Title required")
+            enriched = await _enrich_staged_item(s, session)
+    except Exception as e:
+        with Session(engine) as session:
+            s = session.get(StagedItem, staged_id)
+            if s:
+                s.status, s.error_log = StagedItemStatus.FAILED, str(e)
+                session.add(s); session.commit()
+        await notification_manager.send_personal_message(
+            {"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "FAILED"}, owner_id
+        )
+        return
+    # 3. DB write (semaphore limits concurrent writes)
+    async with enrichment_semaphore:
+        try:
+            with Session(engine) as session:
+                s = session.get(StagedItem, staged_id)
+                if not s:
+                    return
+                subject_str = ", ".join(enriched["subjects"]) if enriched["subjects"] else None
                 item = Item(
-                    title=t,
-                    author=a,
-                    description=desc,
-                    image_url=img,
+                    title=enriched["title"],
+                    author=enriched["author"],
+                    description=enriched["description"],
+                    image_url=enriched["image_url"],
                     owner_id=comm_id or owner_id,
                     item_type=ItemType.book,
-                    isbn=i,
-                    category=cat,
-                    genre=gen,
+                    isbn=enriched["isbn"],
+                    category=enriched["category"],
+                    genre=enriched["genre"],
                     subject=subject_str,
                     # Physical info CAN come from staging as it's user-specific
-                    info=d.get("info", {}) 
+                    info=enriched["raw_data"].get("info", {}),
                 )
                 session.add(item); session.flush()
-                session.add(Contribution(user_id=owner_id, item_id=item.id, work_author=a, work_title=t, description=f"Imported: {t}"))
-                if a and t: ensure_work_metadata(session, a, t, isbn_val=i, description=desc, category=cat, genre=gen, tags=subjects, image_url=img)
-                
-                # Success: Delete from staging
-                session.delete(s)
-                session.commit()
+                session.add(Contribution(
+                    user_id=owner_id, item_id=item.id,
+                    work_author=enriched["author"], work_title=enriched["title"],
+                    description=f"Imported: {enriched['title']}",
+                ))
+                if enriched["author"] and enriched["title"]:
+                    ensure_work_metadata(
+                        session, enriched["author"], enriched["title"],
+                        isbn_val=enriched["isbn"], description=enriched["description"],
+                        category=enriched["category"], genre=enriched["genre"],
+                        tags=enriched["subjects"], image_url=enriched["image_url"],
+                    )
+                session.delete(s); session.commit()
                 session.refresh(item)
-                await notification_manager.send_personal_message({"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "COMPLETED"}, owner_id)
-            except Exception as e:
-                s.status, s.error_log = StagedItemStatus.FAILED, str(e); session.add(s); session.commit()
-                await notification_manager.send_personal_message({"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "FAILED"}, owner_id)
+        except Exception as e:
+            with Session(engine) as session:
+                s = session.get(StagedItem, staged_id)
+                if s:
+                    s.status, s.error_log = StagedItemStatus.FAILED, str(e)
+                    session.add(s); session.commit()
+            await notification_manager.send_personal_message(
+                {"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "FAILED"}, owner_id
+            )
+            return
+    await notification_manager.send_personal_message(
+        {"type": "IMPORT_ITEM_PROCESSED", "staged_id": str(staged_id), "status": "COMPLETED"}, owner_id
+    )

@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     # 24 hours
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
+    JWT_ALGORITHM: str = "HS256"
+    MAX_PAGE_SIZE: int = 500
     FRONTEND_HOST: str = "http://localhost:5173"
     ENVIRONMENT: Literal["local", "staging", "production"] = "local"
 

@@ -326,8 +326,8 @@ def cleanup_broken_images(
 def list_book_registry(
     session: SessionDep,
     current_user: CurrentUser,
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=settings.MAX_PAGE_SIZE),
     filter_missing: str | None = None,
 ) -> Any:
     """
@@ -414,8 +414,8 @@ def lookup_book_registry(
 def recommend_items(
     session: SessionDep,
     current_user: CurrentUser,
-    skip: int = 0,
-    limit: int = 10,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=10, ge=1, le=100),
 ) -> Any:
     """
     Get recommended books based on user interests and social graph.
@@ -621,15 +621,15 @@ def recommend_items(
     item_ids_list = list(item_map.keys())
 
     # ── 8. Bulk-fetch enrichment data ────────────────────────────────────────
-    active_loan_ids = set(session.exec(
-        select(Loan.item_id).where(
+    active_loan_counts = dict(session.exec(
+        select(Loan.item_id, func.count(Loan.id)).where(
             Loan.item_id.in_(item_ids_list),
             Loan.status.in_([
                 LoanStatus.ACTIVE, LoanStatus.ACCEPTED,
                 LoanStatus.RETURN_PENDING, LoanStatus.EXTENSION_PENDING,
                 LoanStatus.DEFAULTED,
             ]),
-        )
+        ).group_by(Loan.item_id)
     ).all())
 
     ratings_by_item: dict[uuid.UUID, list] = {}
@@ -669,7 +669,7 @@ def recommend_items(
         if item is None:
             continue
 
-        is_avail = item.id not in active_loan_ids
+        is_avail = active_loan_counts.get(item.id, 0) < item.count
         owner_pub = None
         community_pub = None
         if item.user_owner:
@@ -723,8 +723,8 @@ def read_item_facets(
     owner_id: uuid.UUID | None = None,
     q: str | None = Query(default=None, max_length=200),
     item_type: str | None = None,
-    skip: int = 0,
-    limit: int = 20,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=settings.MAX_PAGE_SIZE),
 ) -> Any:
     """
     Get unique values and counts for a specific facet for user or community items.
@@ -931,8 +931,8 @@ def read_item_facets(
 def read_items(
     session: SessionDep,
     current_user: CurrentUser,
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=settings.MAX_PAGE_SIZE),
     owner_id: uuid.UUID | None = None,
     sort_by: str = "created_at",
     sort_order: str = "desc",
@@ -1122,9 +1122,9 @@ def read_items(
 
             # Pre-fetch availability, possession, and donation status for all items
             item_ids = [item.id for item in items]
-            active_loan_item_ids = set(
+            active_loan_item_counts = dict(
                 session.exec(
-                    select(Loan.item_id).where(
+                    select(Loan.item_id, func.count(Loan.id)).where(
                         Loan.item_id.in_(item_ids),
                         Loan.status.in_(
                             [
@@ -1135,7 +1135,7 @@ def read_items(
                                 LoanStatus.DEFAULTED,
                             ]
                         ),
-                    )
+                    ).group_by(Loan.item_id)
                 ).all()
             )
 
@@ -1185,7 +1185,7 @@ def read_items(
                             image_url=item.image_url,
                             count=item.count,
                             created_at=item.created_at,
-                            is_available=item.id not in active_loan_item_ids,
+                            is_available=active_loan_item_counts.get(item.id, 0) < item.count,
                             had_possession=item.owner_id == current_user.id
                             or item.id in possession_loan_item_ids,
                             is_community_owned=item.community_owner is not None,
@@ -1255,7 +1255,7 @@ def read_items(
             # Map to Public
             items_public_data = []
             for item in items:
-                is_avail = item.id not in active_loan_item_ids
+                is_avail = active_loan_item_counts.get(item.id, 0) < item.count
                 owner_pub = None
                 community_pub = None
 
@@ -1444,9 +1444,9 @@ def read_items(
     item_ids = [item.id for item in items]
 
     # Bulk fetch availability (active loans)
-    active_loan_item_ids = set(
+    active_loan_item_counts = dict(
         session.exec(
-            select(Loan.item_id).where(
+            select(Loan.item_id, func.count(Loan.id)).where(
                 Loan.item_id.in_(item_ids),
                 Loan.status.in_(
                     [
@@ -1457,7 +1457,7 @@ def read_items(
                         LoanStatus.DEFAULTED,
                     ]
                 ),
-            )
+            ).group_by(Loan.item_id)
         ).all()
     )
 
@@ -1510,7 +1510,7 @@ def read_items(
                     image_url=item.image_url,
                     count=item.count,
                     created_at=item.created_at,
-                    is_available=item.id not in active_loan_item_ids,
+                    is_available=active_loan_item_counts.get(item.id, 0) < item.count,
                     had_possession=item.owner_id == current_user.id
                     or item.id in possession_loan_item_ids,
                     is_community_owned=item.community_owner is not None,
@@ -1559,7 +1559,7 @@ def read_items(
 
     public_items = []
     for item in items:
-        is_avail = item.id not in active_loan_item_ids
+        is_avail = active_loan_item_counts.get(item.id, 0) < item.count
         owner_pub = None
         community_pub = None
         if item.user_owner:
@@ -2454,8 +2454,8 @@ def read_reviews(
     current_user: CurrentUser,
     author: str,
     title: str,
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=settings.MAX_PAGE_SIZE),
 ) -> Any:
     """
     Get reviews for a work.

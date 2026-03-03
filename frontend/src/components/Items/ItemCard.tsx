@@ -35,6 +35,7 @@ import {
   FiBookOpen,
   FiBookmark,
   FiCheck,
+  FiChevronLeft,
   FiChevronRight,
   FiClock,
   FiCornerUpLeft,
@@ -91,6 +92,7 @@ const ItemCard = ({
 
   const items = Array.isArray(itemProp) ? itemProp : [itemProp]
   const item = items[itemIndex]
+  const availableCount = items.filter((i) => i.is_available).length
 
   const { data: outgoingLoans } = useQuery({
     queryKey: ["loans", "outgoing"],
@@ -206,6 +208,11 @@ const ItemCard = ({
   const handleNextItem = (e: React.MouseEvent) => {
     e.stopPropagation()
     setItemIndex((prev) => (prev + 1) % items.length)
+  }
+
+  const handlePrevItem = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setItemIndex((prev) => (prev - 1 + items.length) % items.length)
   }
 
   const handleInfoClick = (e: React.MouseEvent) => {
@@ -604,8 +611,8 @@ const ItemCard = ({
             bg={bgColor}
             color={textColor}
             borderColor={borderColor}
-            opacity={!item.is_available && !isOwner ? 0.75 : 1}
-            filter={!item.is_available && !isOwner ? "grayscale(30%)" : "none"}
+            opacity={availableCount === 0 && !isOwner ? 0.75 : 1}
+            filter={availableCount === 0 && !isOwner ? "grayscale(30%)" : "none"}
           >
             <Card.Body
               p={4}
@@ -792,12 +799,20 @@ const ItemCard = ({
                     )}
                   </HStack>
                   {items.length > 1 && (
-                    <HStack gap={1}>
+                    <HStack gap={0}>
+                      <IconButton
+                        aria-label="Previous copy"
+                        size="xs"
+                        variant="ghost"
+                        onClick={handlePrevItem}
+                      >
+                        <FiChevronLeft />
+                      </IconButton>
                       <Text fontSize="2xs" color="gray.500">
                         {itemIndex + 1}/{items.length}
                       </Text>
                       <IconButton
-                        aria-label="Next Owner"
+                        aria-label="Next copy"
                         size="xs"
                         variant="ghost"
                         onClick={handleNextItem}

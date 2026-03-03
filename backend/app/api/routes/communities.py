@@ -6,6 +6,7 @@ from sqlmodel import String, cast, col, func, or_, select, text
 
 from app import crud
 from app.api.deps import CurrentUser, SessionDep
+from app.core.config import settings
 from app.api.utils import (
     _write_log,
     filter_loan_privacy,
@@ -109,8 +110,8 @@ def _is_last_admin(session: SessionDep, community_id: uuid.UUID, user_id: uuid.U
 def read_communities(
     session: SessionDep,
     current_user: CurrentUser,
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=settings.MAX_PAGE_SIZE),
     member_only: bool = False,
     browse: bool = False,
 ) -> Any:
@@ -591,8 +592,8 @@ def read_community_members(
     session: SessionDep,
     current_user: CurrentUser,
     id: uuid.UUID,
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=settings.MAX_PAGE_SIZE),
     status: CommunityMemberStatus | None = None,
 ) -> Any:
     """
@@ -1430,8 +1431,8 @@ def read_community_item_facets(
     id: uuid.UUID,
     group_by: str = "category",  # category, genre, author, subject, ownership
     q: str | None = Query(default=None, max_length=200),
-    skip: int = 0,
-    limit: int = 20,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=settings.MAX_PAGE_SIZE),
 ) -> Any:
     """
     Get unique values and counts for a specific facet belonging to a community.
@@ -1590,8 +1591,8 @@ def read_community_items(
     session: SessionDep,
     current_user: CurrentUser,
     id: uuid.UUID,
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=settings.MAX_PAGE_SIZE),
     sort_by: str = "created_at",
     sort_order: str = "desc",
     category: str | None = None,
@@ -1803,9 +1804,9 @@ def read_community_items(
             work_meta_map[(wm.author, wm.title)] = wm
 
     # Bulk fetch active loans for availability
-    active_loan_item_ids = set(
+    active_loan_item_counts = dict(
         session.exec(
-            select(Loan.item_id).where(
+            select(Loan.item_id, func.count(Loan.id)).where(
                 Loan.item_id.in_(item_ids),
                 Loan.status.in_(
                     [
@@ -1816,13 +1817,13 @@ def read_community_items(
                         LoanStatus.DEFAULTED,
                     ]
                 ),
-            )
+            ).group_by(Loan.item_id)
         ).all()
     )
 
     items_public = []
     for item in items:
-        is_avail = item.id not in active_loan_item_ids
+        is_avail = active_loan_item_counts.get(item.id, 0) < item.count
 
         owner_pub = None
         community_pub = None
@@ -2430,8 +2431,8 @@ def read_community_announcements(
     session: SessionDep,
     current_user: CurrentUser,
     id: uuid.UUID,
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=settings.MAX_PAGE_SIZE),
 ) -> Any:
     """
     Get announcements for a community.
@@ -2617,8 +2618,8 @@ def read_community_messages(
     session: SessionDep,
     current_user: CurrentUser,
     id: uuid.UUID,
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=settings.MAX_PAGE_SIZE),
 ) -> Any:
     """
     Get messages for a community board.
@@ -2779,8 +2780,8 @@ def read_community_log(
     session: SessionDep,
     current_user: CurrentUser,
     id: uuid.UUID,
-    skip: int = 0,
-    limit: int = 50,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=settings.MAX_PAGE_SIZE),
 ) -> Any:
     """
     Get the community event log (accepted members only).
@@ -2812,8 +2813,8 @@ def read_community_loans(
     session: SessionDep,
     current_user: CurrentUser,
     id: uuid.UUID,
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=settings.MAX_PAGE_SIZE),
 ) -> Any:
     """
     Get loans for a community. Staff see all, members see their own.
