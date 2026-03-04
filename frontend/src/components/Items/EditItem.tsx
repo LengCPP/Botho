@@ -158,7 +158,11 @@ const EditItem = ({
       handleError(err)
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["items"] })
+      queryClient.invalidateQueries({ queryKey: ["itemsInfinite"] })
+      queryClient.invalidateQueries({ queryKey: ["userItemsInfinite"] })
+      queryClient.invalidateQueries({ queryKey: ["itemFacetsInfinite"] })
+      queryClient.invalidateQueries({ queryKey: ["communityFacetsInfinite"] })
+      queryClient.invalidateQueries({ queryKey: ["communityItemsInfinite"] })
       queryClient.invalidateQueries({ queryKey: ["currentUser"] })
     },
   })

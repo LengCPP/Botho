@@ -99,7 +99,10 @@ export const ItemActionsMenu = ({
       queryClient.invalidateQueries({
         queryKey: ["communityItems", communityId],
       })
-      queryClient.invalidateQueries({ queryKey: ["items"] })
+      queryClient.invalidateQueries({ queryKey: ["itemsInfinite"] })
+      queryClient.invalidateQueries({ queryKey: ["itemFacetsInfinite"] })
+      queryClient.invalidateQueries({ queryKey: ["communityFacetsInfinite"] })
+      queryClient.invalidateQueries({ queryKey: ["communityItemsInfinite"] })
       setConfirmationType(null)
       setIsActionsModalOpen(false)
     },
@@ -120,7 +123,10 @@ export const ItemActionsMenu = ({
       queryClient.invalidateQueries({
         queryKey: ["communityItems", communityId],
       })
-      queryClient.invalidateQueries({ queryKey: ["items"] })
+      queryClient.invalidateQueries({ queryKey: ["itemsInfinite"] })
+      queryClient.invalidateQueries({ queryKey: ["itemFacetsInfinite"] })
+      queryClient.invalidateQueries({ queryKey: ["communityFacetsInfinite"] })
+      queryClient.invalidateQueries({ queryKey: ["communityItemsInfinite"] })
       setConfirmationType(null)
       setIsActionsModalOpen(false)
     },
@@ -134,7 +140,8 @@ export const ItemActionsMenu = ({
     mutationFn: () => Items.duplicateItem({ id: item.id }),
     onSuccess: () => {
       showSuccessToast("Another copy added to your collection!")
-      queryClient.invalidateQueries({ queryKey: ["items"] })
+      queryClient.invalidateQueries({ queryKey: ["itemsInfinite"] })
+      queryClient.invalidateQueries({ queryKey: ["itemFacetsInfinite"] })
       setIsActionsModalOpen(false)
     },
     onError: () => showErrorToast("Failed to copy item"),

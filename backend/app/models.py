@@ -1002,6 +1002,7 @@ class ItemMinimal(SQLModel):
     category: str | None = None
     genre: str | None = None
     subject: str | None = None
+    info: dict[str, Any] | None = None
     count: int
     created_at: datetime
     is_available: bool = True
