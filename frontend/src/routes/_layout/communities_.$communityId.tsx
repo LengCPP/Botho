@@ -1343,7 +1343,7 @@ function CommunityBoard() {
                       ...(type && type !== "book" ? { display_type: "items" } : {}),
                     })
                   }
-                  items={groupItems(allItems as any)}
+                  items={groupItems(allItems as any, false)}
                   facets={allCollections}
                   totalItemCount={commI?.pages[0]?.count || 0}
                   totalFacetCount={(facets?.pages[0] as any)?.count || 0}

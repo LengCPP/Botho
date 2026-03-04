@@ -1775,20 +1775,62 @@ def read_community_items(
             )
 
         # Basic SQL filtering
+        # For genre/category we use "sibling expansion": include all copies of a book
+        # where at least one copy in the community has the requested genre/category.
+        # This ensures that if two records for the same book exist and only one is tagged,
+        # both copies are returned and can be grouped/stacked in the frontend.
+        from sqlalchemy import and_, tuple_
+        _comm_item_ids = select(CommunityItem.item_id).where(CommunityItem.community_id == id)
         if category:
             if category == "Others":
                 statement = statement.where(
                     or_(Item.category.is_(None), Item.category == "")
                 )
             else:
-                statement = statement.where(Item.category == category)
+                cat_sibling_sub = (
+                    select(Item.title, Item.author).distinct()
+                    .where(
+                        or_(Item.owner_id == id, Item.id.in_(_comm_item_ids)),
+                        Item.category == category,
+                        Item.title.is_not(None),
+                        Item.author.is_not(None),
+                    )
+                )
+                statement = statement.where(
+                    or_(
+                        Item.category == category,
+                        and_(
+                            Item.title.is_not(None),
+                            Item.author.is_not(None),
+                            tuple_(Item.title, Item.author).in_(cat_sibling_sub),
+                        ),
+                    )
+                )
         if genre:
             if genre == "Others":
                 statement = statement.where(
                     or_(Item.genre.is_(None), Item.genre == "")
                 )
             else:
-                statement = statement.where(Item.genre == genre)
+                genre_sibling_sub = (
+                    select(Item.title, Item.author).distinct()
+                    .where(
+                        or_(Item.owner_id == id, Item.id.in_(_comm_item_ids)),
+                        Item.genre == genre,
+                        Item.title.is_not(None),
+                        Item.author.is_not(None),
+                    )
+                )
+                statement = statement.where(
+                    or_(
+                        Item.genre == genre,
+                        and_(
+                            Item.title.is_not(None),
+                            Item.author.is_not(None),
+                            tuple_(Item.title, Item.author).in_(genre_sibling_sub),
+                        ),
+                    )
+                )
         if subject:
             if subject == "Others":
                 statement = statement.where(

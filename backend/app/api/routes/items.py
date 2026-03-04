@@ -1373,10 +1373,37 @@ def read_items(
                 )
             )
 
+        # For genre/category: sibling expansion — include all copies of a book where
+        # at least one copy (under the same owner scope) has the requested value.
+        # Ensures multiple records of the same title/author all appear together.
+        if not feed_mode:
+            from sqlalchemy import and_ as _and, tuple_ as _tuple
+            _owner_scope = Item.owner_id == target_owner_id
+
         if category:
             if category == "Others":
                 statement = statement.where(
                     or_(Item.category.is_(None), Item.category == "")
+                )
+            elif not feed_mode:
+                cat_sibling_sub = (
+                    select(Item.title, Item.author).distinct()
+                    .where(
+                        _owner_scope,
+                        Item.category == category,
+                        Item.title.is_not(None),
+                        Item.author.is_not(None),
+                    )
+                )
+                statement = statement.where(
+                    or_(
+                        Item.category == category,
+                        _and(
+                            Item.title.is_not(None),
+                            Item.author.is_not(None),
+                            _tuple(Item.title, Item.author).in_(cat_sibling_sub),
+                        ),
+                    )
                 )
             else:
                 statement = statement.where(Item.category == category)
@@ -1384,6 +1411,26 @@ def read_items(
         if genre:
             if genre == "Others":
                 statement = statement.where(or_(Item.genre.is_(None), Item.genre == ""))
+            elif not feed_mode:
+                genre_sibling_sub = (
+                    select(Item.title, Item.author).distinct()
+                    .where(
+                        _owner_scope,
+                        Item.genre == genre,
+                        Item.title.is_not(None),
+                        Item.author.is_not(None),
+                    )
+                )
+                statement = statement.where(
+                    or_(
+                        Item.genre == genre,
+                        _and(
+                            Item.title.is_not(None),
+                            Item.author.is_not(None),
+                            _tuple(Item.title, Item.author).in_(genre_sibling_sub),
+                        ),
+                    )
+                )
             else:
                 statement = statement.where(Item.genre == genre)
 

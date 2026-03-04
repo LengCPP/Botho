@@ -256,6 +256,24 @@ async def enrich_and_import_to_archive(staged_id: uuid.UUID, owner_id: uuid.UUID
                     category=enriched["category"], genre=enriched["genre"],
                     tags=enriched["subjects"], image_url=enriched["image_url"],
                 )
+                # Propagate tags to all Item copies with the same (title, author)
+                cat, gen = enriched["category"], enriched["genre"]
+                sub_str = ", ".join(enriched["subjects"]) if enriched["subjects"] else None
+                if cat or gen or sub_str:
+                    siblings = session.exec(
+                        select(Item).where(
+                            Item.title == enriched["title"],
+                            Item.author == enriched["author"],
+                        )
+                    ).all()
+                    for sib in siblings:
+                        if cat and not sib.category:
+                            sib.category = cat
+                        if gen and not sib.genre:
+                            sib.genre = gen
+                        if sub_str and not sib.subject:
+                            sib.subject = sub_str
+                        session.add(sib)
                 session.delete(s); session.commit()
         except Exception as e:
             with Session(engine) as session:
@@ -336,6 +354,23 @@ async def enrich_and_import_item(staged_id: uuid.UUID, owner_id: uuid.UUID, comm
                         category=enriched["category"], genre=enriched["genre"],
                         tags=enriched["subjects"], image_url=enriched["image_url"],
                     )
+                # Propagate tags to other existing copies of the same book
+                if enriched["category"] or enriched["genre"] or subject_str:
+                    siblings = session.exec(
+                        select(Item).where(
+                            Item.id != item.id,
+                            Item.title == enriched["title"],
+                            Item.author == enriched["author"],
+                        )
+                    ).all()
+                    for sib in siblings:
+                        if enriched["category"] and not sib.category:
+                            sib.category = enriched["category"]
+                        if enriched["genre"] and not sib.genre:
+                            sib.genre = enriched["genre"]
+                        if subject_str and not sib.subject:
+                            sib.subject = subject_str
+                        session.add(sib)
                 session.delete(s); session.commit()
                 session.refresh(item)
         except Exception as e:

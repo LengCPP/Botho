@@ -366,7 +366,7 @@ function UserProfilePage() {
           author={author}
           itemType={item_type}
           typeBreakdown={
-            (infiniteItems?.pages[0] as any)?.facets?.item_type ?? {}
+            (user as any)?.collection_index?.item_type ?? {}
           }
           onChangeItemType={(type) =>
             updateSearch({

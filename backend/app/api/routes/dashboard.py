@@ -164,15 +164,15 @@ def get_recent_activity(
         for wm in work_metas:
             work_meta_map[(wm.author, wm.title)] = wm
 
-    # 3.2 Bulk fetch active loans for availability
-    active_loan_item_ids = set(session.exec(
-        select(Loan.item_id).where(
+    # 3.2 Bulk fetch active loan counts for availability (count-aware: item.count copies)
+    active_loan_item_counts = dict(session.exec(
+        select(Loan.item_id, func.count(Loan.id)).where(
             Loan.item_id.in_(item_ids),
             Loan.status.in_([
                 LoanStatus.ACTIVE, LoanStatus.ACCEPTED,
                 LoanStatus.RETURN_PENDING, LoanStatus.EXTENSION_PENDING, LoanStatus.DEFAULTED
             ])
-        )
+        ).group_by(Loan.item_id)
     ).all())
 
     # 3.3 Bulk fetch possession history for current user
@@ -207,7 +207,7 @@ def get_recent_activity(
 
     public_items = []
     for item in items:
-        is_avail = item.id not in active_loan_item_ids
+        is_avail = active_loan_item_counts.get(item.id, 0) < item.count
         owner_pub = None
         community_pub = None
 

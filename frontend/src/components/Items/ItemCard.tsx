@@ -91,8 +91,18 @@ const ItemCard = ({
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
   const items = Array.isArray(itemProp) ? itemProp : [itemProp]
-  const item = items[itemIndex]
-  const availableCount = items.filter((i) => i.is_available).length
+  // Expand single-row items with count > 1 into virtual copies for stacking/cycling
+  const expandedItems =
+    items.length === 1 && items[0].count > 1
+      ? Array.from({ length: items[0].count }, () => items[0])
+      : items
+  const item = expandedItems[itemIndex]
+  const availableCount =
+    expandedItems.length > 1 && items.length === 1
+      ? items[0].is_available
+        ? items[0].count
+        : 0
+      : expandedItems.filter((i) => i.is_available).length
 
   const { data: outgoingLoans } = useQuery({
     queryKey: ["loans", "outgoing"],
@@ -203,12 +213,12 @@ const ItemCard = ({
 
   const handleNextItem = (e: React.MouseEvent) => {
     e.stopPropagation()
-    setItemIndex((prev) => (prev + 1) % items.length)
+    setItemIndex((prev) => (prev + 1) % expandedItems.length)
   }
 
   const handlePrevItem = (e: React.MouseEvent) => {
     e.stopPropagation()
-    setItemIndex((prev) => (prev - 1 + items.length) % items.length)
+    setItemIndex((prev) => (prev - 1 + expandedItems.length) % expandedItems.length)
   }
 
   const handleInfoClick = (e: React.MouseEvent) => {
@@ -453,7 +463,7 @@ const ItemCard = ({
         position="relative"
         data-testid="item-card"
       >
-        {items.slice(1, 3).map((layerItem, idx) => (
+        {expandedItems.slice(1, 3).map((layerItem, idx) => (
           <Box
             key={layerItem.id}
             position="absolute"
@@ -543,7 +553,7 @@ const ItemCard = ({
               </Flex>
             )}
 
-            {items.length > 1 && (
+            {expandedItems.length > 1 && (
               <Badge
                 position="absolute"
                 bottom={2}
@@ -554,7 +564,7 @@ const ItemCard = ({
                 borderRadius="full"
                 px={2}
               >
-                {items.length} copies
+                {expandedItems.length} copies
               </Badge>
             )}
 
@@ -794,7 +804,7 @@ const ItemCard = ({
                       </Badge>
                     )}
                   </HStack>
-                  {items.length > 1 && (
+                  {expandedItems.length > 1 && (
                     <HStack gap={0}>
                       <IconButton
                         aria-label="Previous copy"
@@ -805,7 +815,7 @@ const ItemCard = ({
                         <FiChevronLeft />
                       </IconButton>
                       <Text fontSize="2xs" color="gray.500">
-                        {itemIndex + 1}/{items.length}
+                        {itemIndex + 1}/{expandedItems.length}
                       </Text>
                       <IconButton
                         aria-label="Next copy"

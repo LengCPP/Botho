@@ -240,6 +240,26 @@ async def classify_pending_books():
                             sync_search=False,
                         )
                         work_doc = _build_work_document(meta) if meta else None
+
+                        # Propagate tags to all other copies of the same book
+                        # so siblings never sit in the queue untagged.
+                        if book.title and book.author and (cat or gen or sub_raw):
+                            siblings = ws.exec(
+                                select(Item).where(
+                                    Item.id != book.id,
+                                    Item.title == book.title,
+                                    Item.author == book.author,
+                                )
+                            ).all()
+                            for sib in siblings:
+                                if cat and not sib.category:
+                                    sib.category = cat
+                                if gen and not sib.genre:
+                                    sib.genre = gen
+                                if sub_raw and not sib.subject:
+                                    sib.subject = sub_raw
+                                ws.add(sib)
+
                         ws.commit()
                 # Non-blocking Meilisearch pushes outside the session context
                 if item_doc:

@@ -66,8 +66,17 @@ const CompactItemCardBase = ({
   })
 
   const items = Array.isArray(itemProp) ? itemProp : [itemProp]
-  const item = items[itemIndex]
-  const availableCount = items.filter((i) => i.is_available).length
+  const expandedItems =
+    items.length === 1 && items[0].count > 1
+      ? Array.from({ length: items[0].count }, () => items[0])
+      : items
+  const item = expandedItems[itemIndex]
+  const availableCount =
+    expandedItems.length > 1 && items.length === 1
+      ? items[0].is_available
+        ? items[0].count
+        : 0
+      : expandedItems.filter((i) => i.is_available).length
 
   // Fetch loan context
   const { data: outgoingLoans } = useQuery({
@@ -229,7 +238,7 @@ const CompactItemCardBase = ({
               </Text>
             </Flex>
           )}
-          {items.length > 1 && (
+          {expandedItems.length > 1 && (
             <Badge
               position="absolute"
               bottom={0}
@@ -238,7 +247,7 @@ const CompactItemCardBase = ({
               size="xs"
               borderRadius="xs"
             >
-              {items.length}
+              {expandedItems.length}
             </Badge>
           )}
         </Box>
@@ -280,7 +289,7 @@ const CompactItemCardBase = ({
             >
               {availableCount > 0 ? "Available" : "On Loan"}
             </Badge>
-            {items.length > 1 && (
+            {expandedItems.length > 1 && (
               <HStack gap={0}>
                 <IconButton
                   aria-label="Previous copy"
@@ -288,21 +297,21 @@ const CompactItemCardBase = ({
                   variant="ghost"
                   onClick={(e) => {
                     e.stopPropagation()
-                    setItemIndex((prev) => (prev - 1 + items.length) % items.length)
+                    setItemIndex((prev) => (prev - 1 + expandedItems.length) % expandedItems.length)
                   }}
                   h="14px"
                   minW="14px"
                 >
                   <FiChevronLeft size="10px" />
                 </IconButton>
-                <Text fontSize="3xs" color="gray.400">{itemIndex + 1}/{items.length}</Text>
+                <Text fontSize="3xs" color="gray.400">{itemIndex + 1}/{expandedItems.length}</Text>
                 <IconButton
                   aria-label="Next copy"
                   size="xs"
                   variant="ghost"
                   onClick={(e) => {
                     e.stopPropagation()
-                    setItemIndex((prev) => (prev + 1) % items.length)
+                    setItemIndex((prev) => (prev + 1) % expandedItems.length)
                   }}
                   h="14px"
                   minW="14px"
